@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include <sl/tensor.h>
+#include <eider/tensor.h>
 TEST(kvecTest,tmp) {
     using E3 = vector_space<double, 3>;
     std::cout << "=== Euclidean Space Example (R^3) ===\n";
