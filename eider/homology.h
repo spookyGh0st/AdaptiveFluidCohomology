@@ -4,7 +4,26 @@
 
 namespace geometrycentral::surface
 {
-    std::vector<Edge> computeMinimalSpanningTree(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry);
-    std::vector<Edge> computePrimalEdgesOfDualMaxST(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry);
+    enum EdgeType {
+        minimal_st, maximal_co_st, bridge
+    };
+    // TODO: extend to relative homology
+    // --- Primal Graph MST Computation ---
+    void computeMinimalSpanningTree(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry, EdgeData<EdgeType>& edgeData);
+
+    // --- Dual Graph Maximal Spanning Tree ---
+    void computePrimalEdgesOfDualMaxST(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry, EdgeData<EdgeType>& edgeData);
+
+    // --- Extract Edges not in MST or MaxST ---
+    std::vector<Edge> distinctEdges(SurfaceMesh& mesh, EdgeData<EdgeType>& edgeData);
+
+    // --- Dual Dijkstra ---
+    std::pair<FaceData<Halfedge>,FaceData<double>> co_dijkstra(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<EdgeType>& edgeData, Face orig_face);
+
+    // --- Minimal Co-loop ---
+    std::vector<Halfedge> minimal_co_loop(FaceData<Halfedge>& prev, Face x, Edge bridge);
+
+    // --- Homotopy Basis ---
+    std::vector<std::vector<Halfedge>> homotopy_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, Face x);
 }
 
