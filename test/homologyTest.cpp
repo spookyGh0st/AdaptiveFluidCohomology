@@ -58,18 +58,18 @@ void updateTriagulationViz(SurfaceMesh& mesh, VertexPositionGeometry& geometry, 
     psCurves->setEnabled(true);
 }
 
-TEST(homologyTest, perf_test)
+TEST(homologyTest, TestHomotopyBasis)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus.stl";
+    fds = fds.parent_path()/ "models" /"two_torus.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     EdgeData<EdgeType> edge_data(*m, EdgeType::bridge);
     computeMinimalSpanningTree(*m,*g,edge_data);
     computePrimalEdgesOfDualMaxST(*m,*g, edge_data);
     auto d_edges = distinctEdges(*m,edge_data);
     Face x = m->face(0);
-    auto dijkstra = co_dijkstra(*m,*g,edge_data,m->face(0));
+    auto dijkstra = co_dijkstra(*m,*g,edge_data,x);
     FaceData<int> prev(*m, 0); for (Face f: m->faces()) {
         Halfedge he = dijkstra.first[f];
         if (he != Halfedge()) { prev[f] = he.face().getIndex(); } else { prev[f] = -1; }
@@ -87,11 +87,43 @@ TEST(homologyTest, perf_test)
     pm->addFaceScalarQuantity("dijkstra prev",prev);
 
     updateTriagulationViz(*m, *g, edge_data);
-    auto h_basis = homotopy_basis(*m,*g,m->face(0));
+    auto h_basis = homotopy_basis(*m,*g,x);
     int basis_i = 0;
     for (const auto& basis: h_basis) {
         EdgeData<int> b(*m, 0);
         for (Halfedge e: basis) { b[e.edge()] = 1;}
+        pm->addEdgeScalarQuantity("homology basis " + std::to_string(basis_i),b,polyscope::DataType::CATEGORICAL);
+        basis_i++;
+    }
+    polyscope::show();
+}
+
+TEST(homologyTest, TestDeRhamCohom)
+{
+    using namespace geometrycentral::surface;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" /"two_torus.stl";
+    auto [m,g] = readManifoldSurfaceMesh(fds.string());
+    Face x = m->face(46);
+    auto h_basis = homotopy_basis(*m,*g,x);
+    for (auto c: h_basis) {
+    }
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList(), polyscopePermutations(*m));
+    int basis_i = 0;
+    g->requireDECOperators();
+    for (const auto& basis: h_basis) {
+        EdgeData<int> b(*m, 0);
+        for (Halfedge e: basis) { b[e.edge()] = 1;}
+        auto df =delta_form(*m, basis);
+        pm->addEdgeScalarQuantity("delta form " + std::to_string(basis_i), df);
+        Eigen::VectorXd l  = g->d1 * df.raw();
+        pm->addFaceScalarQuantity("delta form ex der " + std::to_string(basis_i),FaceData<double>(*m,l)) ;
+        EdgeData<double> pf = pressure_project(*m, df, *g);
+        FaceData<double> dpf = FaceData<double>(*m, g->d1 * pf.raw());
+        pm->addEdgeScalarQuantity("pressure projection " + std::to_string(basis_i), pf);
+        pm->addFaceScalarQuantity("pressure projection ex der " + std::to_string(basis_i), dpf);
         pm->addEdgeScalarQuantity("homology basis " + std::to_string(basis_i),b,polyscope::DataType::CATEGORICAL);
         basis_i++;
     }

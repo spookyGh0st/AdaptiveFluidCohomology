@@ -1,10 +1,12 @@
 #include "homology.h"
 #include <vector>
-#include <algorithm> // For std::sort
-#include <tuple>     // For std::tuple
-#include <numeric>   // For std::iota (for DSU initialization)
+#include <algorithm>
+#include <tuple>
+#include <numeric>
+#include <bitset>
 
 #include "geometrycentral/surface/barycentric_vector.h"
+#include "geometrycentral/surface/manifold_surface_mesh.h"
 #include "geometrycentral/surface/surface_mesh.h"
 #include "geometrycentral/surface/surface_point.h"
 
@@ -262,12 +264,6 @@ namespace geometrycentral::surface
             heapifyUp(idx);
         }
 
-        double value(const T& vertex) const
-        {
-            int idx = pos[vertex];
-            if (idx == -1) return std::numeric_limits<double>::max();
-            return heap[idx].first;
-        }
     };
 
     std::pair<FaceData<Halfedge>,FaceData<double>> co_dijkstra(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<EdgeType>& edgeData, Face orig_face)
@@ -336,6 +332,76 @@ namespace geometrycentral::surface
             co_loops.push_back(minimal_co_loop(prev.first, x, e));
         }
         return co_loops;
+    }
+
+    inline static constexpr std::size_t n_bits = 64;
+    EdgeData<std::bitset<n_bits>> homology_bitvectors(SurfaceMesh& mesh, const std::vector<std::vector<Halfedge>>& homotopy_basis) {
+        EdgeData<std::bitset<n_bits>> bitsets(mesh, std::bitset<n_bits>(0));
+        if (homotopy_basis.size() > n_bits) throw std::runtime_error("Genus exceeds bitvector size");
+        for (std::size_t i = 0; i < homotopy_basis.size(); i++) {
+            for (Halfedge he: homotopy_basis[i]) {
+                // TODO: Should i set you or flip you - what about basis that go forth and back, i.e. contain an edge twice?
+                bitsets[he.edge()][i].flip();
+            }
+        }
+        return  bitsets;
+    }
+
+    bool cycle_contractable(EdgeData<std::bitset<n_bits>>& hom_bitvectors, const std::vector<Halfedge>& cycle) {
+        std::bitset<n_bits> v {};
+        for (Halfedge he : cycle) {
+            v ^= hom_bitvectors[he.edge()];
+        }
+        return v.none();
+    }
+
+    void shortest_path_cotree() {
+        // TODO
+    }
+
+
+    void co_cut_locus()
+    {
+        /*
+        1. Compute the shortest path tree T from basepoint x (using Dijkstra).
+        2. Construct the cut locus graph C:
+        - For each edge e = (u,v) ∈ E not in T:
+        a. Let P1 = shortest path x → u in T
+        b. Let P2 = shortest path x → v in T
+        c. Form cycle γ_e = P1 + (u,v) + reverse(P2)
+        d. If γ_e is non-contractible (i.e., a valid loop):
+        Add edge e to cut locus graph C
+        3. Remove all degree-1 vertices from C iteratively.
+        (This gives the reduced cut locus Φ)
+        4. Return Φ
+        */
+    }
+
+    EdgeData<double> delta_form(SurfaceMesh& mesh, const std::vector<Halfedge>& co_loop) {
+        EdgeData<double> delta(mesh, 0);
+        for (Halfedge he : co_loop) {
+            delta[he.edge()] = he.orientation() ? 1 : -1;
+        }
+        return  delta;
+
+    }
+
+
+
+    EdgeData<double> pressure_project(SurfaceMesh& mesh, const EdgeData<double>& co_loop, IntrinsicGeometryInterface& geom) {
+        geom.requireDECOperators();
+        // d_pi = d_pi.completeOrthogonalDecomposition().pseudoInverse();
+        // Eigen::VectorXd v = (Eigen::MatrixXd::Identity(mesh.nEdges(), mesh.nEdges()) - geom.d0 * d_pi) * co_loop.raw();
+
+        Eigen::SparseMatrix<double>& A = geom.d0;
+        const Eigen::VectorXd& x = co_loop.raw();
+        Eigen::SparseMatrix<double> AT = A.transpose();
+
+        Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower | Eigen::Upper> solver;
+        solver.compute(AT*A);
+
+        Eigen::VectorXd c = solver.solve(AT * x);
+        return EdgeData<double>(mesh, x - A*c);
     }
 }
 

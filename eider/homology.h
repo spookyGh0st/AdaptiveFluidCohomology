@@ -25,5 +25,9 @@ namespace geometrycentral::surface
 
     // --- Homotopy Basis ---
     std::vector<std::vector<Halfedge>> homotopy_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, Face x);
+
+    EdgeData<double> delta_form(SurfaceMesh& mesh, const std::vector<Halfedge>& co_loop);
+
+    EdgeData<double> pressure_project(SurfaceMesh& mesh, const EdgeData<double>& co_loop, IntrinsicGeometryInterface& geom);
 }
 
