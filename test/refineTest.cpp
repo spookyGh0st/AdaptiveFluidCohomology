@@ -97,10 +97,11 @@ TEST(refineTest, perf_test)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/"L.stl";
+    fds = fds.parent_path()/"models"/"L.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
 
     IntegerCoordinatesIntrinsicTriangulation icit(*m,*g);
+    icit.requireHalfedgeVectorsInFace();
     for (int i = 0; i< 10; i++)
     {
         uniform_refine(icit);

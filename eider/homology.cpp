@@ -319,6 +319,19 @@ namespace geometrycentral::surface
         return co_loop;
     }
 
+    // TODO: move to down
+    std::vector<Halfedge> reduce_co_loop(SurfaceMesh& mesh, const std::vector<Halfedge>& co_loop) {
+        // this is in O(n), could be improved to be in size of co_loop
+        std::vector<Halfedge> reduced {}; reduced.reserve(co_loop.size());
+        HalfedgeData<bool> in_loop(mesh,false);
+        for (Halfedge he : co_loop) { in_loop[he] = true; }
+        for (Halfedge he : co_loop) {
+            if (in_loop[he] && in_loop[he.twin()]) continue;
+            reduced.push_back(he);
+        }
+        return reduced;
+    }
+
     std::vector<std::vector<Halfedge>> homotopy_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, Face x)
     {
         EdgeData<EdgeType> edge_data(mesh, EdgeType::bridge);
@@ -329,7 +342,7 @@ namespace geometrycentral::surface
         std::vector<std::vector<Halfedge>> co_loops;
         for (Edge e : dist_edges)
         {
-            co_loops.push_back(minimal_co_loop(prev.first, x, e));
+            co_loops.push_back(reduce_co_loop(mesh,minimal_co_loop(prev.first, x, e)));
         }
         return co_loops;
     }
@@ -377,6 +390,7 @@ namespace geometrycentral::surface
         */
     }
 
+
     EdgeData<double> delta_form(SurfaceMesh& mesh, const std::vector<Halfedge>& co_loop) {
         EdgeData<double> delta(mesh, 0);
         for (Halfedge he : co_loop) {
@@ -402,6 +416,123 @@ namespace geometrycentral::surface
 
         Eigen::VectorXd c = solver.solve(AT * x);
         return EdgeData<double>(mesh, x - A*c);
+    }
+
+    // Function to compute the Whitney interpolated vector field
+    // TODO: Propably broken!
+    FaceData<Vector2> whitney_interpolation(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<double>& h) {
+        geom.requireHalfedgeVectorsInFace();
+        geom.requireFaceAreas();
+        FaceData<Vector2> vField(mesh, Vector2::zero());
+
+
+        for (Face f : mesh.faces()) {
+            Vector2 vT = Vector2::zero();
+            double A = geom.faceAreas[f];
+            auto grad = [&,A](Halfedge he) -> Vector2 {
+                Vector2 ei = geom.halfedgeVectorsInFace[he.next()];
+                return 1/(2*A) * ei.rotate90();
+            };
+            for (Halfedge he: f.adjacentHalfedges()){
+                Edge e = he.edge();
+                double wij = (he.orientation()) ? h[e] : -h[e];
+                double A = geom.faceAreas[f];
+                vT += wij * grad(he) * A/3 - wij * grad(he.next()) * A/3;
+            }
+            vField[f] = vT;
+        }
+
+        return vField;
+    }
+
+
+    struct Vec2 {
+        double x, y;
+
+        Vec2() : x(0), y(0) {}
+        Vec2(double x, double y) : x(x), y(y) {}
+        Vec2(double v) : x(v), y(v) {}
+        Vec2(const Vector2& v) : x(v.x), y(v.y) {}
+
+        operator Vector2() const { return Vector2(x, y); };
+        Vec2 operator+(const Vec2& other) const { return Vec2(x + other.x, y + other.y); }
+        Vec2 operator-(const Vec2& other) const { return Vec2(x - other.x, y - other.y); }
+        Vec2 operator*(double scalar) const { return Vec2(x * scalar, y * scalar); }
+        double operator*(const Vec2& other) const { return x * other.x + y * other.y; }
+        auto operator<=>(const Vec2& other) const { return (x * x + y * y) <=> (other.x * other.x + other.y * other.y); }
+    };
+
+    using VectorX2d = Eigen::Matrix<Vector2,-1,1>;
+    using MatrixX2d = Eigen::Matrix<Vector2,-1,-1>;
+
+    using InnerProductFn = std::function<double(const VectorX2d, const VectorX2d&)>;
+
+    void modifiedGramSchmidt(const MatrixX2d& A, MatrixX2d& Q, Eigen::MatrixXd& R, const InnerProductFn& innerProduct) {
+        const int m = A.rows();
+        const int n = A.cols();
+
+        Q = MatrixX2d::Zero(m, n);
+        R = Eigen::MatrixXd::Zero(n, n);
+
+        for (int j = 0; j < n; ++j) {
+            VectorX2d v = A.col(j);
+
+            for (int i = 0; i < j; ++i) {
+                R(i, j) = innerProduct(Q.col(i), A.col(j));
+                VectorX2d w = Q.col(i);
+                for (int k = 0; k< v.size(); ++k) { v[k] -= w[k] * R(i,j); }
+            }
+
+            R(j, j) = std::sqrt(innerProduct(v, v));
+            if (R(j, j) == 0.0) {
+                throw std::runtime_error("Linearly dependent column detected");
+            }
+            for (int k = 0; k< v.size(); ++k) { Q.col(j)[k] = v[k] / R(j,j); }
+            // Q.col(j) = v / R(j, j);
+        }
+    }
+
+
+    std::vector<FaceData<Vector2>> orthonormalize(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,const std::vector<FaceData<Vector2>>& X) {
+        MatrixX2d matrix(mesh.nFaces(), X.size());
+        // TODO: Think about indexing
+        for (std::size_t m = 0; m < X.size(); m++) {
+            for (std::size_t n = 0; n < mesh.nFaces(); n++) {
+                matrix(n,m) = X[m][mesh.face(n)] * std::sqrt(geom.faceAreas[mesh.face(n)]);
+            }
+        }
+        MatrixX2d Q {}; Eigen::MatrixXd R{};
+        auto inner_product = [](const VectorX2d& a, const VectorX2d& b) -> double {
+            double s = 0; for (std::size_t i = 0; i < a.size(); i++) s += dot(a[i], b[i]); return s;
+        };
+        modifiedGramSchmidt(matrix,Q,R, inner_product);
+        std::cout << "Orthogonality: "  << inner_product(Q.col(0), Q.col(1)) << std::endl;
+        std::vector<FaceData<Vector2>> h{};
+        for (std::size_t m = 0; m < X.size(); m++)
+        {
+            FaceData<Vector2>& hm = h.emplace_back(mesh);
+            for (std::size_t n = 0; n < mesh.nFaces(); n++)
+            {
+                Face f = mesh.face(n);
+                hm[f] = Q(n, m) * (1./ std::sqrt(geom.faceAreas[f]));
+            }
+        }
+        return h;
+    }
+
+    std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
+    {
+        Face x = mesh.face(0);
+        auto homotopy_b= homotopy_basis(mesh, geom,x);
+        std::vector<FaceData<Vector2>> h(homotopy_b.size());
+        for (std::size_t i = 0; i < homotopy_b.size(); i++){
+            auto& basis = homotopy_b[i];
+            // TODO: reduce to homology basis;
+            auto df =delta_form(mesh, basis);
+            EdgeData<double> pf = pressure_project(mesh, df, geom);
+            h[i] = whitney_interpolation(mesh,geom,pf);
+        }
+        return orthonormalize(mesh, geom, h);
     }
 }
 

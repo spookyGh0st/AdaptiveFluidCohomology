@@ -29,5 +29,11 @@ namespace geometrycentral::surface
     EdgeData<double> delta_form(SurfaceMesh& mesh, const std::vector<Halfedge>& co_loop);
 
     EdgeData<double> pressure_project(SurfaceMesh& mesh, const EdgeData<double>& co_loop, IntrinsicGeometryInterface& geom);
+
+    FaceData<Vector2> whitney_interpolation(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<double>& h);
+
+    std::vector<FaceData<Vector2>> orthonormalize(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const std::vector<FaceData<Vector2>>& h);
+
+    std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom);
 }
 

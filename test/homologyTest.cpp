@@ -102,17 +102,20 @@ TEST(homologyTest, TestDeRhamCohom)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"two_torus.stl";
+    fds = fds.parent_path()/ "models" /"torus.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
-    Face x = m->face(46);
+    Face x = m->face(0);
     auto h_basis = homotopy_basis(*m,*g,x);
-    for (auto c: h_basis) {
-    }
 
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList(), polyscopePermutations(*m));
     int basis_i = 0;
     g->requireDECOperators();
+
+    g->requireFaceTangentBasis();
+    FaceData<Vector3> e1(*m),e2(*m);
+    for (Face f: m->faces()) { e1[f] = g->faceTangentBasis[f][0], e2[f] = g->faceTangentBasis[f][1]; }
+
     for (const auto& basis: h_basis) {
         EdgeData<int> b(*m, 0);
         for (Halfedge e: basis) { b[e.edge()] = 1;}
@@ -125,7 +128,33 @@ TEST(homologyTest, TestDeRhamCohom)
         pm->addEdgeScalarQuantity("pressure projection " + std::to_string(basis_i), pf);
         pm->addFaceScalarQuantity("pressure projection ex der " + std::to_string(basis_i), dpf);
         pm->addEdgeScalarQuantity("homology basis " + std::to_string(basis_i),b,polyscope::DataType::CATEGORICAL);
+        FaceData<Vector2> wi = whitney_interpolation(*m,*g,pf);
+        pm->addFaceTangentVectorQuantity("homology basis Whitney " + std::to_string(basis_i), wi, e1,e2);
         basis_i++;
+    }
+    polyscope::show();
+}
+
+TEST(homologyTest, TestWhitney)
+{
+    using namespace geometrycentral::surface;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" /"torus.stl";
+    auto [m,g] = readManifoldSurfaceMesh(fds.string());
+    g->requireHalfedgeVectorsInFace();
+    g->requireFaceTangentBasis();
+    auto basis = orthonormal_hom_basis(*m,*g);
+
+    g->requireFaceTangentBasis();
+    FaceData<Vector3> e1(*m),e2(*m);
+    for (Face f: m->faces()) { e1[f] = g->faceTangentBasis[f][0], e2[f] = g->faceTangentBasis[f][1]; }
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList(), polyscopePermutations(*m));
+    std::size_t i = 0;
+    for (const auto& b: basis) {
+        pm->addFaceTangentVectorQuantity("Hom basis" + std::to_string(i),b,e1,e2);
+        i++;
     }
     polyscope::show();
 }
