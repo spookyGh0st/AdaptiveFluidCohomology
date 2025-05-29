@@ -342,7 +342,8 @@ namespace geometrycentral::surface
         std::vector<std::vector<Halfedge>> co_loops;
         for (Edge e : dist_edges)
         {
-            co_loops.push_back(reduce_co_loop(mesh,minimal_co_loop(prev.first, x, e)));
+            // co_loops.push_back(reduce_co_loop(mesh,minimal_co_loop(prev.first, x, e)));
+            co_loops.push_back(minimal_co_loop(prev.first, x, e));
         }
         return co_loops;
     }
@@ -401,25 +402,22 @@ namespace geometrycentral::surface
     }
 
 
-
-    EdgeData<double> pressure_project(SurfaceMesh& mesh, const EdgeData<double>& co_loop, IntrinsicGeometryInterface& geom) {
+    void PressureProjectionSolver::compute(IntrinsicGeometryInterface& geom)
+    {
         geom.requireDECOperators();
-        // d_pi = d_pi.completeOrthogonalDecomposition().pseudoInverse();
-        // Eigen::VectorXd v = (Eigen::MatrixXd::Identity(mesh.nEdges(), mesh.nEdges()) - geom.d0 * d_pi) * co_loop.raw();
-
-        Eigen::SparseMatrix<double>& A = geom.d0;
-        const Eigen::VectorXd& x = co_loop.raw();
-        Eigen::SparseMatrix<double> AT = A.transpose();
-
-        Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower | Eigen::Upper> solver;
+        A = geom.d0; AT = A.transpose();
         solver.compute(AT*A);
+        geom.unrequireDECOperators();
+    }
 
+    EdgeData<double> PressureProjectionSolver::solve(SurfaceMesh& mesh, const EdgeData<double>& co_loop) const
+    {
+        const Eigen::VectorXd& x = co_loop.raw();
         Eigen::VectorXd c = solver.solve(AT * x);
         return EdgeData<double>(mesh, x - A*c);
     }
 
     // Function to compute the Whitney interpolated vector field
-    // TODO: Propably broken!
     FaceData<Vector2> whitney_interpolation(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<double>& h) {
         geom.requireHalfedgeVectorsInFace();
         geom.requireFaceAreas();
@@ -446,26 +444,10 @@ namespace geometrycentral::surface
     }
 
 
-    struct Vec2 {
-        double x, y;
-
-        Vec2() : x(0), y(0) {}
-        Vec2(double x, double y) : x(x), y(y) {}
-        Vec2(double v) : x(v), y(v) {}
-        Vec2(const Vector2& v) : x(v.x), y(v.y) {}
-
-        operator Vector2() const { return Vector2(x, y); };
-        Vec2 operator+(const Vec2& other) const { return Vec2(x + other.x, y + other.y); }
-        Vec2 operator-(const Vec2& other) const { return Vec2(x - other.x, y - other.y); }
-        Vec2 operator*(double scalar) const { return Vec2(x * scalar, y * scalar); }
-        double operator*(const Vec2& other) const { return x * other.x + y * other.y; }
-        auto operator<=>(const Vec2& other) const { return (x * x + y * y) <=> (other.x * other.x + other.y * other.y); }
-    };
-
     using VectorX2d = Eigen::Matrix<Vector2,-1,1>;
     using MatrixX2d = Eigen::Matrix<Vector2,-1,-1>;
 
-    using InnerProductFn = std::function<double(const VectorX2d, const VectorX2d&)>;
+    using InnerProductFn = std::function<double(const VectorX2d&, const VectorX2d&)>;
 
     void modifiedGramSchmidt(const MatrixX2d& A, MatrixX2d& Q, Eigen::MatrixXd& R, const InnerProductFn& innerProduct) {
         const int m = A.rows();
@@ -523,13 +505,15 @@ namespace geometrycentral::surface
     std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
     {
         Face x = mesh.face(0);
+        PressureProjectionSolver pp_solver {};
+        pp_solver.compute(geom);
         auto homotopy_b= homotopy_basis(mesh, geom,x);
         std::vector<FaceData<Vector2>> h(homotopy_b.size());
         for (std::size_t i = 0; i < homotopy_b.size(); i++){
             auto& basis = homotopy_b[i];
             // TODO: reduce to homology basis;
-            auto df =delta_form(mesh, basis);
-            EdgeData<double> pf = pressure_project(mesh, df, geom);
+            auto df =delta_form(mesh, reduce_co_loop(mesh, basis));
+            EdgeData<double> pf = pp_solver.solve(mesh,df);
             h[i] = whitney_interpolation(mesh,geom,pf);
         }
         return orthonormalize(mesh, geom, h);

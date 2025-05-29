@@ -23,12 +23,21 @@ namespace geometrycentral::surface
     // --- Minimal Co-loop ---
     std::vector<Halfedge> minimal_co_loop(FaceData<Halfedge>& prev, Face x, Edge bridge);
 
+    std::vector<Halfedge> reduce_co_loop(SurfaceMesh& mesh, const std::vector<Halfedge>& co_loop);
+
     // --- Homotopy Basis ---
     std::vector<std::vector<Halfedge>> homotopy_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, Face x);
 
     EdgeData<double> delta_form(SurfaceMesh& mesh, const std::vector<Halfedge>& co_loop);
 
-    EdgeData<double> pressure_project(SurfaceMesh& mesh, const EdgeData<double>& co_loop, IntrinsicGeometryInterface& geom);
+    struct PressureProjectionSolver
+    {
+        void compute(IntrinsicGeometryInterface& geom);
+        EdgeData<double> solve(SurfaceMesh& mesh, const EdgeData<double>& co_loop) const;
+        Eigen::SparseMatrix<double> A, AT;
+        // Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver {};
+        Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver {};
+    };
 
     FaceData<Vector2> whitney_interpolation(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<double>& h);
 

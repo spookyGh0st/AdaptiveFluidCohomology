@@ -8,6 +8,7 @@
 
 #include <chrono>
 
+#include "Stopwatch.h"
 #include "polyscope/curve_network.h"
 
 using namespace geometrycentral;
@@ -62,7 +63,7 @@ TEST(homologyTest, TestHomotopyBasis)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"two_torus.stl";
+    fds = fds.parent_path()/ "models" /"torus.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     EdgeData<EdgeType> edge_data(*m, EdgeType::bridge);
     computeMinimalSpanningTree(*m,*g,edge_data);
@@ -90,9 +91,12 @@ TEST(homologyTest, TestHomotopyBasis)
     auto h_basis = homotopy_basis(*m,*g,x);
     int basis_i = 0;
     for (const auto& basis: h_basis) {
-        EdgeData<int> b(*m, 0);
+        EdgeData<int> b(*m, 0), b_reduced(*m,0);
+        auto red_basis = reduce_co_loop(*m,basis);
         for (Halfedge e: basis) { b[e.edge()] = 1;}
+        for (Halfedge e: red_basis) { b_reduced[e.edge()] = 1;}
         pm->addEdgeScalarQuantity("homology basis " + std::to_string(basis_i),b,polyscope::DataType::CATEGORICAL);
+        pm->addEdgeScalarQuantity("reduced homology basis " + std::to_string(basis_i),b_reduced,polyscope::DataType::CATEGORICAL);
         basis_i++;
     }
     polyscope::show();
@@ -115,15 +119,17 @@ TEST(homologyTest, TestDeRhamCohom)
     g->requireFaceTangentBasis();
     FaceData<Vector3> e1(*m),e2(*m);
     for (Face f: m->faces()) { e1[f] = g->faceTangentBasis[f][0], e2[f] = g->faceTangentBasis[f][1]; }
+    PressureProjectionSolver pp_solver {};
+    pp_solver.compute(*g);
 
     for (const auto& basis: h_basis) {
         EdgeData<int> b(*m, 0);
         for (Halfedge e: basis) { b[e.edge()] = 1;}
-        auto df =delta_form(*m, basis);
+        auto df =delta_form(*m, reduce_co_loop(*m, basis));
         pm->addEdgeScalarQuantity("delta form " + std::to_string(basis_i), df);
         Eigen::VectorXd l  = g->d1 * df.raw();
         pm->addFaceScalarQuantity("delta form ex der " + std::to_string(basis_i),FaceData<double>(*m,l)) ;
-        EdgeData<double> pf = pressure_project(*m, df, *g);
+        EdgeData<double> pf = pp_solver.solve(*m, df);
         FaceData<double> dpf = FaceData<double>(*m, g->d1 * pf.raw());
         pm->addEdgeScalarQuantity("pressure projection " + std::to_string(basis_i), pf);
         pm->addFaceScalarQuantity("pressure projection ex der " + std::to_string(basis_i), dpf);
@@ -139,12 +145,11 @@ TEST(homologyTest, TestWhitney)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus.stl";
+    fds = fds.parent_path()/ "models" /"torus_max.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     g->requireHalfedgeVectorsInFace();
     g->requireFaceTangentBasis();
     auto basis = orthonormal_hom_basis(*m,*g);
-
     g->requireFaceTangentBasis();
     FaceData<Vector3> e1(*m),e2(*m);
     for (Face f: m->faces()) { e1[f] = g->faceTangentBasis[f][0], e2[f] = g->faceTangentBasis[f][1]; }
@@ -157,4 +162,24 @@ TEST(homologyTest, TestWhitney)
         i++;
     }
     polyscope::show();
+}
+TEST(homologyTest, TestPerformance)
+{
+    using namespace geometrycentral::surface;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" /"torus_max.stl";
+    auto [m,g] = readManifoldSurfaceMesh(fds.string());
+    g->requireHalfedgeVectorsInFace();
+    g->requireFaceTangentBasis();
+    double time = 0;
+    std::vector<FaceData<Vector2>> basis;
+    {
+        auto s = Stopwatch(time);
+        basis = orthonormal_hom_basis(*m, *g);
+    }
+    std::cout<< "#faces:  " << m->nFaces() << std::endl;
+    std::cout<< "#edges:  " << m->nEdges() << std::endl;
+    std::cout<< "#vertices:  " << m->nVertices() << std::endl;
+    std::cout<< "1betti:  " << basis.size() << std::endl;
+    std::cout<< "runtime: " << time << " ms" << std::endl;
 }
