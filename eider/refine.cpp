@@ -5,7 +5,7 @@
 
 namespace gcs=geometrycentral::surface;
 
-void refine(gcs::IntrinsicTriangulation& tri, const std::vector<gcs::Face>& faces) {
+void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
     auto& M = tri.intrinsicMesh;
 
     gcs::FaceData<gcs::Halfedge> refinement_edges (*M);
@@ -26,12 +26,15 @@ void refine(gcs::IntrinsicTriangulation& tri, const std::vector<gcs::Face>& face
     // marked_edges.reserve(faces.size()*2);
 
     // TODO: This is not recursive, fix!
-    for (const auto& f: faces)
+    while (!faces.empty())
     {
-        auto he = refinement_edges[f];
+        gcs::Face f = faces.back(); faces.pop_back();
+        gcs::Halfedge he = refinement_edges[f];
         marked_edges.insert(he.edge());
         if (he.edge().isBoundary() || refinement_edges[he.twin().face()] == he.twin()) {
             start_edges.insert(he.edge());
+        }else if (!he.edge().isBoundary() && !marked_edges.contains(refinement_edges[he.twin().face()].edge())) {
+            faces.push_back(he.twin().face());
         }
     }
 

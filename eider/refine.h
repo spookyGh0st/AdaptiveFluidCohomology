@@ -4,4 +4,4 @@
 
 namespace gcs=geometrycentral::surface;
 
-void refine(gcs::IntrinsicTriangulation& tri, const std::vector<gcs::Face>& faces);
+void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces);

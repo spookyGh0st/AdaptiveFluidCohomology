@@ -58,10 +58,46 @@ void uniform_refine(gcs::IntrinsicTriangulation& intrT) {
 }
 
 double refinement_ms = 0;
-void refine_callback(gcs::IntrinsicTriangulation& tri, gcs::VertexPositionGeometry& geometry) { // gets executed per-frame
+void refine_callback(gcs::IntrinsicTriangulation& tri, gcs::SurfaceMesh& mesh, gcs::VertexPositionGeometry& geometry, gcs::FaceData<int>& selection) { // gets executed per-frame
+
+    polyscope::SurfaceMesh* pm = polyscope::getSurfaceMesh("M");
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.MouseClicked[0])
+    {
+        // if clicked
+        glm::vec2 screenCoords{io.MousePos.x, io.MousePos.y};
+        polyscope::PickResult pickResult = polyscope::pickAtScreenCoords(screenCoords);
+
+        // check out pickResult.isHit, pickResult.structureName, pickResult.depth, etc
+
+        // get additional information if we clicked on a mesh
+        if(pickResult.isHit && pickResult.structure == pm) {
+            polyscope::SurfaceMeshPickResult meshPickResult =
+              pm->interpretPickResult(pickResult);
+
+            if(meshPickResult.elementType == polyscope::MeshElement::FACE) {
+                std::cout << "clicked face " << meshPickResult.index << std::endl;
+                gcs::Face f = mesh.face(meshPickResult.index);
+                if (selection[f] == 1) selection[f] =0;
+                else selection[f] = 1;
+                pm->addFaceScalarQuantity("selected faces", selection)->setEnabled(true);
+            }
+        }
+    }
 
     // Build a UI element to edit a parameter, which will
     // appear in the onscreen panel
+    if (ImGui::Button("Refine Selected"))
+    {
+        std::vector<gcs::Face> faces;
+        for (gcs::Face f:mesh.faces()) {
+            if (selection[f] == 1) faces.push_back(f);
+        }
+        refine(tri, faces);
+        updateTriagulationViz(tri,geometry);
+        for (gcs::Face f:mesh.faces()) { selection[f] = 0; }
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Uniform Refine"))
     {
         {
@@ -85,11 +121,20 @@ TEST(refineTest, testSplit)
     // uniform_refine(icit);
     // uniform_refine(icit);
     // uniform_refine(icit);
+    FaceData<int> selection(*m,0);
 
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
+    pm->addFaceScalarQuantity("selected faces", selection)->setEnabled(true);
+
+    pm->setSelectionMode(polyscope::MeshSelectionMode::FacesOnly);
+    // get the mouse location from ImGui
+
+
+
+
     updateTriagulationViz(icit, *g);
-    polyscope::state::userCallback = [&]() { refine_callback(icit, *g); };// specify the callback
+    polyscope::state::userCallback = [&]() { refine_callback(icit, *m, *g, selection); };// specify the callback
     polyscope::show();
 }
 
