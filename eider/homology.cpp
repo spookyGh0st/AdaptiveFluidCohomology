@@ -488,7 +488,6 @@ namespace geometrycentral::surface
             double s = 0; for (std::size_t i = 0; i < a.size(); i++) s += dot(a[i], b[i]); return s;
         };
         modifiedGramSchmidt(matrix,Q,R, inner_product);
-        std::cout << "Orthogonality: "  << inner_product(Q.col(0), Q.col(1)) << std::endl;
         std::vector<FaceData<Vector2>> h{};
         for (std::size_t m = 0; m < X.size(); m++)
         {
