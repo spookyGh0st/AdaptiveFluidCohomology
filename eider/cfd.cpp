@@ -66,10 +66,10 @@ namespace geometrycentral::surface
 
     FaceData<Vector2> velocity(
         SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
-        const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h)
+        const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h, const StreamFunctionSolver& S)
     {
         VertexData<double> f(mesh, 0);
-        solve_stream_function(mesh, geom, f, wc.w);
+        S.solve(mesh,geom,f,wc.w);
         FaceData<Vector2> u(mesh, Vector2::zero());
         for (Face face : mesh.faces())
         {
@@ -86,10 +86,10 @@ namespace geometrycentral::surface
 
     wc_wrapper evalRHS(
         SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
-        const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h)
+        const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h, const StreamFunctionSolver& S)
     {
         geom.requireFaceAreas(); geom.requireHalfedgeVectorsInFace();
-        auto u = velocity(mesh, geom, wc, h);
+        auto u = velocity(mesh, geom, wc, h, S);
 
         auto l = FaceData<Vector2>(mesh, Vector2::zero());
         for (Face f : mesh.faces()) { l[f] = Lamb(f, wc.w, u); }
@@ -112,12 +112,12 @@ namespace geometrycentral::surface
     wc_wrapper RK4Step(
         SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const std::vector<FaceData<Vector2>>& h,
-        const wc_wrapper& x, double dt
+        const wc_wrapper& x, double dt, const StreamFunctionSolver& S
     )
     {
-        auto F = [&mesh, &geom, &h](const wc_wrapper& wc) -> wc_wrapper { return evalRHS(mesh, geom, wc, h); };
-        wc_wrapper k1 = F(x), k2 = F(x + dt / 2 * k1);
-        wc_wrapper k3 = F(x + dt / 2 * k2), k4 = F(x + dt * k3);
+        auto F = [&mesh, &geom, &h, &S](const wc_wrapper& wc) -> wc_wrapper { return evalRHS(mesh, geom, wc, h, S); };
+        wc_wrapper k1 = F(x), k2 = F(x + (dt / 2) * k1);
+        wc_wrapper k3 = F(x + (dt / 2) * k2), k4 = F(x + dt * k3);
         return x + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4);
     }
 

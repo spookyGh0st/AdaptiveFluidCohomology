@@ -4,6 +4,8 @@
 #include "geometrycentral/surface/intrinsic_geometry_interface.h"
 #include <geometrycentral/utilities/vector2.h>
 
+#include "poisson.h"
+
 namespace geometrycentral::surface
 {
     struct wc_wrapper
@@ -14,12 +16,12 @@ namespace geometrycentral::surface
 
     FaceData<Vector2> velocity(
         SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
-        const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h
+        const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h, const StreamFunctionSolver& S
     );
 
     wc_wrapper RK4Step(
         SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const std::vector<FaceData<Vector2>>& h,
-        const wc_wrapper& x, double dt
+        const wc_wrapper& x, double dt, const StreamFunctionSolver& S
     );
 }

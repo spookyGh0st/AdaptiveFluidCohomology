@@ -15,7 +15,8 @@ wc_wrapper init_wc(SurfaceMesh& mesh, VertexPositionGeometry& geo, std::vector<F
     wc_wrapper wc;
     wc.w = VertexData<double>(mesh,1);
     wc.c = std::vector<double>(h.size(), 0);
-    for (int i = 0; i < h.size(); i++) {wc.c[i] = i;}
+    wc.c[0] = 0;
+    wc.c[1] = 0.5;
     return wc;
 }
 
@@ -27,9 +28,11 @@ TEST(cfdTest, testFluidSim)
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     std::vector<FaceData<Vector2>> h= orthonormal_hom_basis(*m,*g);
 
+    StreamFunctionSolver S;
+    S.compute(*m,*g);
 
     wc_wrapper wc = init_wc(*m, *g, h);
-    FaceData<Vector2> u = velocity(*m,*g,wc,h);
+    FaceData<Vector2> u = velocity(*m,*g,wc,h, S);
 
     g->requireFaceTangentBasis();
     FaceData<Vector3> e1(*m),e2(*m);
@@ -39,21 +42,24 @@ TEST(cfdTest, testFluidSim)
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
     pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
     pm->addFaceTangentVectorQuantity("velocity",u,e1,e2)->setEnabled(true);
+    std::size_t i = 0;
+    for (const auto& b: h) {
+        pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
+        i++;
+    }
 
-    pm->addFaceTangentVectorQuantity("velocity",u,e1,e2)->setEnabled(true);
-
-    float dt = 1;
+    float dt = 0.01;
     polyscope::state::userCallback = [&]() {
         if (ImGui::Button("reset")) {
             wc = init_wc(*m, *g, h);
-            u = velocity(*m,*g,wc,h);
+            u = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
             pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
         };
         ImGui::SliderFloat("delta time",&dt,0,1); ImGui::SameLine();
-        if (ImGui::Button("Advance")) {
-            wc = RK4Step(*m,*g,h,wc, dt);
-            u = velocity(*m,*g,wc,h);
+        if (!ImGui::Button("Advance")) {
+            wc = RK4Step(*m,*g,h,wc, dt, S);
+            u = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
             pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
         }
