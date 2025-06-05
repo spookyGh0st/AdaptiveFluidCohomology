@@ -34,11 +34,14 @@ void updateTriagulationViz(SurfaceMesh& mesh, VertexPositionGeometry& geometry, 
         } else if (t[e] == EdgeType::maximal_co_st) {
             auto& line = traces.emplace_back();
             Vector3 v13 = Vector3(1./3,1./3,1./3);
-            line.push_back(SurfacePoint(e.halfedge().face(),v13).interpolate(geometry.vertexPositions));
-            line.push_back(SurfacePoint(e,0.5).interpolate(geometry.vertexPositions));
-            line.push_back(SurfacePoint(e.halfedge().twin().face(),v13).interpolate(geometry.vertexPositions));
-            edge_color.push_back(1.0);
-            edge_color.push_back(1.0);
+            if (e.halfedge().isInterior())
+                line.push_back(SurfacePoint(e.halfedge().face(),v13).interpolate(geometry.vertexPositions));
+            line.push_back(0.5* (geometry.vertexPositions[e.firstVertex()] + geometry.vertexPositions[e.secondVertex()]));
+            if (e.halfedge().twin().isInterior())
+                line.push_back(SurfacePoint(e.halfedge().twin().face(),v13).interpolate(geometry.vertexPositions));
+            for (int i = 0; i < line.size()-1; ++i) {
+                edge_color.push_back(1.0);
+            }
         }
     }
     std::vector<Vector3> tracesPts;
@@ -63,12 +66,13 @@ TEST(homologyTest, TestHomotopyBasis)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus.stl";
+    fds = fds.parent_path()/ "models" /"torus_bounded_min.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     EdgeData<EdgeType> edge_data(*m, EdgeType::bridge);
-    computeMinimalSpanningTree(*m,*g,edge_data);
     computePrimalEdgesOfDualMaxST(*m,*g, edge_data);
+    computeMinimalSpanningTree(*m,*g,edge_data);
     auto d_edges = distinctEdges(*m,edge_data);
+
     Face x = m->face(0);
     auto dijkstra = co_dijkstra(*m,*g,edge_data,x);
     FaceData<int> prev(*m, 0); for (Face f: m->faces()) {
@@ -106,7 +110,7 @@ TEST(homologyTest, TestDeRhamCohom)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus.stl";
+    fds = fds.parent_path()/ "models" /"torus_bounded_max.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     Face x = m->face(0);
     auto h_basis = homotopy_basis(*m,*g,x);
@@ -126,11 +130,12 @@ TEST(homologyTest, TestDeRhamCohom)
         EdgeData<int> b(*m, 0);
         for (Halfedge e: basis) { b[e.edge()] = 1;}
         auto df =delta_form(*m, reduce_co_loop(*m, basis));
+        // auto df =delta_form(*m, basis);
         pm->addEdgeScalarQuantity("delta form " + std::to_string(basis_i), df);
-        Eigen::VectorXd l  = g->d1 * df.raw();
+        Eigen::VectorXd l  = g->d1 * df.toVector();
         pm->addFaceScalarQuantity("delta form ex der " + std::to_string(basis_i),FaceData<double>(*m,l)) ;
         EdgeData<double> pf = pp_solver.solve(*m, df);
-        FaceData<double> dpf = FaceData<double>(*m, g->d1 * pf.raw());
+        FaceData<double> dpf = FaceData<double>(*m, g->d1 * pf.toVector());
         pm->addEdgeScalarQuantity("pressure projection " + std::to_string(basis_i), pf);
         pm->addFaceScalarQuantity("pressure projection ex der " + std::to_string(basis_i), dpf);
         pm->addEdgeScalarQuantity("homology basis " + std::to_string(basis_i),b,polyscope::DataType::CATEGORICAL);

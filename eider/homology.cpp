@@ -61,26 +61,23 @@ namespace geometrycentral::surface
 
 
         geometry.requireEdgeLengths();
-        std::vector<std::tuple<double, Edge>> weightedEdges;
+        std::vector<Edge> weightedEdges;
         weightedEdges.reserve(mesh.nEdges());
 
         for (Edge e : mesh.edges()) {
-            weightedEdges.emplace_back(geometry.edgeLengths[e], e);
+            if (edgeData[e] == EdgeType::bridge)
+                weightedEdges.emplace_back(e);
         }
 
-        std::sort(weightedEdges.begin(), weightedEdges.end()); // Ascending for MST
+        std::ranges::sort(weightedEdges, [&geometry](const auto& a, const auto& b) { return geometry.edgeLengths[a] > geometry.edgeLengths[b]; });
 
         std::vector<Edge> mstEdges;
-        if (mesh.nVertices() == 0) {
-            return ;
-        }
 
         DSU dsu(mesh.nVertices());
         size_t numMstEdges = 0;
         size_t targetNumEdges = mesh.nVertices() > 0 ? mesh.nVertices() - 1 : 0;
 
-        for (const auto& item : weightedEdges) {
-            Edge e = std::get<1>(item);
+        for (Edge e : weightedEdges) {
             Halfedge he = e.halfedge();
 
             size_t idx1 = he.tailVertex().getIndex();
@@ -106,7 +103,7 @@ namespace geometrycentral::surface
     // Computes the Maximal Spanning Tree (MaxST) of the dual graph.
     // Returns the set of primal edges that are "crossed" by the edges of this dual MaxST.
     // The weight of a dual edge is the length of the primal edge it crosses.
-    void computePrimalEdgesOfDualMaxST(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry, EdgeData<EdgeType>& edgeData) {
+    Halfedge computePrimalEdgesOfDualMaxST(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry, EdgeData<EdgeType>& edgeData) {
 
         geometry.requireEdgeLengths();
 
@@ -121,10 +118,8 @@ namespace geometrycentral::surface
             dualEdges.emplace_back(primal_e);
         }
 
-        // Sort them by dual edge lengths. First do so by edge lengths and reserve to ensure distinct sets tho.
-        std::ranges::sort(dualEdges, [&geometry](const auto& a, const auto& b) { return geometry.edgeLengths[a] < geometry.edgeLengths[b]; });
-        std::ranges::reverse(dualEdges);
-        std::ranges::sort(dualEdges, [&geometry](const auto& a, const auto& b) { return geometry.dualEdgeLengths[a] > geometry.dualEdgeLengths[b]; });
+
+        std::ranges::sort(dualEdges, [&geometry](const auto& a, const auto& b) { return geometry.dualEdgeLengths[a] < geometry.dualEdgeLengths[b]; });
 
         std::vector<Edge> primalEdgesInDualMaxST;
         primalEdgesInDualMaxST.reserve(mesh.nEdges());
@@ -150,10 +145,22 @@ namespace geometrycentral::surface
         }
 
         geometry.unrequireDualEdgeLengths();
-        for (Edge e: primalEdgesInDualMaxST)
-        {
+        for (Edge e: primalEdgesInDualMaxST) {
             edgeData[e] = EdgeType::maximal_co_st;
         }
+
+        // If manifold with boundary, add single boundary edge
+        if (mesh.hasBoundary())
+        {
+            for (Edge e: mesh.edges()) {
+                if (e.isBoundary()) {
+                    edgeData[e] = EdgeType::maximal_co_st;
+                    if (e.halfedge().isInterior()) return e.halfedge();
+                    return e.halfedge().twin();
+                }
+            }
+        }
+        return Halfedge();
     }
 
     std::vector<Edge> distinctEdges(SurfaceMesh& mesh, EdgeData<EdgeType>& edgeData) {
@@ -299,9 +306,10 @@ namespace geometrycentral::surface
         return {prev, dist};
     }
 
-    std::vector<Halfedge> minimal_co_loop(FaceData<Halfedge>& prev, Face x, Edge bridge)
+    std::vector<Halfedge> minimal_co_loop(FaceData<Halfedge>& prev, Face x, Edge bridge, Halfedge bound_dual_edge)
     {
         Halfedge he = bridge.halfedge();
+        assert(he.isInterior());
         Face f = he.face();
         std::vector<Halfedge> co_loop;
         co_loop.push_back(he);
@@ -310,7 +318,9 @@ namespace geometrycentral::surface
             co_loop.push_back(prev[f]);
             f = prev[f].face();
         }
-        f = he.twin().face();
+        if (bridge.isBoundary()) { he = bound_dual_edge; co_loop.push_back(he.twin()); }
+        else {he = bridge.halfedge().twin(); }
+        f = he.face();
         while (f != x)
         {
             co_loop.push_back(prev[f].twin());
@@ -326,7 +336,7 @@ namespace geometrycentral::surface
         HalfedgeData<bool> in_loop(mesh,false);
         for (Halfedge he : co_loop) { in_loop[he] = true; }
         for (Halfedge he : co_loop) {
-            if (in_loop[he] && in_loop[he.twin()]) continue;
+            if (!he.edge().isBoundary() && in_loop[he] && in_loop[he.twin()]) continue;
             reduced.push_back(he);
         }
         return reduced;
@@ -335,15 +345,15 @@ namespace geometrycentral::surface
     std::vector<std::vector<Halfedge>> homotopy_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, Face x)
     {
         EdgeData<EdgeType> edge_data(mesh, EdgeType::bridge);
+        Halfedge b_halfedge = computePrimalEdgesOfDualMaxST(mesh, geom, edge_data);
         computeMinimalSpanningTree(mesh, geom, edge_data);
-        computePrimalEdgesOfDualMaxST(mesh, geom, edge_data);
         auto dist_edges = distinctEdges(mesh, edge_data);
         auto prev = co_dijkstra(mesh, geom, edge_data, x);
         std::vector<std::vector<Halfedge>> co_loops;
         for (Edge e : dist_edges)
         {
             // co_loops.push_back(reduce_co_loop(mesh,minimal_co_loop(prev.first, x, e)));
-            co_loops.push_back(minimal_co_loop(prev.first, x, e));
+            co_loops.push_back(minimal_co_loop(prev.first, x, e,b_halfedge));
         }
         return co_loops;
     }
@@ -412,7 +422,7 @@ namespace geometrycentral::surface
 
     EdgeData<double> PressureProjectionSolver::solve(SurfaceMesh& mesh, const EdgeData<double>& co_loop) const
     {
-        const Eigen::VectorXd& x = co_loop.raw();
+        const Eigen::VectorXd& x = co_loop.toVector();
         Eigen::VectorXd c = solver.solve(AT * x);
         return EdgeData<double>(mesh, x - A*c);
     }

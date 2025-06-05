@@ -23,7 +23,7 @@ wc_wrapper init_wc(SurfaceMesh& mesh, VertexPositionGeometry& geo, std::vector<F
 TEST(cfdTest, testFluidSim)
 {
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus.stl";
+    fds = fds.parent_path()/ "models" /"torus_bounded_max.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     std::vector<FaceData<Vector2>> h= orthonormal_hom_basis(*m,*g);
 

@@ -12,7 +12,7 @@ namespace geometrycentral::surface
     void computeMinimalSpanningTree(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry, EdgeData<EdgeType>& edgeData);
 
     // --- Dual Graph Maximal Spanning Tree ---
-    void computePrimalEdgesOfDualMaxST(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry, EdgeData<EdgeType>& edgeData);
+    Halfedge computePrimalEdgesOfDualMaxST(SurfaceMesh& mesh, IntrinsicGeometryInterface& geometry, EdgeData<EdgeType>& edgeData);
 
     // --- Extract Edges not in MST or MaxST ---
     std::vector<Edge> distinctEdges(SurfaceMesh& mesh, EdgeData<EdgeType>& edgeData);
@@ -21,7 +21,7 @@ namespace geometrycentral::surface
     std::pair<FaceData<Halfedge>,FaceData<double>> co_dijkstra(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<EdgeType>& edgeData, Face orig_face);
 
     // --- Minimal Co-loop ---
-    std::vector<Halfedge> minimal_co_loop(FaceData<Halfedge>& prev, Face x, Edge bridge);
+    std::vector<Halfedge> minimal_co_loop(FaceData<Halfedge>& prev, Face x, Edge bridge, Halfedge bound_dual_edge);
 
     std::vector<Halfedge> reduce_co_loop(SurfaceMesh& mesh, const std::vector<Halfedge>& co_loop);
 
