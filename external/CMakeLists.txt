@@ -3,6 +3,8 @@
 # If not possible, please vendor libraries (aka copy them here to git)
 add_subdirectory("geometry-central")
 add_subdirectory("polyscope")
+set(TBB_TEST OFF)
+add_subdirectory("oneTBB")
 
 # Suppress warnings for GCC/Clang/MSVC
 function(disable_warnings target)
@@ -16,3 +18,4 @@ endfunction()
 # Apply to the relevant targets
 disable_warnings(geometry-central)
 disable_warnings(polyscope)
+disable_warnings(tbb)

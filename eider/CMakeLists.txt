@@ -3,7 +3,7 @@ add_library(eider ${SOURCE_FILES})
 set_target_properties(eider PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(eider PUBLIC cxx_std_23)
 
-target_link_libraries(eider PUBLIC geometry-central)
+target_link_libraries(eider PUBLIC geometry-central tbb)
 
 set_target_properties(eider PROPERTIES POSITION_INDEPENDENT_CODE ${BUILD_SHARED_LIBS})
 target_include_directories(eider INTERFACE

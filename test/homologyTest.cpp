@@ -66,7 +66,7 @@ TEST(homologyTest, TestHomotopyBasis)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus_bounded_min.stl";
+    fds = fds.parent_path()/ "models" /"torus_bounded_max.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     EdgeData<EdgeType> edge_data(*m, EdgeType::bridge);
     computePrimalEdgesOfDualMaxST(*m,*g, edge_data);
