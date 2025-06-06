@@ -18,7 +18,7 @@ namespace geometrycentral::surface
         std::vector<size_t> parent;
         std::vector<size_t> rank;
 
-        DSU(size_t n) {
+        explicit DSU(size_t n) {
             parent.resize(n);
             std::iota(parent.begin(), parent.end(), 0);
             rank.assign(n, 0);
@@ -237,7 +237,7 @@ namespace geometrycentral::surface
 
         void insert(const T& vertex, double key)
         {
-            heap.push_back({key, vertex});
+            heap.emplace_back(key, vertex);
             int idx = static_cast<int>(heap.size()) - 1;
             pos[vertex] = idx;
             heapifyUp(idx);
@@ -520,7 +520,6 @@ namespace geometrycentral::surface
         std::vector<FaceData<Vector2>> h(homotopy_b.size());
         for (std::size_t i = 0; i < homotopy_b.size(); i++){
             auto& basis = homotopy_b[i];
-            // TODO: reduce to homology basis;
             auto df =delta_form(mesh, reduce_co_loop(mesh, basis));
             EdgeData<double> pf = pp_solver.solve(mesh,df);
             h[i] = whitney_interpolation(mesh,geom,pf);
