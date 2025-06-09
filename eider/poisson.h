@@ -13,7 +13,7 @@ namespace geometrycentral::surface {
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
         Eigen::SparseMatrix<double> M_II, L_IB;
         VertexData<std::size_t> globalToInteriorIndex, globalToBoundaryIndex; // global to interior/boundary indices
-        std::vector<Vertex> boundaryVertices, interiorVertices;
+        std::vector<Vertex> boundaryVertices {}, interiorVertices {};
 
         void compute(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom);
 

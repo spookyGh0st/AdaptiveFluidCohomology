@@ -98,8 +98,8 @@ namespace geometrycentral::surface
         globalToInteriorIndex = VertexData(mesh, INVALID_IND);
         globalToBoundaryIndex = VertexData(mesh, INVALID_IND);
 
-        std::vector<Vertex> interiorVertices;
-        std::vector<Vertex> boundaryVertices;
+        interiorVertices;
+        boundaryVertices;
         size_t nInterior = 0;
         size_t nBoundary = 0;
 
@@ -163,7 +163,7 @@ namespace geometrycentral::surface
         }
 
         Eigen::SparseMatrix<double> L_II(nInterior, nInterior);
-        Eigen::SparseMatrix<double> L_IB(nInterior, nBoundary);
+        L_IB = Eigen::SparseMatrix<double> (nInterior, nBoundary);
         L_II.setFromTriplets(triplets_II.begin(), triplets_II.end());
         L_IB.setFromTriplets(triplets_IB.begin(), triplets_IB.end());
 
@@ -192,7 +192,7 @@ namespace geometrycentral::surface
                 }
             }
         }
-        Eigen::SparseMatrix<double> M_II(nInterior, nInterior);
+        M_II = Eigen::SparseMatrix<double> (nInterior, nInterior);
         M_II.setFromTriplets(triplets_MI.begin(), triplets_MI.end());
 
 
