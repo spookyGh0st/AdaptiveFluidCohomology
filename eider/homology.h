@@ -37,6 +37,8 @@ namespace geometrycentral::surface
         Eigen::SparseMatrix<double> A, AT;
         // Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver {};
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver {};
+        // TODO: check wether i need QR to solve pseudoinverse - I hope not, but Im afraid I do!
+        // Eigen::SparseQR<SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
     };
 
     FaceData<Vector2> whitney_interpolation(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<double>& h);

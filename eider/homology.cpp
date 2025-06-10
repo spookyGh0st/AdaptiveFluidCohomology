@@ -417,12 +417,14 @@ namespace geometrycentral::surface
         geom.requireDECOperators();
         A = geom.d0; AT = A.transpose();
         solver.compute(AT*A);
+        // TODO: QR - solver.compute(A);
         geom.unrequireDECOperators();
     }
 
     EdgeData<double> PressureProjectionSolver::solve(SurfaceMesh& mesh, const EdgeData<double>& co_loop) const
     {
-        const Eigen::VectorXd& x = co_loop.toVector();
+        Eigen::VectorXd x = co_loop.toVector();
+        // TODO: QR - Eigen::VectorXd c = solver.solve(x);
         Eigen::VectorXd c = solver.solve(AT * x);
         return EdgeData<double>(mesh, x - A*c);
     }
