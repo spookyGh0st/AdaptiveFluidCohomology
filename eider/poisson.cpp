@@ -10,83 +10,21 @@
 
 namespace geometrycentral::surface
 {
-    void solve_poisson_dirichlet_zero_mean(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
-                                           VertexData<double>& f, const VertexData<double>& g)
+    void StreamFunctionSolver::compute(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
     {
-        geom.requireCotanLaplacian();
-        geom.requireVertexDualAreas(); // Needed for area-weighted mean
+        if (mesh.hasBoundary()) { compute_dirichlet(mesh,geom); }
+        else { compute_zero_mean(mesh, geom); }
+    }
 
-        size_t nVertices = mesh.nVertices();
-        if (nVertices == 0) return;
-
-        // === 1. Build Laplacian ===
-        Eigen::SparseMatrix<double>& L = geom.cotanLaplacian;
-
-        // === 2. Build RHS vector (g) ===
-        Eigen::VectorXd rhs(nVertices);
-        for (Vertex v : mesh.vertices())
-        {
-            rhs[v.getIndex()] = g[v];
-        }
-
-        // === 3. Build area-weight vector for zero mean constraint ===
-        Eigen::RowVectorXd areaRow(nVertices);
-        for (Vertex v : mesh.vertices())
-        {
-            areaRow[v.getIndex()] = geom.vertexDualAreas[v];
-        }
-
-        // === 4. Augment system (L_aug * f = rhs_aug) ===
-        Eigen::SparseMatrix<double> L_aug(nVertices + 1, nVertices);
-        std::vector<Eigen::Triplet<double>> triplets;
-
-        // Copy L into top rows of L_aug
-        for (int k = 0; k < L.outerSize(); ++k)
-        {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(L, k); it; ++it)
-            {
-                triplets.emplace_back(it.row(), it.col(), it.value());
-            }
-        }
-
-        // Add areaRow as the last row in L_aug
-        for (int j = 0; j < nVertices; ++j)
-        {
-            if (areaRow(j) != 0.0)
-            {
-                triplets.emplace_back(nVertices, j, areaRow(j));
-            }
-        }
-
-        L_aug.setFromTriplets(triplets.begin(), triplets.end());
-
-        // === 5. Augmented RHS ===
-        Eigen::VectorXd rhs_aug(nVertices + 1);
-        rhs_aug.head(nVertices) = rhs;
-        rhs_aug(nVertices) = 0.0; // Enforce ∑ A_i * f_i = 0
-
-        // === 6. Solve the least-squares problem ===
-        Eigen::SparseMatrix<double> L_augT = L_aug.transpose();
-        Eigen::SparseMatrix<double> normalMatrix = L_augT * L_aug;
-        Eigen::VectorXd normalRHS = L_augT * rhs_aug;
-
-        Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
-        solver.compute(normalMatrix);
-        Eigen::VectorXd f_vec = solver.solve(normalRHS);
-
-        // === 7. Copy result into f ===
-        for (Vertex v : mesh.vertices())
-        {
-            f[v] = f_vec[v.getIndex()];
-        }
-
-        geom.unrequireCotanLaplacian();
-        geom.unrequireVertexDualAreas();
+    void StreamFunctionSolver::solve(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, VertexData<double>& f,
+        const VertexData<double>& g) const
+    {
+        if (mesh.hasBoundary()) { solve_dirichlet(f,g); }
+        else { solve_zero_mean(mesh, f, g); }
     }
 
 
-
-    void StreamFunctionSolver::compute(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
+    void StreamFunctionSolver::compute_dirichlet(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
     {
         geom.requireCotanLaplacian();
 
@@ -98,8 +36,6 @@ namespace geometrycentral::surface
         globalToInteriorIndex = VertexData(mesh, INVALID_IND);
         globalToBoundaryIndex = VertexData(mesh, INVALID_IND);
 
-        interiorVertices;
-        boundaryVertices;
         size_t nInterior = 0;
         size_t nBoundary = 0;
 
@@ -211,21 +147,86 @@ namespace geometrycentral::surface
 
         Eigen::VectorXd rhs = (M_II * B_I) - (L_IB * x_B);
         Eigen::VectorXd x_I = solver.solve(rhs);
+        if (solver.info() != Eigen::Success) {
+            throw std::runtime_error("Solving dirichlet system failed.");
+        }
 
         for (Vertex v : interiorVertices) {
             f[v] = x_I(globalToInteriorIndex[v]);
         }
     }
 
-    void StreamFunctionSolver::solve(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, VertexData<double>& f,
-        const VertexData<double>& g) const
+
+    void StreamFunctionSolver::compute_zero_mean(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
     {
-        if (mesh.hasBoundary())
-        {
-            solve_dirichlet(f,g);
-        } else {
-            solve_poisson_dirichlet_zero_mean(mesh, geom, f, g);
-            // TODO: make more efficient
+        size_t n = mesh.nVertices();
+        if (n == 0) return;
+
+        geom.requireCotanLaplacian();
+        geom.requireVertexGalerkinMassMatrix();
+
+        L_full = geom.cotanLaplacian;
+        M_full = geom.vertexGalerkinMassMatrix;
+
+        // Build mass vector
+        massVector = Eigen::VectorXd::Zero(n);
+        for (int k = 0; k < M_full.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(M_full, k); it; ++it) {
+                massVector[it.row()] += it.value();
+            }
+        }
+
+        // Build augmented matrix A
+        std::vector<Eigen::Triplet<double>> triplets;
+        triplets.reserve(L_full.nonZeros() + 2 * n);
+
+        for (int k = 0; k < L_full.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(L_full, k); it; ++it) {
+                triplets.emplace_back(it.row(), it.col(), it.value());
+            }
+        }
+
+        for (int i = 0; i < n; ++i) {
+            double m_i = massVector[i];
+            triplets.emplace_back(i, n, m_i);
+            triplets.emplace_back(n, i, m_i);
+        }
+
+        A_zero_mean = Eigen::SparseMatrix<double>(n + 1, n + 1);
+        A_zero_mean.setFromTriplets(triplets.begin(), triplets.end());
+
+        solver.compute(A_zero_mean);
+        if (solver.info() != Eigen::Success) {
+            throw std::runtime_error("Augmented system factorization failed in compute_zero_mean().");
+        }
+
+        geom.unrequireCotanLaplacian();
+        geom.unrequireVertexGalerkinMassMatrix();
+    }
+
+    void StreamFunctionSolver::solve_zero_mean(SurfaceMesh& mesh, VertexData<double>& f, const VertexData<double>& g) const
+    {
+        size_t n = f.size();
+        if (n == 0) return;
+
+        Eigen::VectorXd g_vec(n);
+        for (Vertex v : mesh.vertices()) {
+            g_vec[v.getIndex()] = g[v];
+        }
+
+        Eigen::VectorXd rhs = M_full * g_vec;
+
+        Eigen::VectorXd rhs_aug(n + 1);
+        rhs_aug.head(n) = rhs;
+        rhs_aug[n] = 0.0;
+
+        Eigen::VectorXd solution = solver.solve(rhs_aug);
+        if (solver.info() != Eigen::Success) {
+            throw std::runtime_error("Solving zero-mean system failed.");
+        }
+
+        for (Vertex v : mesh.vertices()) {
+            f[v] = solution[v.getIndex()];
         }
     }
 }
