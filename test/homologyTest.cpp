@@ -188,3 +188,22 @@ TEST(homologyTest, TestPerformance)
     std::cout<< "1betti:  " << basis.size() << std::endl;
     std::cout<< "runtime: " << time << " ms" << std::endl;
 }
+
+TEST(homologyTest, testProjection)
+{
+    using namespace geometrycentral::surface;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" /"torus_bounded_max.stl";
+    auto [m,g] = readManifoldSurfaceMesh(fds.string());
+    PressureProjectionSolver P {};
+    P.compute(*g);
+    EdgeData<double> x(*m, Eigen::VectorXd::Random(m->nEdges()));
+    EdgeData<double> px = P.solve(*m, x);
+    Eigen::VectorXd dTx = (g->d0.transpose() * px.toVector());
+    ASSERT_LE(dTx.norm(), 1e-10) << "projection does not project on kernel of A^T";
+    ASSERT_LE(dTx.maxCoeff(), 1e-10) << "projection does not project on kernel of A^T ";
+
+    Eigen::VectorXd xPx = px.toVector() - x.toVector();
+    double d = px.toVector().transpose() * xPx;
+    ASSERT_LE(std::abs(d), 1e-10) << "projection is not orthogonal";
+}
