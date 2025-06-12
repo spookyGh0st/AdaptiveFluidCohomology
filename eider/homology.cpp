@@ -482,7 +482,6 @@ namespace geometrycentral::surface
                 throw std::runtime_error("Linearly dependent column detected");
             }
             for (int k = 0; k< v.size(); ++k) { Q.col(j)[k] = v[k] / R(j,j); }
-            // Q.col(j) = v / R(j, j);
         }
     }
 
@@ -515,6 +514,7 @@ namespace geometrycentral::surface
 
     std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
     {
+        assert(&mesh == &geom.mesh);
         Face x = mesh.face(0);
         PressureProjectionSolver pp_solver {};
         pp_solver.compute(geom);

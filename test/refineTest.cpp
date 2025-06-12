@@ -11,6 +11,7 @@
 #include <chrono>
 
 #include "Stopwatch.h"
+#include "eider/poisson.h"
 
 void updateTriagulationViz(gcs::IntrinsicTriangulation& signpostTri, gcs::VertexPositionGeometry& geometry) {
     using namespace geometrycentral::surface;
@@ -151,6 +152,29 @@ TEST(refineTest, perf_test)
     {
         uniform_refine(icit);
     }
+}
+
+TEST(afemTest, estimate)
+{
+    using namespace geometrycentral::surface;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "L_fine.stl";
+    auto [m,g] = readManifoldSurfaceMesh(fds.string());
+
+    VertexData<double> f(*m,1);
+    VertexData<double> u(*m,0);
+
+    StreamFunctionSolver S {};
+    S.compute(*m, *g);
+    S.solve(*m,*g,u,f);
+    auto e = poisson_residual_error(*m, *g, f,u);
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
+    pm->addFaceScalarQuantity("residual error",e)->setEnabled(true);
+    pm->addVertexScalarQuantity("u",u);
+    pm->addVertexScalarQuantity("f",f);
+    polyscope::show();
 }
 
 TEST(refineTest, laplacian_test)

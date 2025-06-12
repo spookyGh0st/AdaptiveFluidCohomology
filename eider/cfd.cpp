@@ -1,4 +1,5 @@
 #include "cfd.h"
+#include "util.h"
 
 #include "geometrycentral/surface/surface_mesh.h"
 #include "geometrycentral/utilities/vector2.h"
@@ -6,17 +7,6 @@
 
 namespace geometrycentral::surface
 {
-    inline Vector2 grad(IntrinsicGeometryInterface& geom, Face face, const VertexData<double>& f)
-    {
-        Vector2 g = Vector2::zero();
-        for (Halfedge he : face.adjacentHalfedges())
-        {
-            Vector2 efp = geom.halfedgeVectorsInFace[he.next()];
-            g += (-efp.rotate90()) * f[he.vertex()];
-        }
-        return g / (2 * geom.faceAreas[face]);
-    }
-
     inline double derive(Vertex p, FaceData<Vector2>& u, IntrinsicGeometryInterface& geom, const VertexData<double>& f)
     {
         double a = 0, s = 0;
@@ -68,6 +58,7 @@ namespace geometrycentral::surface
         SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h, const StreamFunctionSolver& S)
     {
+        geom.requireHalfedgeVectorsInFace();
         VertexData<double> f(mesh, 0);
         S.solve(mesh,geom,f,wc.w);
         FaceData<Vector2> u(mesh, Vector2::zero());
@@ -80,6 +71,8 @@ namespace geometrycentral::surface
         for (std::size_t i = 0; i < h.size(); i++)
             for (Face face : mesh.faces())
                 u[face] = u[face] + wc.c[i] * h[i][face];
+
+        geom.unrequireHalfedgeVectorsInFace();
         return u;
     }
 

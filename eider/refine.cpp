@@ -3,6 +3,8 @@
 #include <geometrycentral/surface/surface_mesh.h>
 #include <set>
 
+#include "util.h"
+
 namespace gcs=geometrycentral::surface;
 
 void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
@@ -25,7 +27,6 @@ void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
     std::set<gcs::Edge> start_edges;
     // marked_edges.reserve(faces.size()*2);
 
-    // TODO: This is not recursive, fix!
     while (!faces.empty())
     {
         gcs::Face f = faces.back(); faces.pop_back();
@@ -65,4 +66,46 @@ void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
 
     assert(marked_edges.empty());
     tri.refreshQuantities();
+}
+
+using namespace geometrycentral::surface;
+using namespace geometrycentral;
+
+double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
+{
+    double f_st = 0, h_t = geom.faceAreas[T];
+    for (Vertex v: T.adjacentVertices()) f_st = f[v];
+    f_st /= 3;
+
+    double lu = 0;
+    for (Vertex v: T.adjacentVertices()) lu += laplacian(geom,v,u);
+    lu /= 3;
+
+
+    double jump_sum = 0;
+    for (Edge e: T.adjacentEdges()) {
+        double h_e = geom.edgeLengths[e];
+        if (e.isBoundary()) {
+            // TODO:
+        } else {
+            double j =0;
+            for (Halfedge he : e.adjacentHalfedges()) {
+                j += dot(grad(geom,e.halfedge().face(),u), geom.halfedgeVectorsInFace[he].rotate90());
+            }
+            jump_sum += h_e * h_e * j *j;
+        }
+    }
+
+    return h_t * h_t + std::pow(f_st + lu,2) + jump_sum;
+}
+
+FaceData<double> poisson_residual_error(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
+{
+    geom.requireHalfedgeVectorsInFace(); geom.requireVertexDualAreas(); geom.requireHalfedgeCotanWeights();
+    FaceData<double> eta(mesh);
+    for (Face T: mesh.faces()) {
+        eta[T] = etaR(T,geom,f,u);
+    }
+    geom.unrequireHalfedgeVectorsInFace(); geom.unrequireVertexDualAreas(); geom.unrequireHalfedgeCotanWeights();
+    return eta;
 }

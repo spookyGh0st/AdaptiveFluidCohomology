@@ -168,6 +168,39 @@ TEST(homologyTest, TestWhitney)
     }
     polyscope::show();
 }
+
+TEST(homologyTest, Intrinsic)
+{
+    using namespace geometrycentral::surface;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" /"grid_hole.stl";
+    auto [m,g] = readManifoldSurfaceMesh(fds.string());
+    IntegerCoordinatesIntrinsicTriangulation ig (*m,*g);
+    ig.flipToDelaunay();
+    g->requireFaceTangentBasis();
+
+    ManifoldSurfaceMesh& im = *ig.intrinsicMesh;
+    ig.requireHalfedgeVectorsInFace();
+    auto basis = orthonormal_hom_basis(im,ig);
+
+    VertexData<Vector3> vd(im);
+    for (Vertex v: m->vertices()) { vd[im.vertex(v.getIndex())] = g->vertexPositions[v]; }
+    VertexPositionGeometry vpg(im,vd);
+
+    vpg.requireFaceTangentBasis();
+    FaceData<Vector3> e1(im),e2(im);
+    for (Face f: im.faces()) { e1[f] = vpg.faceTangentBasis[f][0], e2[f] = vpg.faceTangentBasis[f][1]; }
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", vpg.vertexPositions,im.getFaceVertexList(), polyscopePermutations(im));
+    std::size_t i = 0;
+    for (const auto& b: basis) {
+        pm->addFaceTangentVectorQuantity("Hom basis" + std::to_string(i),b,e1,e2);
+        i++;
+    }
+    polyscope::show();
+}
+
 TEST(homologyTest, TestPerformance)
 {
     using namespace geometrycentral::surface;

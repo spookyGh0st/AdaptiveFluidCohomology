@@ -9,6 +9,8 @@
 #include <gtest/gtest.h>
 
 #include "geometrycentral/surface/surface_point.h"
+#include "geometrycentral/surface/integer_coordinates_intrinsic_triangulation.h"
+
 
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
@@ -184,6 +186,77 @@ TEST(cfdTest, testVorticesThroughHole)
 
 }
 
+TEST(cfdTest, IntrinsicHole)
+{
+    using namespace geometrycentral::surface;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" /"grid_hole.stl";
+    auto [m,g] = readManifoldSurfaceMesh(fds.string());
+    IntegerCoordinatesIntrinsicTriangulation ig (*m,*g);
+    ig.flipToDelaunay();
+    g->requireFaceTangentBasis();
+
+    ManifoldSurfaceMesh& im = *ig.intrinsicMesh;
+    ig.requireHalfedgeVectorsInFace();
+    auto h = orthonormal_hom_basis(im,ig);
+
+    VertexData<Vector3> vd(im);
+    for (Vertex v: m->vertices()) { vd[im.vertex(v.getIndex())] = g->vertexPositions[v]; }
+    VertexPositionGeometry vpg(im,vd);
+
+    vpg.requireFaceTangentBasis();
+    FaceData<Vector3> e1(im),e2(im);
+    for (Face f: im.faces()) { e1[f] = vpg.faceTangentBasis[f][0], e2[f] = vpg.faceTangentBasis[f][1]; }
+
+    StreamFunctionSolver S;
+    S.compute(im,ig);
+
+    // wc_wrapper wc = init_wc(*m, *g, h);
+    float dt = 0.001, v_dist  = 0.5, x_add = v_dist/4, y_add = 0, x_cuttof = v_dist/2, y_cuttof = v_dist/4, x_cutt_offset = 0, y_cutt_offset = 0.5;
+    wc_wrapper wc = init_taylor(im, vpg, h, v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
+    FaceData<Vector2> u = velocity(im,ig,wc,h, S);
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", vpg.vertexPositions,im.getFaceVertexList(), polyscopePermutations(im));
+    pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
+    pm->addFaceTangentVectorQuantity("velocity",u,e1,e2)->setEnabled(true);
+    std::size_t i = 0;
+    for (const auto& b: h) {
+        pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
+        i++;
+    }
+
+    bool running = false, fix_c = false;
+    polyscope::state::userCallback = [&]() {
+        ImGui::InputFloat("vorticity distance",&v_dist,0.125,0.5);
+        ImGui::InputFloat("x_add",&x_add,0.125,0.5); ImGui::InputFloat("y_add",&y_add,0.125,0.5);
+        ImGui::InputFloat("x_cuttof",&x_cuttof,0.125,0.5); ImGui::InputFloat("y_cuttoff",&y_cuttof,0.125,0.5);
+        ImGui::InputFloat("x_cut offset",&x_cutt_offset,0.125,0.5); ImGui::InputFloat("y_cut offset",&y_cutt_offset,0.125,0.5);
+        if (ImGui::Button("reset")) {
+            wc = init_taylor(im, vpg, h, v_dist, Vector2(x_add,y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
+            u = velocity(im,ig,wc,h, S);
+            pm->addVertexScalarQuantity("vorticity",wc.w);
+            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+        };
+        ImGui::InputFloat("delta time",&dt,0.001,0.01);
+        ImGui::Checkbox("Run", &running);
+        ImGui::Checkbox("Fix c", &fix_c);
+        if (running || ImGui::Button("Advance")) {
+            auto tmpc = wc.c;
+            wc = RK4Step(im,ig,h,wc, dt, S);
+            if (fix_c) wc.c = tmpc;
+            u = velocity(im,ig,wc,h, S);
+            pm->addVertexScalarQuantity("vorticity",wc.w);
+            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+        }
+        for (int i = 0; i< wc.c.size(); i++) {
+            ImGui::Text("c%d: %f",i,wc.c[i]);
+        }
+
+    };// specify the callback
+    polyscope::show();
+}
+
 wc_wrapper init_torus_taylor(SurfaceMesh& m, IntrinsicGeometryInterface& g, CornerData<Vector2>& p, std::vector<FaceData<Vector2>> h, double vorticity_distance, double A) {
     wc_wrapper wc; wc.w = VertexData<double>(m);
     double k = 2 * PI / vorticity_distance;
@@ -203,13 +276,14 @@ wc_wrapper init_torus_taylor(SurfaceMesh& m, IntrinsicGeometryInterface& g, Corn
             wc.c[i] += (u.x * v.y - u.y * v.x) * g.faceAreas[f];
         }
     }
+    wc.c[0] = 1;
     return wc;
 }
 
 TEST(cfdTest, testTorus)
 {
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus_bounded.obj";
+    fds = fds.parent_path()/ "models" /"torus.obj";
     std::unique_ptr<ManifoldSurfaceMesh> m; std::unique_ptr<VertexPositionGeometry> g;
     std::unique_ptr<CornerData<Vector2>> p;
     std::tie(m,g,p) = readParameterizedManifoldSurfaceMesh(fds.string());
