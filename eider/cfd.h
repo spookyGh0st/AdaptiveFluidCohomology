@@ -14,13 +14,18 @@ namespace geometrycentral::surface
         std::vector<double> c;
     };
 
-    FaceData<Vector2> velocity(
-        SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
+    struct velocity_wrapper {
+        FaceData<Vector2> u;
+        FaceData<double> residual;
+    };
+
+    velocity_wrapper velocity(
+        ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h, const StreamFunctionSolver& S
     );
 
     wc_wrapper RK4Step(
-        SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
+        ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const std::vector<FaceData<Vector2>>& h,
         const wc_wrapper& x, double dt, const StreamFunctionSolver& S
     );

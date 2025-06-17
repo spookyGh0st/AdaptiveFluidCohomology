@@ -21,14 +21,11 @@ namespace geometrycentral::surface
         double sum = 0.0;
 
         for (Halfedge he : v.outgoingHalfedges()) {
-            if (!he.isInterior()) continue;
-            Vertex vi = he.vertex();
-            Vertex vj = he.twin().vertex();
-
-            double cotAlpha = geom.halfedgeCotanWeights[he];
-            sum += cotAlpha * (f[vj] - f[vi]);
+            Vertex vi = he.tailVertex();
+            Vertex vj = he.tipVertex();
+            double wij =geom.edgeCotanWeights[he.edge()];
+            sum += wij * (f[vi] - f[vj]);
         }
-
-        return sum / geom.vertexDualAreas[v];
+        return sum;
     }
 }

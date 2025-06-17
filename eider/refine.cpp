@@ -81,31 +81,28 @@ double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& 
     for (Vertex v: T.adjacentVertices()) lu += laplacian(geom,v,u);
     lu /= 3;
 
-
     double jump_sum = 0;
-    for (Edge e: T.adjacentEdges()) {
-        double h_e = geom.edgeLengths[e];
-        if (e.isBoundary()) {
-            // TODO:
-        } else {
-            double j =0;
-            for (Halfedge he : e.adjacentHalfedges()) {
-                j += dot(grad(geom,e.halfedge().face(),u), geom.halfedgeVectorsInFace[he].rotate90());
-            }
-            jump_sum += h_e * h_e * j *j;
+    for (Edge e : T.adjacentEdges())
+    {
+        if (e.isBoundary()) continue; // only sum over interior edges
+        double h_e = geom.edgeLengths[e], j = 0;
+        for (Halfedge he : e.adjacentHalfedges()) // for both sides of edge
+        {
+            j += dot(grad(geom, he.face(), u), geom.halfedgeVectorsInFace[he].rotateCW(PI/2));
         }
+        jump_sum += h_e * h_e * j * j;
     }
 
-    return h_t * h_t + std::pow(f_st + lu,2) + jump_sum;
+    return h_t * h_t * std::pow(f_st + lu,2) + jump_sum;
 }
 
 FaceData<double> poisson_residual_error(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
 {
-    geom.requireHalfedgeVectorsInFace(); geom.requireVertexDualAreas(); geom.requireHalfedgeCotanWeights();
+    geom.requireHalfedgeVectorsInFace(); geom.requireEdgeCotanWeights();
     FaceData<double> eta(mesh);
     for (Face T: mesh.faces()) {
         eta[T] = etaR(T,geom,f,u);
     }
-    geom.unrequireHalfedgeVectorsInFace(); geom.unrequireVertexDualAreas(); geom.unrequireHalfedgeCotanWeights();
+    geom.unrequireHalfedgeVectorsInFace(); geom.requireEdgeCotanWeights();
     return eta;
 }

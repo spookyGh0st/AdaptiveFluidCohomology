@@ -4,6 +4,7 @@
 #include "geometrycentral/surface/surface_mesh.h"
 #include "geometrycentral/utilities/vector2.h"
 #include "poisson.h"
+#include "refine.h"
 
 namespace geometrycentral::surface
 {
@@ -54,13 +55,14 @@ namespace geometrycentral::surface
         return result;
     }
 
-    FaceData<Vector2> velocity(
-        SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
+    velocity_wrapper velocity(
+        ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h, const StreamFunctionSolver& S)
     {
         geom.requireHalfedgeVectorsInFace();
         VertexData<double> f(mesh, 0);
         S.solve(mesh,geom,f,wc.w);
+        FaceData<double> res = poisson_residual_error(mesh,geom,wc.w,f);
         FaceData<Vector2> u(mesh, Vector2::zero());
         for (Face face : mesh.faces())
         {
@@ -73,24 +75,24 @@ namespace geometrycentral::surface
                 u[face] = u[face] + wc.c[i] * h[i][face];
 
         geom.unrequireHalfedgeVectorsInFace();
-        return u;
+        return { u, res};
     }
 
 
     wc_wrapper evalRHS(
-        SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
+        ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const wc_wrapper& wc, const std::vector<FaceData<Vector2>>& h, const StreamFunctionSolver& S)
     {
         geom.requireFaceAreas(); geom.requireHalfedgeVectorsInFace();
         auto u = velocity(mesh, geom, wc, h, S);
 
         auto l = FaceData<Vector2>(mesh, Vector2::zero());
-        for (Face f : mesh.faces()) { l[f] = Lamb(f, wc.w, u); }
+        for (Face f : mesh.faces()) { l[f] = Lamb(f, wc.w, u.u); }
 
         VertexData<double> dw(mesh, 0);
         for (Vertex v : mesh.vertices())
         {
-            dw[v] = -derive(v, u, geom, wc.w);
+            dw[v] = -derive(v, u.u, geom, wc.w);
         }
         std::vector<double> dc(wc.c.size(), 0);
         for (std::size_t i = 0; i < wc.c.size(); i++)
@@ -103,7 +105,7 @@ namespace geometrycentral::surface
 
 
     wc_wrapper RK4Step(
-        SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
+        ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const std::vector<FaceData<Vector2>>& h,
         const wc_wrapper& x, double dt, const StreamFunctionSolver& S
     )

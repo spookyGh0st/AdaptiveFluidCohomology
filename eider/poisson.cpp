@@ -141,6 +141,7 @@ namespace geometrycentral::surface
     void StreamFunctionSolver::solve_dirichlet(VertexData<double>& f,
         const VertexData<double>& g) const
     {
+        if (interiorVertices.empty()) return;
         Eigen::VectorXd x_B(boundaryVertices.size()), B_I(interiorVertices.size());
         for (Vertex v : boundaryVertices) { x_B(globalToBoundaryIndex[v]) = f[v]; }
         for (Vertex v : interiorVertices) { B_I[globalToInteriorIndex[v]] = g[v]; }

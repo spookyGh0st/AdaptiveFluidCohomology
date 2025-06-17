@@ -81,7 +81,7 @@ TEST(cfdTest, testSec15)
     S.compute(*m,*g);
     wc_wrapper wc = init_wc(*m, *g, h);
     g->requireHalfedgeVectorsInFace();
-    FaceData<Vector2> u = velocity(*m,*g,wc,h, S);
+    velocity_wrapper vel = velocity(*m,*g,wc,h, S);
 
     g->requireFaceTangentBasis();
     FaceData<Vector3> e1(*m),e2(*m);
@@ -90,7 +90,7 @@ TEST(cfdTest, testSec15)
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
     pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
-    pm->addFaceTangentVectorQuantity("velocity",u,e1,e2)->setEnabled(true);
+    pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
     std::size_t i = 0;
     for (const auto& b: h) {
         pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
@@ -102,17 +102,17 @@ TEST(cfdTest, testSec15)
     polyscope::state::userCallback = [&]() {
         if (ImGui::Button("reset")) {
             wc = init_wc(*m,*g,h);
-            u = velocity(*m,*g,wc,h, S);
+            vel = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
         };
         ImGui::InputFloat("delta time",&dt,0.001,0.01);
         ImGui::Checkbox("Run", &running);
         if (running || ImGui::Button("Advance")) {
             wc = RK4Step(*m,*g,h,wc, dt, S);
-            u = velocity(*m,*g,wc,h, S);
+            vel = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
         }
         for (int i = 0; i< wc.c.size(); i++) {
             ImGui::Text("c%d: %f",i,wc.c[i]);
@@ -138,7 +138,7 @@ TEST(cfdTest, testVorticesThroughHole)
     float dt = 0.001, v_dist  = 0.5, x_add = v_dist/4, y_add = 0, x_cuttof = v_dist/2, y_cuttof = v_dist/4, x_cutt_offset = 0, y_cutt_offset = 0.5;
     wc_wrapper wc = init_taylor(*m, *g, h, v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
     g->requireHalfedgeVectorsInFace();
-    FaceData<Vector2> u = velocity(*m,*g,wc,h, S);
+    velocity_wrapper vel = velocity(*m,*g,wc,h, S);
 
     g->requireFaceTangentBasis();
     FaceData<Vector3> e1(*m),e2(*m);
@@ -147,7 +147,8 @@ TEST(cfdTest, testVorticesThroughHole)
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
     pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
-    pm->addFaceTangentVectorQuantity("velocity",u,e1,e2)->setEnabled(true);
+    pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
+    pm->addFaceScalarQuantity("residual",vel.residual);
     std::size_t i = 0;
     for (const auto& b: h) {
         pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
@@ -162,9 +163,10 @@ TEST(cfdTest, testVorticesThroughHole)
         ImGui::InputFloat("x_cut offset",&x_cutt_offset,0.125,0.5); ImGui::InputFloat("y_cut offset",&y_cutt_offset,0.125,0.5);
         if (ImGui::Button("reset")) {
             wc = init_taylor(*m, *g, h, v_dist, Vector2(x_add,y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-            u = velocity(*m,*g,wc,h, S);
+            vel = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
+            pm->addFaceScalarQuantity("residual",vel.residual);
         };
         ImGui::InputFloat("delta time",&dt,0.001,0.01);
         ImGui::Checkbox("Run", &running);
@@ -173,9 +175,10 @@ TEST(cfdTest, testVorticesThroughHole)
             auto tmpc = wc.c;
             wc = RK4Step(*m,*g,h,wc, dt, S);
             if (fix_c) wc.c = tmpc;
-            u = velocity(*m,*g,wc,h, S);
+            vel = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
+            pm->addFaceScalarQuantity("residual",vel.residual);
         }
         for (int i = 0; i< wc.c.size(); i++) {
             ImGui::Text("c%d: %f",i,wc.c[i]);
@@ -214,12 +217,12 @@ TEST(cfdTest, IntrinsicHole)
     // wc_wrapper wc = init_wc(*m, *g, h);
     float dt = 0.001, v_dist  = 0.5, x_add = v_dist/4, y_add = 0, x_cuttof = v_dist/2, y_cuttof = v_dist/4, x_cutt_offset = 0, y_cutt_offset = 0.5;
     wc_wrapper wc = init_taylor(im, vpg, h, v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-    FaceData<Vector2> u = velocity(im,ig,wc,h, S);
+    velocity_wrapper vel = velocity(im,ig,wc,h, S);
 
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", vpg.vertexPositions,im.getFaceVertexList(), polyscopePermutations(im));
     pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
-    pm->addFaceTangentVectorQuantity("velocity",u,e1,e2)->setEnabled(true);
+    pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
     std::size_t i = 0;
     for (const auto& b: h) {
         pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
@@ -234,9 +237,9 @@ TEST(cfdTest, IntrinsicHole)
         ImGui::InputFloat("x_cut offset",&x_cutt_offset,0.125,0.5); ImGui::InputFloat("y_cut offset",&y_cutt_offset,0.125,0.5);
         if (ImGui::Button("reset")) {
             wc = init_taylor(im, vpg, h, v_dist, Vector2(x_add,y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-            u = velocity(im,ig,wc,h, S);
+            vel = velocity(im,ig,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
         };
         ImGui::InputFloat("delta time",&dt,0.001,0.01);
         ImGui::Checkbox("Run", &running);
@@ -245,9 +248,10 @@ TEST(cfdTest, IntrinsicHole)
             auto tmpc = wc.c;
             wc = RK4Step(im,ig,h,wc, dt, S);
             if (fix_c) wc.c = tmpc;
-            u = velocity(im,ig,wc,h, S);
+            vel = velocity(im,ig,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
+            pm->addFaceScalarQuantity("error",vel.residual);
         }
         for (int i = 0; i< wc.c.size(); i++) {
             ImGui::Text("c%d: %f",i,wc.c[i]);
@@ -295,7 +299,7 @@ TEST(cfdTest, testTorus)
     wc_wrapper wc = init_torus_taylor(*m, *g, *p,h, v_dist,A);
 
     g->requireHalfedgeVectorsInFace();
-    FaceData<Vector2> u = velocity(*m,*g,wc,h, S);
+    velocity_wrapper vel = velocity(*m,*g,wc,h, S);
 
     g->requireFaceTangentBasis();
     FaceData<Vector3> e1(*m),e2(*m);
@@ -304,7 +308,7 @@ TEST(cfdTest, testTorus)
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
     pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
-    pm->addFaceTangentVectorQuantity("velocity",u,e1,e2)->setEnabled(true);
+    pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
     std::size_t i = 0;
     for (const auto& b: h) {
         pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
@@ -318,17 +322,17 @@ TEST(cfdTest, testTorus)
         ImGui::SliderFloat("A",&A,0,10);
         if (ImGui::Button("reset")) {
             wc = init_torus_taylor(*m, *g, *p,h, v_dist,A);
-            u = velocity(*m,*g,wc,h, S);
+            vel = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
         };
         ImGui::InputFloat("delta time",&dt,0.01,0.1);
         ImGui::Checkbox("Run", &running);
         if (running || ImGui::Button("Advance")) {
             wc = RK4Step(*m,*g,h,wc, dt, S);
-            u = velocity(*m,*g,wc,h, S);
+            vel = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",u,e1,e2);
+            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
         }
         for (int i = 0; i< wc.c.size(); i++) {
             ImGui::Text("c%d: %f",i,wc.c[i]);
