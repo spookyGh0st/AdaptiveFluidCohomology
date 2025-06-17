@@ -2,6 +2,7 @@
 
 #include <geometrycentral/utilities/vector2.h>
 #include <geometrycentral/surface/intrinsic_geometry_interface.h>
+#include <geometrycentral/surface/manifold_surface_mesh.h>
 
 namespace geometrycentral::surface
 {
@@ -27,5 +28,20 @@ namespace geometrycentral::surface
             sum += wij * (f[vi] - f[vj]);
         }
         return sum;
+    }
+
+    inline double diameter(IntrinsicGeometryInterface& geom, Face f) {
+        assert(f.isTriangle());
+        double d = 0;
+        for (Edge e: f.adjacentEdges())
+            d = std::max(d,geom.edgeLengths[e]);
+        return d;
+    }
+
+    inline double max_diameter(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom) {
+        double d = 0;
+        for (Face f: mesh.faces())
+            d = std::max(d,diameter(geom, f));
+        return d;
     }
 }

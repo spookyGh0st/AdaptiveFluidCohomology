@@ -14,6 +14,8 @@
 #include "eider/poisson.h"
 #include <implot.h>
 
+#include "eider/util.h"
+
 void updateTriagulationViz(gcs::IntrinsicTriangulation& signpostTri, gcs::VertexPositionGeometry& geometry) {
     using namespace geometrycentral::surface;
     using namespace geometrycentral;
@@ -75,10 +77,11 @@ TEST(refineTest, testSplit)
 
     ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
     FaceData<int> selection(m,0);
+    FaceData<double> residual(m,0);
 
     polyscope::SurfaceMesh* pm;
-    std::vector<double> n_tri, error;
-    auto vis_mg = [&m,&icit,&parent_g,&selection, &pm,&n_tri, &error]() {
+    std::vector<double> n_tri, error, h1, h2;
+    auto vis_mg = [&m,&icit,&parent_g,&selection, &pm,&n_tri, &error, &h1, &h2,&residual]() {
         m.compress();
         VertexData<Vector3> int_positions(m) ;
         for (Vertex v : m.vertices()) {
@@ -94,17 +97,23 @@ TEST(refineTest, testSplit)
         StreamFunctionSolver S {};
         S.compute(m, icit);
         S.solve(m,icit,u,f);
-        auto e = poisson_residual_error(m, icit, f,u);
-        double s = 0; for (Face f: m.faces()) { s += e[f]; }
-        pm->addFaceScalarQuantity("residual error",e)->setEnabled(true);
+        residual = poisson_residual_error(m, icit, f,u);
+        double s = 0; for (Face f: m.faces()) { s += residual[f]; }
+        pm->addVertexScalarQuantity("u",u);
+        pm->addVertexScalarQuantity("f",f);
+        pm->addFaceScalarQuantity("residual error",residual);
         n_tri.push_back(m.nFaces());
         error.push_back(s);
+        h1.push_back(max_diameter(m,icit));
+        h2.push_back(std::cbrt(h1.back()*h1.back()));
     };
 
 
     polyscope::init();
     ImPlot::CreateContext();
     vis_mg();
+
+    float theta = 0.6;
 
 
     polyscope::state::userCallback = [&]()
@@ -131,6 +140,17 @@ TEST(refineTest, testSplit)
             }
         }
 
+        ImGui::DragFloat("etha",&theta,0.025,0,1);
+        ImGui::SameLine();
+        if (ImGui::Button("Select doerfler"))
+        {
+            auto faces = select_doerfler(m,residual,theta);
+            selection.fill(0);
+            for (Face f:faces) {
+                selection[f] = 1;
+            }
+            vis_mg();
+        }
         // Build a UI element to edit a parameter, which will
         // appear in the onscreen panel
         if (ImGui::Button("Refine Selected"))
@@ -158,9 +178,10 @@ TEST(refineTest, testSplit)
             ImPlot::SetupAxis(ImAxis_X1, "#Triangles",ImPlotAxisFlags_AutoFit);
             ImPlot::SetupAxis(ImAxis_Y1, "residual error estimate", ImPlotAxisFlags_AutoFit);
             ImPlot::SetupAxis(ImAxis_Y2, "Optimal", ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_Opposite);
-            ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+            // ImPlot::SetupAxisScale(ImAxis_X1);
 
-            std::vector<double> bound1(n_tri.size()), bound2(n_tri.size());
+            std::size_t n = n_tri.size();
+            std::vector<double> bound1(n), bound2(n);
             for (int i = 0; i < n_tri.size(); ++i) {
                 bound1[i] = 1. / std::sqrt(double(n_tri[i]));
                 bound2[i] = 1. / std::cbrt(double(n_tri[i]));
@@ -172,6 +193,8 @@ TEST(refineTest, testSplit)
             ImPlot::SetAxes(ImAxis_X1, ImAxis_Y2);
             ImPlot::PlotLine("#T^-(1/2)", n_tri.data(), bound1.data(),n_tri.size());
             ImPlot::PlotLine("#T^-(1/3)", n_tri.data(), bound2.data(),n_tri.size());
+            ImPlot::PlotLine("h", n_tri.data(), h1.data(),n_tri.size());
+            ImPlot::PlotLine("h^(2/3)", n_tri.data(), h2.data(),n_tri.size());
             ImPlot::EndPlot();
         }
         ImPlot::ShowDemoWindow();

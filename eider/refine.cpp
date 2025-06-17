@@ -111,3 +111,25 @@ FaceData<double> poisson_residual_error(ManifoldSurfaceMesh& mesh, IntrinsicGeom
     geom.unrequireHalfedgeVectorsInFace(); geom.requireEdgeCotanWeights();
     return eta;
 }
+
+std::vector<Face> select_doerfler(ManifoldSurfaceMesh& mesh, FaceData<double> residual, double theta)
+{
+    if (mesh.nFaces() == 0) return {};
+    std::vector<Face> faces; faces.reserve(mesh.nFaces());
+    double total_res = 0;
+    for (Face f: mesh.faces()) { faces.push_back(f); total_res+= residual[f]; }
+
+    std::ranges::sort(faces,[&residual](const Face& a, const Face& b)->bool {return residual[a] < residual[b];});
+
+    std::vector<Face> result;
+    result.reserve(theta * mesh.nFaces());
+    double accum_res = 0;
+    for (int i = faces.size() - 1; i >= 0; --i) {
+        double d = accum_res + residual[faces[i]];
+        if (d <= theta*total_res) {
+            result.push_back(faces[i]);
+            accum_res= d;
+        }
+    }
+    return result;
+}
