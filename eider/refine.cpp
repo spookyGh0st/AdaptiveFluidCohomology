@@ -10,6 +10,7 @@ namespace gcs=geometrycentral::surface;
 void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
     auto& M = tri.intrinsicMesh;
 
+
     gcs::FaceData<gcs::Halfedge> refinement_edges (*M);
     tri.requireEdgeLengths();
     for (gcs::Face f: M->faces()) {
@@ -23,48 +24,52 @@ void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
     }
     tri.unrequireEdgeLengths();
 
-    std::set<gcs::Edge> marked_edges;
-    std::set<gcs::Edge> start_edges;
+    using namespace gcs;
+    ManifoldSurfaceMesh& mesh = *tri.intrinsicMesh;
+    std::set<Face> marked_faces;
+    std::set<Edge> start_edges;
     // marked_edges.reserve(faces.size()*2);
-
     while (!faces.empty())
     {
-        gcs::Face f = faces.back(); faces.pop_back();
-        gcs::Halfedge he = refinement_edges[f];
-        marked_edges.insert(he.edge());
+        Face f = faces.back(); faces.pop_back();
+        marked_faces.insert(f);
+        Halfedge he = refinement_edges[f];
+        if (!he.edge().isBoundary() && !marked_faces.contains(he.twin().face())) {
+            faces.push_back(he.twin().face());
+        }
         if (he.edge().isBoundary() || refinement_edges[he.twin().face()] == he.twin()) {
             start_edges.insert(he.edge());
-        }else if (!he.edge().isBoundary() && !marked_edges.contains(refinement_edges[he.twin().face()].edge())) {
-            faces.push_back(he.twin().face());
         }
     }
 
     while (!start_edges.empty())
     {
-        gcs::Edge e = *start_edges.begin();
+        Edge e = *start_edges.begin();
         start_edges.erase(start_edges.begin());
+        marked_faces.erase(e.halfedge().face());
+        marked_faces.erase(e.halfedge().twin().face());
 
-        gcs::Halfedge he = e.halfedge();
-        gcs::Halfedge n_he = tri.splitEdge(he,0.5);
-        refinement_edges[n_he.face()] = n_he.next();
-        refinement_edges[he.face()] = he.prevOrbitFace();
-        if (!n_he.edge().isBoundary())
-        {
-            refinement_edges[n_he.twin().face()] = n_he.twin().prevOrbitFace();
-            refinement_edges[he.twin().face()] = he.twin().next();
+        Vertex new_v = tri.splitEdge(e.halfedge(),0.5).vertex();
+
+        // Update refinement edges
+        for (Halfedge he_o: new_v.outgoingHalfedges()) {
+            refinement_edges[he_o.face()] = he_o.next();
         }
 
-        auto he_r = n_he.next(), he_l = n_he.next().next().twin().next();
-        if (he_r.isInterior() && refinement_edges[he_r.twin().face()] == he_r.twin() && marked_edges.contains(he_r.edge())) {
-            start_edges.insert(he_r.edge());
+        // Check if we can now refine one of the neighbours, i.e.
+        // if the primal edge of one of the neighbours is one
+        // of the newly created primal edges
+        for (Halfedge he_o: new_v.outgoingHalfedges()) {
+            Halfedge side_he = he_o.next();
+            if (side_he.edge().isBoundary()) continue;
+            Face side_f = side_he.twin().face();
+            if (!marked_faces.contains(side_f)) continue;
+            if (refinement_edges[side_f].edge() == side_he.edge())
+                start_edges.insert(side_he.edge());
         }
-        if (he_l.isInterior() && refinement_edges[he_l.twin().face()] == he_l.twin() && marked_edges.contains(he_l.edge())) {
-            start_edges.insert(he_l.edge());
-        }
-        marked_edges.erase(e);
     }
 
-    assert(marked_edges.empty());
+    assert(marked_faces.empty());
     tri.refreshQuantities();
 }
 
