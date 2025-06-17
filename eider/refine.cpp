@@ -53,6 +53,7 @@ void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
 
         // Update refinement edges
         for (Halfedge he_o: new_v.outgoingHalfedges()) {
+            if (!he_o.isInterior()) continue;
             refinement_edges[he_o.face()] = he_o.next();
         }
 
@@ -60,6 +61,7 @@ void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
         // if the primal edge of one of the neighbours is one
         // of the newly created primal edges
         for (Halfedge he_o: new_v.outgoingHalfedges()) {
+            if (!he_o.isInterior()) continue;
             Halfedge side_he = he_o.next();
             if (side_he.edge().isBoundary()) continue;
             Face side_f = side_he.twin().face();
