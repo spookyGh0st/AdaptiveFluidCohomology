@@ -242,6 +242,88 @@ TEST(afemTest, estimate)
     polyscope::show();
 }
 
+TEST(refineTest, uniform_vs_adaptive_refinement) {
+    using namespace geometrycentral::surface;
+    using namespace geometrycentral;
+    float theta = 0.5;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "L_coarse.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+
+    IntegerCoordinatesIntrinsicTriangulation uniform_g(*parent_m,*parent_g), adaptive_g(*parent_m, *parent_g);
+    ManifoldSurfaceMesh &uniform_m = *uniform_g.intrinsicMesh, &adaptive_m = *adaptive_g.intrinsicMesh;
+    FaceData<double> res_u(uniform_m,0), res_a(adaptive_m,0);
+    std::vector<double> error_u, error_a; std::vector<double> nTri_u, nTri_a;
+
+    auto vis_mg = [&](std::string name, IntegerCoordinatesIntrinsicTriangulation& icit, std::vector<double>& nTri, std::vector<double>& error, FaceData<double>& residual) {
+        ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
+        m.compress();
+        VertexData<Vector3> int_positions(m) ;
+        for (Vertex v : m.vertices()) {
+            int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
+        }
+        polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh(name, int_positions,m.getFaceVertexList());
+
+        VertexData<double> f(m,1);
+        VertexData<double> u(m,0);
+
+        StreamFunctionSolver S {};
+        S.compute(m, icit);
+        S.solve(m,icit,u,f);
+        pm->addVertexScalarQuantity(name + " - u",u);
+        pm->addVertexScalarQuantity(name + " - f",f);
+        residual = poisson_residual_error(m, icit, f,u);
+        double s = 0; for (Face f: m.faces()) { s += residual[f]; }
+        pm->addFaceScalarQuantity(name + " - residual error",residual);
+        nTri.push_back(m.nFaces());
+        error.push_back(s);
+    };
+    auto vis_all = [&]() { vis_mg("uniform", uniform_g,nTri_u,error_u,res_u); vis_mg("adaptive", adaptive_g,nTri_a,error_a,res_a); };
+    auto adaptive_refine = [&]() {
+        VertexData<double> f(adaptive_m,1); VertexData<double> u(adaptive_m,0);
+        StreamFunctionSolver S {}; S.compute(adaptive_m, adaptive_g); S.solve(adaptive_m,adaptive_g,u,f);
+
+        res_a = poisson_residual_error(adaptive_m, adaptive_g, f,u);
+        auto faces = select_doerfler(adaptive_m,res_a,theta);
+        refine(adaptive_g,faces);
+    };
+
+    polyscope::init();
+    vis_all();
+    ImPlot::CreateContext();
+
+    polyscope::state::userCallback = [&]()
+    {
+        ImGui::DragFloat("theta",&theta,0.01,0,1);
+        if (ImGui::Button("Refine until 2xT"))
+        {
+            std::size_t n = uniform_m.nFaces() *2;
+            while (uniform_m.nFaces() < n) uniform_refine(uniform_g);
+            while (adaptive_m.nFaces() < n) adaptive_refine();
+            vis_all();
+        }
+
+        if (ImPlot::BeginPlot("My Plot")) {
+            ImPlot::SetupAxis(ImAxis_X1, "#Triangles",ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxis(ImAxis_Y1, "residual error estimate", ImPlotAxisFlags_AutoFit);
+            // ImPlot::SetupAxis(ImAxis_Y2, "Optimal", ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_Opposite);
+            ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);
+
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+            ImPlot::SetAxes(ImAxis_X1, ImAxis_Y1);
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+            ImPlot::PlotLine("uniform-p", nTri_u.data(), error_u.data(),nTri_u.size());
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+            ImPlot::PlotLine("adaptive-p", nTri_a.data(), error_a.data(),nTri_a.size());
+            ImPlot::EndPlot();
+        }
+    };// specify the callback
+    polyscope::show();
+    ImPlot::DestroyContext();
+
+
+}
+
 TEST(refineTest, laplacian_test)
 {
     using namespace geometrycentral::surface;
@@ -250,4 +332,6 @@ TEST(refineTest, laplacian_test)
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     g->requireDECOperators();
     Eigen::MatrixXd L = g->L1;
+
+
 }
