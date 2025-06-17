@@ -60,54 +60,6 @@ void uniform_refine(gcs::IntrinsicTriangulation& intrT) {
 }
 
 double refinement_ms = 0;
-void refine_callback(gcs::IntrinsicTriangulation& tri, gcs::SurfaceMesh& mesh, gcs::VertexPositionGeometry& geometry, gcs::FaceData<int>& selection) { // gets executed per-frame
-
-    polyscope::SurfaceMesh* pm = polyscope::getSurfaceMesh("M");
-    ImGuiIO& io = ImGui::GetIO();
-    if (io.MouseClicked[0])
-    {
-        // if clicked
-        glm::vec2 screenCoords{io.MousePos.x, io.MousePos.y};
-        polyscope::PickResult pickResult = polyscope::pickAtScreenCoords(screenCoords);
-
-        // get additional information if we clicked on a mesh
-        if(pickResult.isHit && pickResult.structure == pm) {
-            polyscope::SurfaceMeshPickResult meshPickResult =
-              pm->interpretPickResult(pickResult);
-
-            if(meshPickResult.elementType == polyscope::MeshElement::FACE) {
-                std::cout << "clicked face " << meshPickResult.index << std::endl;
-                gcs::Face f = mesh.face(meshPickResult.index);
-                if (selection[f] == 1) selection[f] =0;
-                else selection[f] = 1;
-                pm->addFaceScalarQuantity("selected faces", selection)->setEnabled(true);
-            }
-        }
-    }
-
-    // Build a UI element to edit a parameter, which will
-    // appear in the onscreen panel
-    if (ImGui::Button("Refine Selected"))
-    {
-        std::vector<gcs::Face> faces;
-        for (gcs::Face f:mesh.faces()) {
-            if (selection[f] == 1) faces.push_back(f);
-        }
-        refine(tri, faces);
-        updateTriagulationViz(tri,geometry);
-        for (gcs::Face f:mesh.faces()) { selection[f] = 0; }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Uniform Refine"))
-    {
-        {
-            Stopwatch sw(refinement_ms);
-            uniform_refine(tri);
-        }
-        updateTriagulationViz(tri,geometry);
-    }
-    ImGui::Text(("duration: "+ std::to_string(refinement_ms) + " ms").c_str());
-}
 
 TEST(refineTest, testSplit)
 {
