@@ -14,7 +14,8 @@ add_executable(eider-test ${SOURCE_FILES})
 set_target_properties(eider-test PROPERTIES LINKER_LANGUAGE CXX)
 target_compile_features(eider-test PUBLIC cxx_std_23)
 
-target_link_libraries(eider-test PUBLIC eider polyscope GTest::gtest_main)
+target_link_libraries(eider-test PUBLIC eider polyscope implot GTest::gtest_main)
+# target_compile_options(eider-test PRIVATE -ftime-trace)
 include(GoogleTest)
 gtest_discover_tests(eider-test)
 
