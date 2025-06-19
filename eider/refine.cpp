@@ -80,7 +80,7 @@ using namespace geometrycentral;
 
 double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
 {
-    double f_st = 0, h_t = geom.faceAreas[T];
+    double f_st = 0, h_t = diameter(geom,T);
     for (Vertex v: T.adjacentVertices()) f_st = f[v];
     f_st /= 3;
 
@@ -92,15 +92,15 @@ double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& 
     for (Edge e : T.adjacentEdges())
     {
         if (e.isBoundary()) continue; // only sum over interior edges
-        double h_e = geom.edgeLengths[e], j = 0;
+        double h_e = diameter(geom,e), l_e = geom.edgeLengths[e], j = 0;
         for (Halfedge he : e.adjacentHalfedges()) // for both sides of edge
         {
             j += dot(grad(geom, he.face(), u), geom.halfedgeVectorsInFace[he].rotateCW(PI/2));
         }
-        jump_sum += h_e * h_e * j * j;
+        jump_sum += h_e * h_e * j * j; // one_he_e form L_2 norm.
     }
-
-    return h_t * h_t * std::pow(f_st + lu,2) + jump_sum;
+    jump_sum *= 1./2.;
+    return h_t * h_t * (std::pow(f_st + lu,2) * geom.faceAreas[T])+ jump_sum;
 }
 
 FaceData<double> poisson_residual_error(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
