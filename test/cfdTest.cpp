@@ -189,38 +189,42 @@ TEST(cfdTest, testVorticesThroughHole)
 
 }
 
+
 TEST(cfdTest, IntrinsicHole)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
     fds = fds.parent_path()/ "models" /"grid_hole.stl";
-    auto [m,g] = readManifoldSurfaceMesh(fds.string());
-    IntegerCoordinatesIntrinsicTriangulation ig (*m,*g);
-    ig.flipToDelaunay();
-    g->requireFaceTangentBasis();
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+    IntegerCoordinatesIntrinsicTriangulation int_T (*parent_m,*parent_g);
+    int_T.flipToDelaunay();
+    int_T.delaunayRefine(30);
 
-    ManifoldSurfaceMesh& im = *ig.intrinsicMesh;
-    ig.requireHalfedgeVectorsInFace();
-    auto h = orthonormal_hom_basis(im,ig);
+    ManifoldSurfaceMesh& m = *int_T.intrinsicMesh;
+    m.compress();
+    VertexData<Vector3> int_positions(m) ;
+    for (Vertex v : m.vertices()) {
+        int_positions[v] = int_T.vertexLocations[v].interpolate(parent_g->vertexPositions);
+    }
+    VertexPositionGeometry g(m, int_positions);
 
-    VertexData<Vector3> vd(im);
-    for (Vertex v: m->vertices()) { vd[im.vertex(v.getIndex())] = g->vertexPositions[v]; }
-    VertexPositionGeometry vpg(im,vd);
+    g.requireFaceTangentBasis();
+    g.requireHalfedgeVectorsInFace();
+    auto h = orthonormal_hom_basis(m,g);
 
-    vpg.requireFaceTangentBasis();
-    FaceData<Vector3> e1(im),e2(im);
-    for (Face f: im.faces()) { e1[f] = vpg.faceTangentBasis[f][0], e2[f] = vpg.faceTangentBasis[f][1]; }
+    FaceData<Vector3> e1(m),e2(m);
+    for (Face f: m.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1]; }
 
     StreamFunctionSolver S;
-    S.compute(im,ig);
+    S.compute(m,g);
 
     // wc_wrapper wc = init_wc(*m, *g, h);
     float dt = 0.001, v_dist  = 0.5, x_add = v_dist/4, y_add = 0, x_cuttof = v_dist/2, y_cuttof = v_dist/4, x_cutt_offset = 0, y_cutt_offset = 0.5;
-    wc_wrapper wc = init_taylor(im, vpg, h, v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-    velocity_wrapper vel = velocity(im,ig,wc,h, S);
+    wc_wrapper wc = init_taylor(m, g, h, v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
+    velocity_wrapper vel = velocity(m,g,wc,h, S);
 
     polyscope::init();
-    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", vpg.vertexPositions,im.getFaceVertexList(), polyscopePermutations(im));
+    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g.vertexPositions,m.getFaceVertexList(), polyscopePermutations(m));
     pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
     pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
     std::size_t i = 0;
@@ -236,8 +240,8 @@ TEST(cfdTest, IntrinsicHole)
         ImGui::InputFloat("x_cuttof",&x_cuttof,0.125,0.5); ImGui::InputFloat("y_cuttoff",&y_cuttof,0.125,0.5);
         ImGui::InputFloat("x_cut offset",&x_cutt_offset,0.125,0.5); ImGui::InputFloat("y_cut offset",&y_cutt_offset,0.125,0.5);
         if (ImGui::Button("reset")) {
-            wc = init_taylor(im, vpg, h, v_dist, Vector2(x_add,y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-            vel = velocity(im,ig,wc,h, S);
+            wc = init_taylor(m, g, h, v_dist, Vector2(x_add,y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
+            vel = velocity(m,g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
             pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
         };
@@ -246,9 +250,9 @@ TEST(cfdTest, IntrinsicHole)
         ImGui::Checkbox("Fix c", &fix_c);
         if (running || ImGui::Button("Advance")) {
             auto tmpc = wc.c;
-            wc = RK4Step(im,ig,h,wc, dt, S);
+            wc = RK4Step(m,g,h,wc, dt, S);
             if (fix_c) wc.c = tmpc;
-            vel = velocity(im,ig,wc,h, S);
+            vel = velocity(m,g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
             pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
             pm->addFaceScalarQuantity("error",vel.residual);
