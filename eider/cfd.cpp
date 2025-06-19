@@ -116,6 +116,110 @@ namespace geometrycentral::surface
         return x + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4);
     }
 
+    std::array<wc_wrapper,7> RK6_k(const std::array<std::array<double,7>,7>& a, const wc_wrapper& y0, double h, const std::function<const wc_wrapper& (wc_wrapper)>& F)
+    {
+        constexpr std::size_t n = 7;
+        std::array<wc_wrapper,n> k{};
+        for (int i = 0; i < n; ++i)
+        {
+            wc_wrapper x = y0;
+            for (int j = 0; j < i; ++i)
+            {
+                if (a[i][j] != 0)  x = x + h * a[i][j] * k[j];
+            }
+            k[i] = F(x);
+        }
+        return k;
+    }
+    wc_wrapper RK6_2(const std::array<double,7>& b, const wc_wrapper& y0, double h, const std::array<wc_wrapper,7>& k)
+    {
+        constexpr std::size_t n = 6;
+        wc_wrapper y1 = y0;
+        for (int i = 0; i < n; ++i) {
+            if (b[i] != 0) y1 = y1 + (h * b[i]) * k[i];
+        }
+        return y1;
+    }
+
+    double error(ManifoldSurfaceMesh& mesh, const wc_wrapper& y0, wc_wrapper& y1, wc_wrapper& y_hat, const wc_wrapper& Atol_i, const wc_wrapper& Rtol_i)
+    {
+        double sum = 0;
+        for (Vertex v: mesh.vertices())
+        {
+            double sc_i =  Atol_i.w[v] + std::max(std::abs(y0.w[v]),std::abs(y1.w[v]));
+            assert(sc_i > 0);
+            sum += std::pow((y1.w[v] -y_hat.w[v]) / sc_i,2);
+        }
+        for (std::size_t i = 0; i < y0.c.size(); i++)
+        {
+            double sc_i =  Atol_i.c[i] + std::max(std::abs(y0.c[i]),std::abs(y1.c[i]));
+            assert(sc_i > 0);
+            sum += std::pow((y1.c[i] -y_hat.c[i]) / sc_i,2);
+        }
+        double n = (mesh.nVertices() + y0.c.size());
+        return std::sqrt(sum / n);
+    }
+
+    inline double compute_h_new(double h, double err, double q, double facmin, double facmax)
+    {
+        double h_o = std::pow(1. / err, 1./(q+1));
+        double fac = std::pow(0.38, 1./(q+1));
+        return h * std::min(facmax, std::max(facmin, fac * h_o));
+    }
+
+    inline bool accept_step(double err) { return err < 1; }
+
+    std::array<wc_wrapper,2> DOPRI5(const wc_wrapper& y0, double h, const std::function<const wc_wrapper& (wc_wrapper)>&F)
+    {
+        constexpr std::size_t n = 7;
+        std::array<std::array<double, n>, n> a = {{
+            {0.0,            0.0,         0.0,         0.0,           0.0,         0.0,     0.0},
+            {1.0/5.0,        0.0,         0.0,         0.0,           0.0,         0.0,     0.0},
+            {3.0/40.0,       9.0/40.0,    0.0,         0.0,           0.0,         0.0,     0.0},
+            {44.0/45.0,     -56.0/15.0,   32.0/9.0,    0.0,           0.0,         0.0,     0.0},
+            {19372.0/6561.0, -25360.0/2187.0, 64448.0/6561.0, -212.0/729.0, 0.0,     0.0,     0.0},
+            {9017.0/3168.0, -355.0/33.0, 46732.0/5247.0, 49.0/176.0, -5103.0/18656.0, 0.0,     0.0},
+            {35.0/384.0,     0.0,        500.0/1113.0, 125.0/192.0,  -2187.0/6784.0, 11.0/84.0,0.0}
+        }};
+        std::array<double, 7> b = { 35.0/384.0, 0.0, 500.0/1113.0, 125.0/192.0, -2187.0/6784.0, 11.0/84.0, 0.0 };
+        std::array<double, 7> b_hat = { 5179.0/57600.0, 0.0, 7571.0/16695.0, 393.0/640.0, -92097.0/339200.0, 187.0/2100.0, 1.0/40.0 };
+        std::array<wc_wrapper,7> k = RK6_k(a,y0, h,F);
+
+        return { RK6_2(b,y0,h,k), RK6_2(b_hat,y0,h,k) };
+    }
+
+    struct DOPRI5_conf {
+        double q{};
+        // Absolute
+        wc_wrapper Atol_i;
+        wc_wrapper Rtol_i;
+
+        /// safety factor dissallowing rapid increase/decrease
+        /// usually between 1.5 and 5
+        double faxmax{};
+        double facmin{};
+    };
+
+    std::pair<wc_wrapper, double> DOPRI5_step(
+        ManifoldSurfaceMesh& mesh,
+        const wc_wrapper& y0, double h,
+        const std::function<const wc_wrapper& (wc_wrapper)>&F,
+        const DOPRI5_conf& conf
+    )
+    {
+        bool accepted = false;
+        double facMax = conf.faxmax;
+        std::array<wc_wrapper,2> y;
+        while (!accepted) {
+            constexpr double q =5; // min of order y and y_hat
+            y = DOPRI5(y0,h,F);
+            double err = error(mesh, y0, y[0], y[1],conf.Atol_i, conf.Rtol_i);
+            accepted = accept_step(err);
+            h = compute_h_new(h,err,q,conf.facmin,facMax);
+            facMax = 1; // addvised to override after step-rejection
+        }
+        return {y[0], h};
+    }
 
 }
 
