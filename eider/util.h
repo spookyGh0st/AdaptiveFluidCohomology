@@ -38,6 +38,10 @@ namespace geometrycentral::surface
         return d;
     }
 
+    inline double diameter(IntrinsicGeometryInterface& geom, Edge e) {
+        return geom.edgeLengths[e];
+    }
+
     inline double max_diameter(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom) {
         double d = 0;
         for (Face f: mesh.faces())
