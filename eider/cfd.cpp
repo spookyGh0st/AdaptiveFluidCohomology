@@ -116,14 +116,16 @@ namespace geometrycentral::surface
         return x + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4);
     }
 
-    std::array<wc_wrapper,7> RK6_k(const std::array<std::array<double,7>,7>& a, const wc_wrapper& y0, double h, const std::function<const wc_wrapper& (wc_wrapper)>& F)
+    using F_type = std::function<wc_wrapper (const wc_wrapper&)>;
+
+    std::array<wc_wrapper,7> RK6_k(const std::array<std::array<double,7>,7>& a, const wc_wrapper& y0, double h, const F_type& F)
     {
         constexpr std::size_t n = 7;
         std::array<wc_wrapper,n> k{};
         for (int i = 0; i < n; ++i)
         {
             wc_wrapper x = y0;
-            for (int j = 0; j < i; ++i)
+            for (int j = 0; j < i; ++j)
             {
                 if (a[i][j] != 0)  x = x + h * a[i][j] * k[j];
             }
@@ -133,7 +135,7 @@ namespace geometrycentral::surface
     }
     wc_wrapper RK6_2(const std::array<double,7>& b, const wc_wrapper& y0, double h, const std::array<wc_wrapper,7>& k)
     {
-        constexpr std::size_t n = 6;
+        constexpr std::size_t n = 7;
         wc_wrapper y1 = y0;
         for (int i = 0; i < n; ++i) {
             if (b[i] != 0) y1 = y1 + (h * b[i]) * k[i];
@@ -141,18 +143,18 @@ namespace geometrycentral::surface
         return y1;
     }
 
-    double error(ManifoldSurfaceMesh& mesh, const wc_wrapper& y0, wc_wrapper& y1, wc_wrapper& y_hat, const wc_wrapper& Atol_i, const wc_wrapper& Rtol_i)
+    double error(ManifoldSurfaceMesh& mesh, const wc_wrapper& y0, wc_wrapper& y1, wc_wrapper& y_hat, const double& Atol_i, const double& Rtol_i)
     {
         double sum = 0;
         for (Vertex v: mesh.vertices())
         {
-            double sc_i =  Atol_i.w[v] + std::max(std::abs(y0.w[v]),std::abs(y1.w[v]));
+            double sc_i =  Atol_i + std::max(std::abs(y0.w[v]),std::abs(y1.w[v])) * Rtol_i;
             assert(sc_i > 0);
             sum += std::pow((y1.w[v] -y_hat.w[v]) / sc_i,2);
         }
         for (std::size_t i = 0; i < y0.c.size(); i++)
         {
-            double sc_i =  Atol_i.c[i] + std::max(std::abs(y0.c[i]),std::abs(y1.c[i]));
+            double sc_i =  Atol_i + std::max(std::abs(y0.c[i]),std::abs(y1.c[i])) * Rtol_i;
             assert(sc_i > 0);
             sum += std::pow((y1.c[i] -y_hat.c[i]) / sc_i,2);
         }
@@ -169,7 +171,7 @@ namespace geometrycentral::surface
 
     inline bool accept_step(double err) { return err < 1; }
 
-    std::array<wc_wrapper,2> DOPRI5(const wc_wrapper& y0, double h, const std::function<const wc_wrapper& (wc_wrapper)>&F)
+    std::array<wc_wrapper,2> DOPRI5(const wc_wrapper& y0, double h, const F_type&F)
     {
         constexpr std::size_t n = 7;
         std::array<std::array<double, n>, n> a = {{
@@ -188,22 +190,11 @@ namespace geometrycentral::surface
         return { RK6_2(b,y0,h,k), RK6_2(b_hat,y0,h,k) };
     }
 
-    struct DOPRI5_conf {
-        double q{};
-        // Absolute
-        wc_wrapper Atol_i;
-        wc_wrapper Rtol_i;
-
-        /// safety factor dissallowing rapid increase/decrease
-        /// usually between 1.5 and 5
-        double faxmax{};
-        double facmin{};
-    };
 
     std::pair<wc_wrapper, double> DOPRI5_step(
         ManifoldSurfaceMesh& mesh,
         const wc_wrapper& y0, double h,
-        const std::function<const wc_wrapper& (wc_wrapper)>&F,
+        const F_type& F,
         const DOPRI5_conf& conf
     )
     {
@@ -219,6 +210,17 @@ namespace geometrycentral::surface
             facMax = 1; // addvised to override after step-rejection
         }
         return {y[0], h};
+    }
+
+    std::pair<wc_wrapper, double> adaptive_step(
+        ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
+        const std::vector<FaceData<Vector2>>& h,
+        const wc_wrapper& x, double dt, const StreamFunctionSolver& S,
+        const DOPRI5_conf& conf
+    )
+    {
+        F_type F = [&mesh, &geom, &h, &S](const wc_wrapper& wc) -> wc_wrapper { return evalRHS(mesh, geom, wc, h, S); };
+        return DOPRI5_step(mesh, x,dt,F,conf);
     }
 
 }

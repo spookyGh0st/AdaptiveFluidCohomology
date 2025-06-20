@@ -198,7 +198,7 @@ TEST(cfdTest, IntrinsicHole)
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
     IntegerCoordinatesIntrinsicTriangulation int_T (*parent_m,*parent_g);
     int_T.flipToDelaunay();
-    int_T.delaunayRefine(30);
+    int_T.delaunayRefine();
 
     ManifoldSurfaceMesh& m = *int_T.intrinsicMesh;
     m.compress();
@@ -233,6 +233,8 @@ TEST(cfdTest, IntrinsicHole)
         i++;
     }
 
+    DOPRI5_conf conf=  DOPRI5_conf();
+
     bool running = false, fix_c = false;
     polyscope::state::userCallback = [&]() {
         ImGui::InputFloat("vorticity distance",&v_dist,0.125,0.5);
@@ -250,7 +252,7 @@ TEST(cfdTest, IntrinsicHole)
         ImGui::Checkbox("Fix c", &fix_c);
         if (running || ImGui::Button("Advance")) {
             auto tmpc = wc.c;
-            wc = RK4Step(m,g,h,wc, dt, S);
+            std::tie(wc,dt) = adaptive_step(m,g,h,wc, dt, S,conf);
             if (fix_c) wc.c = tmpc;
             vel = velocity(m,g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);

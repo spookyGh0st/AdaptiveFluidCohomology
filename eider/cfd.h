@@ -29,4 +29,29 @@ namespace geometrycentral::surface
         const std::vector<FaceData<Vector2>>& h,
         const wc_wrapper& x, double dt, const StreamFunctionSolver& S
     );
+
+    /**
+ * @brief Configuration parameters for DOPRI5 adaptive solver.
+ */
+    struct DOPRI5_conf {
+        /**
+         * @brief Absolute tolerance.
+         */
+        double Atol_i = 1e-8;
+
+        /** * @brief Relative tolerance. */
+        double Rtol_i = 1e-6;
+
+        /** * @brief Max factor to increase step size (1.5–5.0 typical). */
+        double faxmax = 3.0;
+        /** @brief Min factor to reduce step size (e.g. 0.1–0.2). */
+        double facmin = 0.1;
+    };
+
+    std::pair<wc_wrapper, double> adaptive_step(
+        ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
+        const std::vector<FaceData<Vector2>>& h,
+        const wc_wrapper& x, double dt, const StreamFunctionSolver& S,
+        const DOPRI5_conf& conf
+    );
 }
