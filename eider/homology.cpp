@@ -342,6 +342,14 @@ namespace geometrycentral::surface
         return reduced;
     }
 
+    double path_length(IntrinsicGeometryInterface& geom, const std::vector<Halfedge>& path) {
+        double s = 0;
+        for (Halfedge he: path) {
+            s += geom.dualEdgeLengths[he.edge()];
+        }
+        return s;
+    }
+
     std::vector<std::vector<Halfedge>> homotopy_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, Face x)
     {
         EdgeData<EdgeType> edge_data(mesh, EdgeType::bridge);
@@ -439,6 +447,7 @@ namespace geometrycentral::surface
         for (Face f : mesh.faces()) {
             Vector2 vT = Vector2::zero();
             double A = geom.faceAreas[f];
+            assert(A > 0);
             auto grad = [&,A](Halfedge he) -> Vector2 {
                 Vector2 ei = geom.halfedgeVectorsInFace[he.next()];
                 return 1/(2*A) * ei.rotate90();
@@ -449,6 +458,7 @@ namespace geometrycentral::surface
                 double A = geom.faceAreas[f];
                 vT += wij * grad(he) * A/3 - wij * grad(he.next()) * A/3;
             }
+            assert(vT.isFinite());
             vField[f] = vT;
         }
 
@@ -523,8 +533,11 @@ namespace geometrycentral::surface
         for (std::size_t i = 0; i < homotopy_b.size(); i++){
             auto& basis = homotopy_b[i];
             auto df =delta_form(mesh, reduce_co_loop(mesh, basis));
+            assert(df.raw().allFinite());
             EdgeData<double> pf = pp_solver.solve(mesh,df);
+            assert(pf.raw().allFinite());
             h[i] = whitney_interpolation(mesh,geom,pf);
+            assert(h[i].raw().allFinite());
         }
         return orthonormalize(mesh, geom, h);
     }
