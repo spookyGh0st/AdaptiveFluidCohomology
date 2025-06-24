@@ -81,7 +81,7 @@ using namespace geometrycentral;
 double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
 {
     double f_st = 0, h_t = diameter(geom,T);
-    for (Vertex v: T.adjacentVertices()) f_st = f[v];
+    for (Vertex v: T.adjacentVertices()) f_st += f[v];
     f_st /= 3;
 
     double lu = 0;
@@ -110,7 +110,7 @@ FaceData<double> poisson_residual_error(ManifoldSurfaceMesh& mesh, IntrinsicGeom
     for (Face T: mesh.faces()) {
         eta[T] = etaR(T,geom,f,u);
     }
-    geom.unrequireHalfedgeVectorsInFace(); geom.requireEdgeCotanWeights();
+    geom.unrequireHalfedgeVectorsInFace(); geom.unrequireEdgeCotanWeights();
     return eta;
 }
 
