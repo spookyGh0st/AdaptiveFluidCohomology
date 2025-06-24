@@ -16,6 +16,9 @@
 
 #include "eider/util.h"
 
+using namespace geometrycentral::surface;
+using namespace geometrycentral;
+
 void updateTriagulationViz(gcs::IntrinsicTriangulation& signpostTri, gcs::VertexPositionGeometry& geometry) {
     using namespace geometrycentral::surface;
     using namespace geometrycentral;
@@ -242,9 +245,29 @@ TEST(afemTest, estimate)
     polyscope::show();
 }
 
+double discrete_energy(IntrinsicGeometryInterface& T, VertexData<double> U)
+{
+    T.requireCotanLaplacian();
+    // double d=0; for (Face f: T.mesh.faces()) d+=T.faceAreas[f]*grad(T,f,U).norm2();
+    // return d;
+    Eigen::VectorXd x = U.toVector();
+    double d = x.transpose() * (T.cotanLaplacian) * x;
+    T.unrequireCotanLaplacian();
+    return d;
+}
+
+double du_norm_sqr() { return 1.06422; }
+
+double abs_error(IntrinsicGeometryInterface& T, VertexData<double> U)
+{
+    return std::sqrt(du_norm_sqr() - discrete_energy(T,U));
+}
+double rel_error(IntrinsicGeometryInterface& T, VertexData<double> U)
+{
+    return std::sqrt(du_norm_sqr() - discrete_energy(T,U))/std::sqrt(du_norm_sqr());
+}
+
 TEST(refineTest, uniform_vs_adaptive_refinement) {
-    using namespace geometrycentral::surface;
-    using namespace geometrycentral;
     float theta = 0.5;
     std::filesystem::path fds(__FILE__);
     fds = fds.parent_path()/ "models" / "L_coarse.stl";
@@ -252,10 +275,16 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
 
     IntegerCoordinatesIntrinsicTriangulation uniform_g(*parent_m,*parent_g), adaptive_g(*parent_m, *parent_g);
     ManifoldSurfaceMesh &uniform_m = *uniform_g.intrinsicMesh, &adaptive_m = *adaptive_g.intrinsicMesh;
+    while (uniform_m.nFaces() < 3072) {uniform_refine(uniform_g); uniform_refine(adaptive_g); }
     FaceData<double> res_u(uniform_m,0), res_a(adaptive_m,0);
-    std::vector<double> error_u, error_a; std::vector<double> nTri_u, nTri_a;
+    struct Data
+    {
+        std::vector<double> abs_error, rel_error, residual, nTri;
+    };
+    Data data_uniform, data_adaptive;
 
-    auto vis_mg = [&](std::string name, IntegerCoordinatesIntrinsicTriangulation& icit, std::vector<double>& nTri, std::vector<double>& error, FaceData<double>& residual) {
+
+    auto vis_mg = [&](std::string name, IntegerCoordinatesIntrinsicTriangulation& icit, Data& data, FaceData<double>& residual) {
         ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
         m.compress();
         VertexData<Vector3> int_positions(m) ;
@@ -274,11 +303,13 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         pm->addVertexScalarQuantity(name + " - f",f);
         residual = poisson_residual_error(m, icit, f,u);
         double s = 0; for (Face f: m.faces()) { s += residual[f]; }
-        pm->addFaceScalarQuantity(name + " - residual error",residual);
-        nTri.push_back(m.nFaces());
-        error.push_back(s);
+        auto* sq = pm->addFaceScalarQuantity(name + " - residual error",residual);
+        data.nTri.push_back(m.nFaces());
+        data.abs_error.push_back(abs_error(icit,u));
+        data.residual.push_back(s);
+        data.rel_error.push_back(rel_error(icit,u));
     };
-    auto vis_all = [&]() { vis_mg("uniform", uniform_g,nTri_u,error_u,res_u); vis_mg("adaptive", adaptive_g,nTri_a,error_a,res_a); };
+    auto vis_all = [&]() { vis_mg("uniform", uniform_g,data_uniform,res_u); vis_mg("adaptive", adaptive_g,data_adaptive,res_a); };
     auto adaptive_refine = [&]() {
         VertexData<double> f(adaptive_m,1); VertexData<double> u(adaptive_m,0);
         StreamFunctionSolver S {}; S.compute(adaptive_m, adaptive_g); S.solve(adaptive_m,adaptive_g,u,f);
@@ -297,24 +328,51 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         ImGui::DragFloat("theta",&theta,0.01,0,1);
         if (ImGui::Button("Refine until 2xT"))
         {
-            std::size_t n = uniform_m.nFaces() *2;
-            while (uniform_m.nFaces() < n) uniform_refine(uniform_g);
-            while (adaptive_m.nFaces() < n) adaptive_refine();
+            adaptive_refine();
+            while (uniform_m.nFaces()*2 < adaptive_m.nFaces()) uniform_refine(uniform_g);
             vis_all();
         }
 
-        if (ImPlot::BeginPlot("My Plot")) {
+        if (ImPlot::BeginPlot("Absolut error")) {
             ImPlot::SetupAxis(ImAxis_X1, "#Triangles",ImPlotAxisFlags_AutoFit);
-            ImPlot::SetupAxis(ImAxis_Y1, "residual error estimate", ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxis(ImAxis_Y1, "absolut error", ImPlotAxisFlags_AutoFit);
             // ImPlot::SetupAxis(ImAxis_Y2, "Optimal", ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_Opposite);
+            ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
             ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);
 
             ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
             ImPlot::SetAxes(ImAxis_X1, ImAxis_Y1);
             ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-            ImPlot::PlotLine("uniform-p", nTri_u.data(), error_u.data(),nTri_u.size());
+            ImPlot::PlotLine("uniform", data_uniform.nTri.data(), data_uniform.abs_error.data(),data_uniform.nTri.size());
             ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-            ImPlot::PlotLine("adaptive-p", nTri_a.data(), error_a.data(),nTri_a.size());
+            ImPlot::PlotLine("adaptive", data_adaptive.nTri.data(), data_adaptive.abs_error.data(),data_adaptive.nTri.size());
+            ImPlot::EndPlot();
+        }
+        if (ImPlot::BeginPlot("Relative Error")) {
+            ImPlot::SetupAxis(ImAxis_X1, "#Triangles",ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxis(ImAxis_Y1, "relative Error", ImPlotAxisFlags_AutoFit);
+            // ImPlot::SetupAxis(ImAxis_Y2, "Optimal", ImPlotAxisFlags_AutoFit | ImPlotAxisFlags_Opposite);
+            ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
+            ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);
+
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+            ImPlot::SetAxes(ImAxis_X1, ImAxis_Y1);
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+            ImPlot::PlotLine("uniform", data_uniform.nTri.data(), data_uniform.rel_error.data(),data_uniform.nTri.size());
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+            ImPlot::PlotLine("adaptive", data_adaptive.nTri.data(), data_adaptive.rel_error.data(),data_adaptive.nTri.size());
+            ImPlot::EndPlot();
+        }
+        if (ImPlot::BeginPlot("Residual")) {
+            ImPlot::SetupAxis(ImAxis_X1, "#Triangles",ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxis(ImAxis_Y1, "residual error estimate", ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
+            ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);
+
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+            ImPlot::PlotLine("uniform residual", data_uniform.nTri.data(), data_uniform.residual.data(),data_uniform.nTri.size());
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+            ImPlot::PlotLine("adaptive residual", data_adaptive.nTri.data(), data_adaptive.residual.data(),data_adaptive.nTri.size());
             ImPlot::EndPlot();
         }
     };// specify the callback

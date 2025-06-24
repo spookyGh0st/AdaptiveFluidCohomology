@@ -127,7 +127,7 @@ TEST(cfdTest, testSec15)
 TEST(cfdTest, testVorticesThroughHole)
 {
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"grid_hole.stl";
+    fds = fds.parent_path()/ "models" /"punctured_disk.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     std::vector<FaceData<Vector2>> h= orthonormal_hom_basis(*m,*g);
 
@@ -198,7 +198,8 @@ TEST(cfdTest, IntrinsicHole)
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
     IntegerCoordinatesIntrinsicTriangulation int_T (*parent_m,*parent_g);
     int_T.flipToDelaunay();
-    int_T.delaunayRefine();
+    int_T.delaunayRefine(10);
+    int_T.refreshQuantities();
 
     ManifoldSurfaceMesh& m = *int_T.intrinsicMesh;
     m.compress();
@@ -247,6 +248,10 @@ TEST(cfdTest, IntrinsicHole)
             pm->addVertexScalarQuantity("vorticity",wc.w);
             pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
         };
+        ImGui::InputDouble("Absolut Error",&conf.Atol_i,0,0,"%.10f");
+        ImGui::InputDouble("relative Error",&conf.Rtol_i,0,0,"%.10f");
+        ImGui::InputDouble("fac Min",&conf.facmin);
+        ImGui::InputDouble("fac max",&conf.faxmax);
         ImGui::InputFloat("delta time",&dt,0.001,0.01);
         ImGui::Checkbox("Run", &running);
         ImGui::Checkbox("Fix c", &fix_c);
