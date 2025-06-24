@@ -4,7 +4,7 @@
 add_subdirectory("geometry-central")
 add_subdirectory("polyscope")
 set(TBB_TEST OFF)
-add_subdirectory("oneTBB")
+# add_subdirectory("oneTBB")
 
 include_directories(polyscope/deps/imgui/imgui)
 include_directories(implot)
@@ -31,4 +31,4 @@ endfunction()
 # Apply to the relevant targets
 disable_warnings(geometry-central)
 disable_warnings(polyscope)
-disable_warnings(tbb)
+# disable_warnings(tbb)
