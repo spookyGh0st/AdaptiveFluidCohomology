@@ -15,6 +15,7 @@ namespace geometrycentral::surface
     };
 
     struct velocity_wrapper {
+        VertexData<double> stream_function;
         FaceData<Vector2> u;
         FaceData<double> residual;
     };

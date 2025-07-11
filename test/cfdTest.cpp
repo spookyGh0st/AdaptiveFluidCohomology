@@ -127,7 +127,7 @@ TEST(cfdTest, testSec15)
 TEST(cfdTest, testVorticesThroughHole)
 {
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"punctured_disk.stl";
+    fds = fds.parent_path()/ "models" /"grid_hole.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     std::vector<FaceData<Vector2>> h= orthonormal_hom_basis(*m,*g);
 
@@ -198,7 +198,7 @@ TEST(cfdTest, IntrinsicHole)
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
     IntegerCoordinatesIntrinsicTriangulation int_T (*parent_m,*parent_g);
     int_T.flipToDelaunay();
-    int_T.delaunayRefine(10);
+    int_T.delaunayRefine(20);
     int_T.refreshQuantities();
 
     ManifoldSurfaceMesh& m = *int_T.intrinsicMesh;
@@ -228,6 +228,7 @@ TEST(cfdTest, IntrinsicHole)
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g.vertexPositions,m.getFaceVertexList(), polyscopePermutations(m));
     pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
     pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
+    pm->addVertexScalarQuantity("stream_function",vel.stream_function);
     std::size_t i = 0;
     for (const auto& b: h) {
         pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
@@ -263,6 +264,7 @@ TEST(cfdTest, IntrinsicHole)
             pm->addVertexScalarQuantity("vorticity",wc.w);
             pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
             pm->addFaceScalarQuantity("error",vel.residual);
+            pm->addVertexScalarQuantity("stream_function",vel.stream_function);
         }
         for (int i = 0; i< wc.c.size(); i++) {
             ImGui::Text("c%d: %f",i,wc.c[i]);

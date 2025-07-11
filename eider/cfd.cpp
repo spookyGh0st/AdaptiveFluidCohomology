@@ -75,7 +75,7 @@ namespace geometrycentral::surface
                 u[face] = u[face] + wc.c[i] * h[i][face];
 
         geom.unrequireHalfedgeVectorsInFace();
-        return { u, res};
+        return {f, u, res};
     }
 
 
