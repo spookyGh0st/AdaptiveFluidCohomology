@@ -289,7 +289,8 @@ namespace geometrycentral::surface
             auto u = Q.extractMin();
             for (Halfedge he : u.second.adjacentHalfedges())
             {
-                if (he.edge().isBoundary()) continue;
+                // TODO: If using dijkstra for optimal, use if (he.edge().isBoundary()) continue;
+                if (he.edge().isBoundary() || edgeData[he.edge()] != EdgeType::maximal_co_st) continue;
                 Face v = he.twin().face();
                 double alt = u.first + geom.dualEdgeLengths[he.edge()];
                 if (alt < dist[v])
@@ -546,7 +547,9 @@ namespace geometrycentral::surface
                 Edge e = he.edge();
                 double wij = (he.orientation()) ? h[e] : -h[e];
                 double A = geom.faceAreas[f];
-                vT += wij * grad(he) * A/3 - wij * grad(he.next()) * A/3;
+                // vT += wij * grad(he) * A/3 - wij * grad(he.next()) * A/3;
+                Vector2 ni = geom.halfedgeVectorsInFace[he.next()].rotate90(), nj = geom.halfedgeVectorsInFace[he.next().next()].rotate90();
+                vT += wij /6 * (nj - ni);
             }
             assert(vT.isFinite());
             vField[f] = vT;

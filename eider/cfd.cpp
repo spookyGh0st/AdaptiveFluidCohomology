@@ -72,7 +72,7 @@ namespace geometrycentral::surface
         assert(wc.c.size() == h.size());
         for (std::size_t i = 0; i < h.size(); i++)
             for (Face face : mesh.faces())
-                u[face] = u[face] + wc.c[i] * h[i][face];
+                u[face] += wc.c[i] * h[i][face];
 
         geom.unrequireHalfedgeVectorsInFace();
         return {f, u, res};
