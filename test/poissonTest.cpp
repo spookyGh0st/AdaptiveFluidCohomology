@@ -17,13 +17,15 @@ using namespace geometrycentral::surface;
 TEST(poissonTest, testLaplace)
 {
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"grid.stl";
+    fds = fds.parent_path()/ "models" /"disk.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
 
-    VertexData<double> f(*m, 0);
-    for (Vertex v: m->vertices()) f[v] = g->vertexPositions[v].x;
-    VertexData<double> g2(*m, 1);
-    for (Vertex v: m->vertices()) g2[v] = std::sin(g->vertexPositions[v].x);
+    VertexData<double> f(*m, 0), f_exact(*m,0);
+    for (Vertex v: m->vertices()) {
+      f_exact[v] = g->vertexPositions[v].x*g->vertexPositions[v].x + g->vertexPositions[v].y * g->vertexPositions[v].y;
+      if(v.isBoundary()) f[v] = f_exact[v];
+    }
+    VertexData<double> g2(*m, -4);
     auto S = StreamFunctionSolver();
     S.compute(*m, *g);
     S.solve(*m,*g,f,g2);
@@ -31,6 +33,7 @@ TEST(poissonTest, testLaplace)
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
     pm->addVertexScalarQuantity("f",f)->setEnabled(true);
+    pm->addVertexScalarQuantity("f exact",f_exact);
     pm->addVertexScalarQuantity("g",g2);
     std::size_t i = 0;
     polyscope::show();
