@@ -69,8 +69,9 @@ TEST(homologyTest, TestHomotopyBasis)
     fds = fds.parent_path()/ "models" /"grid_hole.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     EdgeData<EdgeType> edge_data(*m, EdgeType::bridge);
-    computePrimalEdgesOfDualMaxST(*m,*g, edge_data);
-    computeMinimalSpanningTree(*m,*g,edge_data);
+    g->requireDualEdgeLengths();
+    computePrimalEdgesOfDualMaxST(*m,edge_data, [&l = g->dualEdgeLengths] (Edge a, Edge b) {return l[a] < l[b]; });
+    computeMinimalSpanningTree(*m,edge_data,[&l = g->edgeLengths] (Edge a, Edge b) {return l[a] > l[b]; });
     auto d_edges = distinctEdges(*m,edge_data);
 
     Face x = m->face(0);
@@ -79,8 +80,6 @@ TEST(homologyTest, TestHomotopyBasis)
         Halfedge he = dijkstra.first[f];
         if (he != Halfedge()) { prev[f] = he.face().getIndex(); } else { prev[f] = -1; }
     }
-
-
 
     g->requireDualEdgeLengths();
     polyscope::init();
@@ -113,7 +112,7 @@ TEST(homologyTest, TestDeRhamCohom)
     fds = fds.parent_path()/ "models" /"grid_hole.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     Face x = m->face(0);
-    auto h_basis = homotopy_basis(*m,*g,x);
+    auto h_basis = homotopy_basis(*m,*g,m->face(0));
 
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList(), polyscopePermutations(*m));
