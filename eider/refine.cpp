@@ -100,7 +100,7 @@ double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& 
         jump_sum += h_e * h_e * j * j; // one_he_e form L_2 norm.
     }
     jump_sum *= 1./2.;
-    return h_t * h_t * (std::pow(f_st + lu,2) * geom.faceAreas[T])+ jump_sum;
+    return std::sqrt(h_t * h_t * (std::pow(f_st + lu,2) * geom.faceAreas[T])+ jump_sum);
 }
 
 FaceData<double> poisson_residual_error(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
@@ -121,17 +121,15 @@ std::vector<Face> select_doerfler(ManifoldSurfaceMesh& mesh, FaceData<double> re
     double total_res = 0;
     for (Face f: mesh.faces()) { faces.push_back(f); total_res+= residual[f]; }
 
-    std::ranges::sort(faces,[&residual](const Face& a, const Face& b)->bool {return residual[a] < residual[b];});
+    std::ranges::sort(faces,[&residual](const Face& a, const Face& b)->bool {return residual[a]*residual[a] < residual[b]*residual[b];});
 
     std::vector<Face> result;
     result.reserve(theta * mesh.nFaces());
     double accum_res = 0;
     for (int i = faces.size() - 1; i >= 0; --i) {
-        double d = accum_res + residual[faces[i]];
-        if (d <= theta*total_res) {
-            result.push_back(faces[i]);
-            accum_res= d;
-        }
+        result.push_back(faces[i]);
+        accum_res += residual[faces[i]];
+        if (accum_res >= theta*total_res) break;
     }
     return result;
 }
