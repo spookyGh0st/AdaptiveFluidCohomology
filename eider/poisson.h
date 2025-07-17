@@ -28,6 +28,7 @@ namespace geometrycentral::surface {
 
         void solve_dirichlet(VertexData<double> &u, const VertexData<double>&f) const;
         void solve_zero_mean(SurfaceMesh& mesh, VertexData<double> &u, const VertexData<double> &f) const;
+        /// Solves Δu = f in Ω, u = 0 in ∂Ω
         void solve(SurfaceMesh & mesh, IntrinsicGeometryInterface & geom, VertexData<double> &u, const VertexData<double>&f) const;
     };
 }
