@@ -100,7 +100,7 @@ TEST(refineTest, testSplit)
         StreamFunctionSolver S {};
         S.compute(m, icit);
         S.solve(m,icit,u,f);
-        residual = poisson_residual_error(m, icit, u, f);
+        residual = poisson_residual_error_sqr(m, icit, u, f);
         double s = 0; for (Face f: m.faces()) { s += residual[f]; }
         pm->addVertexScalarQuantity("u",u);
         pm->addVertexScalarQuantity("f",f);
@@ -235,7 +235,7 @@ TEST(afemTest, estimate)
     StreamFunctionSolver S {};
     S.compute(*m, *g);
     S.solve(*m,*g,u,f);
-    auto e = poisson_residual_error(*m, *g, u, f);
+    auto e = poisson_residual_error_sqr(*m, *g, u, f);
 
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
@@ -301,7 +301,7 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         S.solve(m,icit,u,f);
         pm->addVertexScalarQuantity(name + " - u",u);
         pm->addVertexScalarQuantity(name + " - f",f);
-        residual = poisson_residual_error(m, icit, u, f);
+        residual = poisson_residual_error_sqr(m, icit, u, f);
         double s = 0; for (Face f: m.faces()) { s += residual[f]; }
         auto* sq = pm->addFaceScalarQuantity(name + " - residual error",residual);
         data.nTri.push_back(m.nFaces());
@@ -314,7 +314,7 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         VertexData<double> f(adaptive_m,1); VertexData<double> u(adaptive_m,0);
         StreamFunctionSolver S {}; S.compute(adaptive_m, adaptive_g); S.solve(adaptive_m,adaptive_g,u,f);
 
-        res_a = poisson_residual_error(adaptive_m, adaptive_g, u, f);
+        res_a = poisson_residual_error_sqr(adaptive_m, adaptive_g, u, f);
         auto faces = select_doerfler(adaptive_m,res_a,theta);
         refine(adaptive_g,faces);
     };

@@ -62,7 +62,7 @@ namespace geometrycentral::surface
         geom.requireHalfedgeVectorsInFace();
         VertexData<double> f(mesh, 0);
         S.solve(mesh,geom,f,wc.w);
-        FaceData<double> res = poisson_residual_error(mesh, geom, f, wc.w);
+        FaceData<double> res = poisson_residual_error_sqr(mesh, geom, f, wc.w);
         FaceData<Vector2> u(mesh, Vector2::zero());
         for (Face face : mesh.faces())
         {

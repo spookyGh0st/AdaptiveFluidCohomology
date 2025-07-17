@@ -78,7 +78,7 @@ void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces) {
 using namespace geometrycentral::surface;
 using namespace geometrycentral;
 
-double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
+double etaRSqr(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
 {
     double f_st = 0, h_t = diameter(geom,T);
     for (Vertex v: T.adjacentVertices()) f_st += f[v];
@@ -100,17 +100,15 @@ double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& 
         jump_sum += h_e * h_e * j * j; // one_he_e form L_2 norm.
     }
     jump_sum *= 1./2.;
-    return std::sqrt(h_t * h_t * (std::pow(f_st + lu,2) * geom.faceAreas[T])+ jump_sum);
+    return h_t * h_t * (std::pow(f_st + lu,2) * geom.faceAreas[T])+ jump_sum;
 }
 
-FaceData<double> poisson_residual_error(ManifoldSurfaceMesh &mesh,
-                                        IntrinsicGeometryInterface &geom,
-                                        const VertexData<double> &u,
-                                        const VertexData<double> &f) {
-    geom.requireHalfedgeVectorsInFace(); geom.requireEdgeCotanWeights();
+FaceData<double> poisson_residual_error_sqr(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const VertexData<double> &u, const VertexData<double> &f)
+{
+  geom.requireHalfedgeVectorsInFace(); geom.requireEdgeCotanWeights();
     FaceData<double> eta(mesh);
     for (Face T: mesh.faces()) {
-        eta[T] = etaR(T,geom,f,u);
+        eta[T] = etaRSqr(T, geom, f, u);
     }
     geom.unrequireHalfedgeVectorsInFace(); geom.unrequireEdgeCotanWeights();
     return eta;
