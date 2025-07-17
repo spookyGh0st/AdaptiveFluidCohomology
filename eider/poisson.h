@@ -8,7 +8,7 @@ namespace geometrycentral::surface {
     void solve_poisson_dirichlet_zero_mean(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
                                            VertexData<double>& f, const VertexData<double>& g);
 
-    /// solves laplace f = g
+    /// Solves Δu = f in Ω, u = 0 in ∂Ω
     struct StreamFunctionSolver {
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
 
@@ -26,8 +26,8 @@ namespace geometrycentral::surface {
         void compute_zero_mean(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom);
         void compute(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom);
 
-        void solve_dirichlet(VertexData<double> & f, const VertexData<double>& g) const;
-        void solve_zero_mean(SurfaceMesh& mesh, VertexData<double>& f, const VertexData<double>& g) const;
-        void solve(SurfaceMesh & mesh, IntrinsicGeometryInterface & geom, VertexData<double> & f, const VertexData<double>& g) const;
+        void solve_dirichlet(VertexData<double> &u, const VertexData<double>&f) const;
+        void solve_zero_mean(SurfaceMesh& mesh, VertexData<double> &u, const VertexData<double> &f) const;
+        void solve(SurfaceMesh & mesh, IntrinsicGeometryInterface & geom, VertexData<double> &u, const VertexData<double>&f) const;
     };
 }

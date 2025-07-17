@@ -16,11 +16,11 @@ namespace geometrycentral::surface
         else { compute_zero_mean(mesh, geom); }
     }
 
-    void StreamFunctionSolver::solve(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, VertexData<double>& f,
-        const VertexData<double>& g) const
+    void StreamFunctionSolver::solve(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, VertexData<double>&u,
+        const VertexData<double>&f) const
     {
-        if (mesh.hasBoundary()) { solve_dirichlet(f,g); }
-        else { solve_zero_mean(mesh, f, g); }
+        if (mesh.hasBoundary()) { solve_dirichlet(u, f); }
+        else { solve_zero_mean(mesh, u, f); }
     }
 
 
@@ -138,13 +138,13 @@ namespace geometrycentral::surface
         geom.unrequireVertexGalerkinMassMatrix();
     }
 
-    void StreamFunctionSolver::solve_dirichlet(VertexData<double>& f,
-        const VertexData<double>& g) const
+    void StreamFunctionSolver::solve_dirichlet(VertexData<double>&u,
+        const VertexData<double>&f) const
     {
         if (interiorVertices.empty()) return;
         Eigen::VectorXd x_B(boundaryVertices.size()), B_I(interiorVertices.size());
-        for (Vertex v : boundaryVertices) { x_B(globalToBoundaryIndex[v]) = f[v]; }
-        for (Vertex v : interiorVertices) { B_I[globalToInteriorIndex[v]] = g[v]; }
+        for (Vertex v : boundaryVertices) { x_B(globalToBoundaryIndex[v]) = u[v]; }
+        for (Vertex v : interiorVertices) { B_I[globalToInteriorIndex[v]] = f[v]; }
 
         Eigen::VectorXd rhs = (M_II * B_I) - (L_IB * x_B);
         Eigen::VectorXd x_I = solver.solve(rhs);
@@ -153,7 +153,7 @@ namespace geometrycentral::surface
         }
 
         for (Vertex v : interiorVertices) {
-            f[v] = x_I(globalToInteriorIndex[v]);
+          u[v] = x_I(globalToInteriorIndex[v]);
         }
     }
 
@@ -205,14 +205,14 @@ namespace geometrycentral::surface
         geom.unrequireVertexGalerkinMassMatrix();
     }
 
-    void StreamFunctionSolver::solve_zero_mean(SurfaceMesh& mesh, VertexData<double>& f, const VertexData<double>& g) const
+    void StreamFunctionSolver::solve_zero_mean(SurfaceMesh& mesh, VertexData<double>&u, const VertexData<double>&f) const
     {
-        size_t n = f.size();
+        size_t n = u.size();
         if (n == 0) return;
 
         Eigen::VectorXd g_vec(n);
         for (Vertex v : mesh.vertices()) {
-            g_vec[v.getIndex()] = g[v];
+            g_vec[v.getIndex()] = f[v];
         }
 
         Eigen::VectorXd rhs = M_full * g_vec;
@@ -227,7 +227,7 @@ namespace geometrycentral::surface
         }
 
         for (Vertex v : mesh.vertices()) {
-            f[v] = solution[v.getIndex()];
+          u[v] = solution[v.getIndex()];
         }
     }
 }

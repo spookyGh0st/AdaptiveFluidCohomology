@@ -20,21 +20,21 @@ TEST(poissonTest, testLaplace)
     fds = fds.parent_path()/ "models" /"disk.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
 
-    VertexData<double> f(*m, 0), f_exact(*m,0);
+    VertexData<double> u(*m, 0), u_exact(*m,0);
     for (Vertex v: m->vertices()) {
-      f_exact[v] = g->vertexPositions[v].x*g->vertexPositions[v].x + g->vertexPositions[v].y * g->vertexPositions[v].y;
-      if(v.isBoundary()) f[v] = f_exact[v];
+      u_exact[v] = g->vertexPositions[v].x*g->vertexPositions[v].x + g->vertexPositions[v].y * g->vertexPositions[v].y;
+      if(v.isBoundary()) u[v] = u_exact[v];
     }
-    VertexData<double> g2(*m, -4);
+    VertexData<double> f(*m, -4);
     auto S = StreamFunctionSolver();
     S.compute(*m, *g);
-    S.solve(*m,*g,f,g2);
+    S.solve(*m,*g, u, f);
 
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
-    pm->addVertexScalarQuantity("f",f)->setEnabled(true);
-    pm->addVertexScalarQuantity("f exact",f_exact);
-    pm->addVertexScalarQuantity("g",g2);
+    pm->addVertexScalarQuantity("u", u)->setEnabled(true);
+    pm->addVertexScalarQuantity("u exact", u_exact);
+    pm->addVertexScalarQuantity("f", f);
     std::size_t i = 0;
     polyscope::show();
 

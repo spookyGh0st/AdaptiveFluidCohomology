@@ -5,5 +5,6 @@
 namespace gcs=geometrycentral::surface;
 
 void refine(gcs::IntrinsicTriangulation& tri, std::vector<gcs::Face> faces);
-gcs::FaceData<double> poisson_residual_error(gcs::ManifoldSurfaceMesh& mesh, gcs::IntrinsicGeometryInterface& geom, const gcs::VertexData<double>& f, const gcs::VertexData<double>& u);
+/// Gives the residual error for Δu = f in Ω, u = 0 in ∂Ω
+gcs::FaceData<double> poisson_residual_error(gcs::ManifoldSurfaceMesh &mesh, gcs::IntrinsicGeometryInterface &geom, const gcs::VertexData<double> &u, const gcs::VertexData<double> &f);
 std::vector<gcs::Face> select_doerfler(gcs::ManifoldSurfaceMesh& mesh, gcs::FaceData<double> residual, double theta);

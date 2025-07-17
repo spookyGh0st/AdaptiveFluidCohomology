@@ -103,8 +103,10 @@ double etaR(Face T, IntrinsicGeometryInterface& geom, const VertexData<double>& 
     return std::sqrt(h_t * h_t * (std::pow(f_st + lu,2) * geom.faceAreas[T])+ jump_sum);
 }
 
-FaceData<double> poisson_residual_error(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const VertexData<double>& f, const VertexData<double>& u)
-{
+FaceData<double> poisson_residual_error(ManifoldSurfaceMesh &mesh,
+                                        IntrinsicGeometryInterface &geom,
+                                        const VertexData<double> &u,
+                                        const VertexData<double> &f) {
     geom.requireHalfedgeVectorsInFace(); geom.requireEdgeCotanWeights();
     FaceData<double> eta(mesh);
     for (Face T: mesh.faces()) {
