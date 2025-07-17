@@ -5,6 +5,7 @@
 #include "geometrycentral/surface/meshio.h"
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
+#include <implot.h>
 
 #include <gtest/gtest.h>
 
@@ -73,7 +74,7 @@ wc_wrapper init_taylor(SurfaceMesh& mesh, VertexPositionGeometry& geo, std::vect
 TEST(cfdTest, testSec15)
 {
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus_bounded_max.stl";
+    fds = fds.parent_path()/ "models" /"torus_bounded.obj";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     std::vector<FaceData<Vector2>> h= orthonormal_hom_basis(*m,*g);
 
@@ -88,6 +89,7 @@ TEST(cfdTest, testSec15)
     for (Face f: m->faces()) { e1[f] = g->faceTangentBasis[f][0], e2[f] = g->faceTangentBasis[f][1]; }
 
     polyscope::init();
+    ImPlot::CreateContext();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
     pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
     pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
@@ -99,6 +101,7 @@ TEST(cfdTest, testSec15)
 
     float dt = 0.001;
     bool running = false, fix_c = false;
+    std::vector<float> c1({float(wc.c[0])}), c2({float(wc.c[1])}), t({0});
     polyscope::state::userCallback = [&]() {
         if (ImGui::Button("reset")) {
             wc = init_wc(*m,*g,h);
@@ -113,11 +116,16 @@ TEST(cfdTest, testSec15)
             vel = velocity(*m,*g,wc,h, S);
             pm->addVertexScalarQuantity("vorticity",wc.w);
             pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
+            c1.push_back(wc.c[0]); c2.push_back(wc.c[1]);
+            t.push_back(t.back() + dt);
         }
-        for (int i = 0; i< wc.c.size(); i++) {
-            ImGui::Text("c%d: %f",i,wc.c[i]);
-        }
-
+      if (ImPlot::BeginPlot("Homology coefficient")) {
+        ImPlot::SetupAxis(ImAxis_X1, "Time",ImPlotAxisFlags_AutoFit);
+        ImPlot::SetupAxis(ImAxis_Y1, "coefficient", ImPlotAxisFlags_AutoFit);
+        ImPlot::PlotLine("c1", t.data(), c1.data(),int(t.size()));
+        ImPlot::PlotLine("c2", t.data(), c2.data(),int(t.size()));
+        ImPlot::EndPlot();
+      }
     };// specify the callback
     polyscope::show();
 
