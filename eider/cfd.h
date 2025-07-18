@@ -49,7 +49,13 @@ namespace geometrycentral::surface
         double facmin = 0.1;
     };
 
-    std::pair<wc_wrapper, double> adaptive_step(
+    struct DOPRI5_sample{
+      wc_wrapper wc {};
+      double t_past {};   // past step
+      double t_future {}; // new stepsize
+    };
+
+    DOPRI5_sample adaptive_step(
         ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const std::vector<FaceData<Vector2>>& h,
         const wc_wrapper& x, double dt, const StreamFunctionSolver& S,

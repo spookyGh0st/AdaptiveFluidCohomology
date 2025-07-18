@@ -9,41 +9,13 @@
 
 #include <gtest/gtest.h>
 
-#include "geometrycentral/surface/surface_point.h"
+#include "eider/util.h"
 #include "geometrycentral/surface/integer_coordinates_intrinsic_triangulation.h"
-
+#include "geometrycentral/surface/surface_point.h"
 
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
 
-double curl(Vertex v, IntrinsicGeometryInterface& geom, FaceData<Vector2> u){
-    double curl_sum = 0.0f;
-    double area_sum = 0.0f;
-    for (Face f : v.adjacentFaces()) {
-        double Af = geom.faceAreas[f];
-        Vector2 vf = u[f];
-
-        double face_curl = 0;
-        for (Halfedge he : f.adjacentHalfedges())
-        {
-            Vector2 efp = geom.halfedgeVectorsInFace[he.next()];
-            face_curl += dot(vf,efp.rotate90());
-        }
-        face_curl = face_curl / (2.0f * Af);
-        curl_sum += face_curl * Af;
-        area_sum += Af;
-    }
-    return curl_sum / area_sum;
-}
-VertexData<double> curl(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, FaceData<Vector2> u){
-    VertexData<double> c(mesh);
-    geom.requireHalfedgeVectorsInFace();
-    for (Vertex v : mesh.vertices()) {
-        c[v] = curl(v, geom, u);
-    }
-    geom.unrequireHalfedgeVectorsInFace();
-    return c;
-}
 
 wc_wrapper init_wc(SurfaceMesh& mesh, VertexPositionGeometry& geo, std::vector<FaceData<Vector2>> h) {
     wc_wrapper wc;
@@ -131,70 +103,8 @@ TEST(cfdTest, testSec15)
 
 }
 
-
-TEST(cfdTest, testVorticesThroughHole)
-{
-    std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"grid_hole.stl";
-    auto [m,g] = readManifoldSurfaceMesh(fds.string());
-    std::vector<FaceData<Vector2>> h= orthonormal_hom_basis(*m,*g);
-
-    StreamFunctionSolver S;
-    S.compute(*m,*g);
-
-    // wc_wrapper wc = init_wc(*m, *g, h);
-    float dt = 0.001, v_dist  = 0.5, x_add = v_dist/4, y_add = 0, x_cuttof = v_dist/2, y_cuttof = v_dist/4, x_cutt_offset = 0, y_cutt_offset = 0.5;
-    wc_wrapper wc = init_taylor(*m, *g, h, v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-    g->requireHalfedgeVectorsInFace();
-    velocity_wrapper vel = velocity(*m,*g,wc,h, S);
-
-    g->requireFaceTangentBasis();
-    FaceData<Vector3> e1(*m),e2(*m);
-    for (Face f: m->faces()) { e1[f] = g->faceTangentBasis[f][0], e2[f] = g->faceTangentBasis[f][1]; }
-
-    polyscope::init();
-    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList());
-    pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
-    pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
-    pm->addFaceScalarQuantity("residual",vel.residual);
-    std::size_t i = 0;
-    for (const auto& b: h) {
-        pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
-        i++;
-    }
-
-    bool running = false, fix_c = false;
-    polyscope::state::userCallback = [&]() {
-        ImGui::InputFloat("vorticity distance",&v_dist,0.125,0.5);
-        ImGui::InputFloat("x_add",&x_add,0.125,0.5); ImGui::InputFloat("y_add",&y_add,0.125,0.5);
-        ImGui::InputFloat("x_cuttof",&x_cuttof,0.125,0.5); ImGui::InputFloat("y_cuttoff",&y_cuttof,0.125,0.5);
-        ImGui::InputFloat("x_cut offset",&x_cutt_offset,0.125,0.5); ImGui::InputFloat("y_cut offset",&y_cutt_offset,0.125,0.5);
-        if (ImGui::Button("reset")) {
-            wc = init_taylor(*m, *g, h, v_dist, Vector2(x_add,y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-            vel = velocity(*m,*g,wc,h, S);
-            pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
-            pm->addFaceScalarQuantity("residual",vel.residual);
-        };
-        ImGui::InputFloat("delta time",&dt,0.001,0.01);
-        ImGui::Checkbox("Run", &running);
-        ImGui::Checkbox("Fix c", &fix_c);
-        if (running || ImGui::Button("Advance")) {
-            auto tmpc = wc.c;
-            wc = RK4Step(*m,*g,h,wc, dt, S);
-            if (fix_c) wc.c = tmpc;
-            vel = velocity(*m,*g,wc,h, S);
-            pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
-            pm->addFaceScalarQuantity("residual",vel.residual);
-        }
-        for (int i = 0; i< wc.c.size(); i++) {
-            ImGui::Text("c%d: %f",i,wc.c[i]);
-        }
-
-    };// specify the callback
-    polyscope::show();
-
+inline double wedge(Vector2 a, Vector2 b){
+  return a[0] * b[1] - a[1] * b[0];
 }
 
 
@@ -232,15 +142,32 @@ TEST(cfdTest, IntrinsicHole)
     wc_wrapper wc = init_taylor(m, g, h, v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
     velocity_wrapper vel = velocity(m,g,wc,h, S);
 
+    std::vector<float> t_data ({0}); std::vector<std::vector<float>> c_data(h.size()), c_should(h.size());
+    for (int i = 0; i < h.size(); ++i) {
+      c_data[i].push_back(float(wc.c[i]));
+      c_should[i].push_back(float(wc.c[i]));
+    }
+
     polyscope::init();
+    ImPlot::CreateContext();
+
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g.vertexPositions,m.getFaceVertexList(), polyscopePermutations(m));
-    pm->addVertexScalarQuantity("vorticity",wc.w)->setEnabled(true);
-    pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2)->setEnabled(true);
-    pm->addVertexScalarQuantity("stream_function",vel.stream_function);
-    std::size_t i = 0;
-    for (const auto& b: h) {
+    auto vispm = [&](){
+      pm->addVertexScalarQuantity("vorticity",wc.w);
+      pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
+      pm->addFaceScalarQuantity("error",vel.residual);
+      pm->addVertexScalarQuantity("stream_function",vel.stream_function);
+      VertexData<double> curlU(m,0);
+      for (Vertex v: m.vertices()) { curlU[v] = curl(g,v,vel.u) ;}
+      pm->addVertexScalarQuantity("vorticity new",curlU);
+    };
+    vispm();
+    {
+      std::size_t i = 0;
+      for (const auto& b: h) {
         pm->addFaceTangentVectorQuantity("Hom basis " + std::to_string(i),b,e1,e2);
         i++;
+      }
     }
 
     DOPRI5_conf conf=  DOPRI5_conf();
@@ -254,8 +181,12 @@ TEST(cfdTest, IntrinsicHole)
         if (ImGui::Button("reset")) {
             wc = init_taylor(m, g, h, v_dist, Vector2(x_add,y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
             vel = velocity(m,g,wc,h, S);
-            pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
+            t_data = std::vector<float>({0});
+            for (int j = 0; j < c_data.size(); ++j) {
+              c_data[j].clear(); c_data[j].push_back(float(wc.c[j]));
+              c_should[j].clear(); c_should[j].push_back(float(wc.c[j]));
+            }
+            vispm();
         };
         ImGui::InputDouble("Absolut Error",&conf.Atol_i,0,0,"%.10f");
         ImGui::InputDouble("relative Error",&conf.Rtol_i,0,0,"%.10f");
@@ -265,15 +196,35 @@ TEST(cfdTest, IntrinsicHole)
         ImGui::Checkbox("Run", &running);
         ImGui::Checkbox("Fix c", &fix_c);
         if (running || ImGui::Button("Advance")) {
-            auto tmpc = wc.c;
-            std::tie(wc,dt) = adaptive_step(m,g,h,wc, dt, S,conf);
+            auto tmpc = wc.c; double tmpdt;
+            auto dp5_sample = adaptive_step(m,g,h,wc, dt, S,conf);
+            wc = dp5_sample.wc;
             if (fix_c) wc.c = tmpc;
+            dt = float(dp5_sample.t_future);
             vel = velocity(m,g,wc,h, S);
-            pm->addVertexScalarQuantity("vorticity",wc.w);
-            pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
-            pm->addFaceScalarQuantity("error",vel.residual);
-            pm->addVertexScalarQuantity("stream_function",vel.stream_function);
+            vispm();
+
+            // update plots arrays
+            t_data.push_back(t_data.back() + float(dp5_sample.t_past));
+            for (int j = 0; j < wc.c.size(); ++j) {
+              c_data[j].push_back(float(wc.c[j]));
+
+              double c_sum = 0;
+              for (Face f: m.faces())
+                c_sum += dot(h[j][f],vel.u[f]) * g.faceAreas[f];
+              c_should[j].push_back(float(c_sum));
+            }
+
         }
+      if (ImPlot::BeginPlot("Homology coefficient")) {
+        ImPlot::SetupAxis(ImAxis_X1, "Time",ImPlotAxisFlags_AutoFit);
+        ImPlot::SetupAxis(ImAxis_Y1, "coefficient", ImPlotAxisFlags_AutoFit);
+        for (int j = 0; j < c_data.size() ; ++j) {
+          ImPlot::PlotLine(("c" + std::to_string(j)).c_str(), t_data.data(), c_data[j].data(),int(t_data.size()));
+          ImPlot::PlotLine(("c_precise" + std::to_string(j)).c_str(), t_data.data(), c_should[j].data(),int(t_data.size()));
+        }
+        ImPlot::EndPlot();
+      }
         for (int i = 0; i< wc.c.size(); i++) {
             ImGui::Text("c%d: %f",i,wc.c[i]);
         }

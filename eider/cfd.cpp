@@ -191,28 +191,31 @@ namespace geometrycentral::surface
     }
 
 
-    std::pair<wc_wrapper, double> DOPRI5_step(
+    DOPRI5_sample DOPRI5_step(
         ManifoldSurfaceMesh& mesh,
         const wc_wrapper& y0, double h,
         const F_type& F,
         const DOPRI5_conf& conf
     )
     {
+        double h_past;
+        DOPRI5_sample sample;
         bool accepted = false;
         double facMax = conf.faxmax;
         std::array<wc_wrapper,2> y;
         while (!accepted) {
             constexpr double q =5; // min of order y and y_hat
             y = DOPRI5(y0,h,F);
+            h_past = h; // store time step
             double err = error(mesh, y0, y[0], y[1],conf.Atol_i, conf.Rtol_i);
             accepted = accept_step(err);
             h = compute_h_new(h,err,q,conf.facmin,facMax);
             facMax = 1; // addvised to override after step-rejection
         }
-        return {y[0], h};
+        return {y[0], h_past,h};
     }
 
-    std::pair<wc_wrapper, double> adaptive_step(
+    DOPRI5_sample adaptive_step(
         ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom,
         const std::vector<FaceData<Vector2>>& h,
         const wc_wrapper& x, double dt, const StreamFunctionSolver& S,

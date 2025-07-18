@@ -30,6 +30,47 @@ namespace geometrycentral::surface
         return g / (2 * geom.faceAreas[face]);
     }
 
+    /**
+ * Compute the scalar curl of a vector field u around a vertex v.
+ *
+ * The scalar curl is approximated as:
+ *   curl(v) = (1 / A) * sum_over_faces ( u_f · t_e ) * |e|,
+ * where:
+ *   - u_f is the vector field in face f,
+ *   - t_e is the unit tangent vector along edge e in counter-clockwise order around v,
+ *   - |e| is the length of the edge,
+ *   - A is the dual area at vertex v (e.g. circumcentric or barycentric).
+ *
+ * This mimics integrating circulation around the vertex and normalizing by area.
+ *
+ * @param geom Intrinsic geometry (requires halfedgeVectorsInFace, edgeLengths, vertexDualAreas)
+ * @param v The vertex at which to compute the curl.
+ * @param u Vector field defined per face.
+ * @return Scalar curl at the vertex.
+     */
+    inline double curl(IntrinsicGeometryInterface& geom, Vertex v, const FaceData<Vector2>& u)
+    {
+      double sum = 0.0;
+
+      for (Halfedge he : v.outgoingHalfedges())
+      {
+        if (!he.isInterior()) continue;
+
+        Face f = he.face();
+        Vector2 u_f = u[f]; // vector field in face
+
+        Vector2 edgeVec = geom.halfedgeVectorsInFace[he]; // edge from v to neighbor
+        double len = edgeVec.norm();
+
+        Vector2 tangent = edgeVec.unit().rotate90(); // CCW tangent vector along edge (boundary of face)
+        sum += dot(u_f,tangent) * len;
+      }
+
+      double area = geom.vertexDualAreas[v]; // should be precomputed, e.g., barycentric or Voronoi dual
+      return sum / area;
+    }
+
+
     inline double laplacian(IntrinsicGeometryInterface& geom, Vertex v, const VertexData<double>& f)
     {
         double sum = 0.0;
