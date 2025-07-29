@@ -172,7 +172,7 @@ TEST(cfdTest, IntrinsicHole)
 
     DOPRI5_conf conf=  DOPRI5_conf();
 
-    bool running = false, fix_c = false;
+    bool running = false, fix_c = false, force_c = false;
     polyscope::state::userCallback = [&]() {
         ImGui::InputFloat("vorticity distance",&v_dist,0.125,0.5);
         ImGui::InputFloat("x_add",&x_add,0.125,0.5); ImGui::InputFloat("y_add",&y_add,0.125,0.5);
@@ -195,6 +195,7 @@ TEST(cfdTest, IntrinsicHole)
         ImGui::InputFloat("delta time",&dt,0.001,0.01);
         ImGui::Checkbox("Run", &running);
         ImGui::Checkbox("Fix c", &fix_c);
+        ImGui::Checkbox("Force correct c", &force_c);
         if (running || ImGui::Button("Advance")) {
             auto tmpc = wc.c; double tmpdt;
             auto dp5_sample = adaptive_step(m,g,h,wc, dt, S,conf);
@@ -213,6 +214,8 @@ TEST(cfdTest, IntrinsicHole)
               for (Face f: m.faces())
                 c_sum += dot(h[j][f],vel.u[f]) * g.faceAreas[f];
               c_should[j].push_back(float(c_sum));
+
+              if(force_c) wc.c[j] = c_sum;
             }
 
         }
