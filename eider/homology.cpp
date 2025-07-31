@@ -615,12 +615,10 @@ namespace geometrycentral::surface
         return h;
     }
 
-    std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
+    std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const std::vector<std::vector<Halfedge>>& homotopy_b)
     {
-        assert(&mesh == &geom.mesh);
         PressureProjectionSolver pp_solver {};
         pp_solver.compute(geom);
-        auto homotopy_b= homotopy_basis(mesh, geom,mesh.face(0));
         std::vector<FaceData<Vector2>> h(homotopy_b.size());
         for (std::size_t i = 0; i < homotopy_b.size(); i++){
             auto& basis = homotopy_b[i];
@@ -632,6 +630,13 @@ namespace geometrycentral::surface
             assert(h[i].raw().allFinite());
         }
         return orthonormalize(mesh, geom, h);
+    }
+
+    std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom)
+    {
+        assert(&mesh == &geom.mesh);
+        auto homotopy_b= homotopy_basis(mesh, geom,mesh.face(0));
+        return orthonormal_hom_basis(mesh,geom,homotopy_b);
     }
 }
 

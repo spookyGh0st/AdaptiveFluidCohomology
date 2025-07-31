@@ -51,6 +51,8 @@ namespace geometrycentral::surface
 
     std::vector<FaceData<Vector2>> orthonormalize(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const std::vector<FaceData<Vector2>>& h);
 
+    std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const std::vector<std::vector<Halfedge>>& homotopy_basis);
+
     std::vector<FaceData<Vector2>> orthonormal_hom_basis(SurfaceMesh& mesh, IntrinsicGeometryInterface& geom);
 }
 
