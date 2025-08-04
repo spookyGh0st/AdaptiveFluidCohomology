@@ -7,7 +7,11 @@
 
 using namespace geometrycentral::surface;
 
-void adaptMesh(IntrinsicTriangulation& Tri,VertexData<double>& f, double theta) {
+
+void onSplit(EdgeData<Halfedge>& next, Edge e, Halfedge he1, Halfedge he2);
+
+
+inline void adaptMesh(IntrinsicTriangulation& Tri,VertexData<double>& f, double theta) {
   auto A = AttributeTransfer(Tri);
 
   ManifoldSurfaceMesh &mesh = *Tri.intrinsicMesh;

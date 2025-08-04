@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include "eider/homology.h"
 #include "eider/util.h"
 
 using namespace geometrycentral;
@@ -31,59 +32,93 @@ TEST(afemTest, testDefaultBehauvior)
 TEST(afemTest, testSplitEdgePath)
 {
   std::filesystem::path fds(__FILE__);
-  fds = fds.parent_path()/ "models" /"quad.stl";
+  fds = fds.parent_path()/ "models" /"torus.stl";
   auto [pm,pg] = readManifoldSurfaceMesh(fds.string());
-  ASSERT_EQ(pm->nFaces(),2);
-  ASSERT_EQ(pm->nEdges(),5);
 
   auto intrTri = IntegerCoordinatesIntrinsicTriangulation(*pm,*pg);
   ManifoldSurfaceMesh& mesh = *intrTri.intrinsicMesh;
-
-  std::array<Edge,4> bEdges {}; int b_i = 0;
-  Edge cEdge;
-  for (Edge e: mesh.edges()) {
-    if (e.isBoundary()) bEdges[b_i++] = e; else cEdge = e;
-  }
-  Vertex start_v = cEdge.halfedge().vertex();
-  EdgeData<Halfedge> next(mesh,Halfedge());
-  next[bEdges[0]]  = cEdge.halfedge();
-  next[cEdge] = bEdges[1].halfedge();
-  next[bEdges[1]] = bEdges[0].halfedge(); //points back
-
-  intrTri.edgeSplitCallbackList.push_back([&](Edge e, Halfedge he1, Halfedge he2)
-  {
-    ASSERT_EQ(he1.vertex(), he2.vertex()) << "new he originate from the same vertex";
-    // he1 and he2 lay along the old edge
-    ASSERT_TRUE(he1.tipVertex() == start_v || he2.tipVertex() == start_v);
-    ASSERT_EQ(next[e],  bEdges[1].halfedge()) << "original edge still points to the same he";
-
-    std::array<Halfedge, 4> cyc_edges {
-      he1.next(),
-      he1.next().next().twin().next(),
-      he2.next(),
-      he2.next().next().twin().next(),
-    };
-    for (Halfedge be: cyc_edges) ASSERT_TRUE(be.edge().isBoundary());
-
-    Halfedge in, out;
-    for (Halfedge be: cyc_edges) {
-      if (next[be.edge()] == Halfedge()) continue;
-      if (next[be.edge()].edge() == e) in = be;
-      else out = be;
+  auto h_basis = homotopy_basis(mesh,intrTri,mesh.face(0));
+  std::vector<EdgeData<Halfedge>> next(h_basis.size());
+  for (int h_idx = 0; h_idx< h_basis.size(); h_idx++) {
+    auto& h = h_basis[h_idx];
+    auto& n = next[h_idx];
+    h = reduce_co_loop(mesh,h);
+    n = EdgeData<Halfedge>(mesh,Halfedge());
+    for (int i = 0; i < h.size(); i++) {
+      n[h[i].edge()] = h[(i+1)%h.size()];
     }
-    ASSERT_NE(in,Halfedge());
-    ASSERT_NE(out,Halfedge());
-    ASSERT_NE(in,out);
+    intrTri.edgeSplitCallbackList.push_back([&,h_idx](Edge e, Halfedge he1, Halfedge he2) { onSplit(next[h_idx],e,he1,he2); });
+  }
+  std::cout << next[0][mesh.edge(5)].getIndex() << std::endl;
 
-    // 4 cases:
-    if (in.tailVertex() == out.tipVertex())
-      std::cout << "case 1" << std::endl;
-    else if (in.tipVertex() == out.tailVertex())
-      std::cout << "case 2" << std::endl;
-    else
-      std::cout << "case 3" << std::endl;
-    });
-  intrTri.splitEdge(cEdge.halfedge(),0.5);
+
+
+  auto refine_mesh = [&]()
+  {
+    VertexData<double> f(mesh, 1);
+    VertexData<double> u(mesh, 0);
+    StreamFunctionSolver S;
+    S.compute(mesh, intrTri);
+    S.solve(mesh, intrTri, u, f);
+    FaceData<double> res = poisson_residual_error_sqr(mesh, intrTri, u, f);
+    auto faces = select_doerfler(mesh, res, 0.5);
+    refine(intrTri, faces);
+  };
+
+
+  // TODO edge split
+
+
+  auto vis_mesh = [&]()
+  {
+    mesh.compress();
+    VertexData<Vector3> int_positions(mesh) ;
+    for (Vertex v : mesh.vertices()) { int_positions[v] = intrTri.vertexLocations[v].interpolate(pg->vertexPositions); }
+    VertexPositionGeometry g(mesh, int_positions);
+
+    polyscope::SurfaceMesh* polym = polyscope::registerSurfaceMesh("M", g.vertexPositions,mesh.getFaceVertexList(), polyscopePermutations(mesh));
+    for (int h_idx = 0; h_idx< h_basis.size(); h_idx++)
+    {
+      auto& h = h_basis[h_idx];
+      auto& n = next[h_idx];
+      HalfedgeData<int> nextInt(mesh,0);
+      for (Edge e: mesh.edges())
+        if (n[e] != Halfedge()) nextInt[n[e]] =1;
+      polym->addHalfedgeScalarQuantity("h_b " + std::to_string(h_idx),nextInt);
+
+      HalfedgeData<int> inList(mesh,-100);
+      h.clear();
+      for (Edge e: mesh.edges()) {
+        if (n[e] == Halfedge()) continue;
+        h.push_back(n[e]);
+        inList[n[e]] = 1;
+      }
+      polym->addHalfedgeScalarQuantity("he " + std::to_string(h_idx),inList);
+    }
+    auto orth_h_basis = orthonormal_hom_basis(mesh,intrTri,h_basis);
+    g.requireFaceTangentBasis();
+    FaceData<Vector3> e1(mesh),e2(mesh);
+    for (Face f: mesh.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1]; }
+    std::size_t i = 0;
+    for (const auto& b: orth_h_basis) {
+      polym->addFaceTangentVectorQuantity("Hom basis" + std::to_string(i),b,e1,e2);
+      i++;
+    }
+  };
+
+  polyscope::init();
+  vis_mesh();
+
+  polyscope::state::userCallback = [&]()
+  {
+    if (ImGui::Button("Refine"))
+    {
+      refine_mesh();
+      vis_mesh();
+    }
+  };
+
+  polyscope::show();
 }
 
 TEST(afemTest, testL)

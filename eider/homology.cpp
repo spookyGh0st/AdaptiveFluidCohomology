@@ -351,13 +351,19 @@ namespace geometrycentral::surface
             co_loop.push_back(prev[f]);
             f = prev[f].face();
         }
-        if (bridge.isBoundary()) { he = bound_dual_edge; co_loop.push_back(he.twin()); }
+
+        std::vector<Halfedge> back_co_loop {};
+        if (bridge.isBoundary()) { he = bound_dual_edge; back_co_loop.push_back(he.twin()); }
         else {he = bridge.halfedge().twin(); }
         f = he.face();
+
         while (f != x)
         {
-            co_loop.push_back(prev[f].twin());
+            back_co_loop.push_back(prev[f].twin());
             f = prev[f].face();
+        }
+        for (int i = back_co_loop.size() - 1; i >= 0; --i) {
+            co_loop.push_back(back_co_loop[i]);
         }
         return co_loop;
     }
