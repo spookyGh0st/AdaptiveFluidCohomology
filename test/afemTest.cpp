@@ -32,11 +32,15 @@ TEST(afemTest, testDefaultBehauvior)
 TEST(afemTest, testSplitEdgePath)
 {
   std::filesystem::path fds(__FILE__);
-  fds = fds.parent_path()/ "models" /"torus.stl";
+  fds = fds.parent_path()/ "models" /"grid_hole.stl";
   auto [pm,pg] = readManifoldSurfaceMesh(fds.string());
 
   auto intrTri = IntegerCoordinatesIntrinsicTriangulation(*pm,*pg);
+  intrTri.flipToDelaunay();
+  intrTri.delaunayRefine(20);
+  intrTri.refreshQuantities();
   ManifoldSurfaceMesh& mesh = *intrTri.intrinsicMesh;
+  mesh.compress();
   auto h_basis = homotopy_basis(mesh,intrTri,mesh.face(0));
   std::vector<EdgeData<Halfedge>> next(h_basis.size());
   for (int h_idx = 0; h_idx< h_basis.size(); h_idx++) {
@@ -67,6 +71,7 @@ TEST(afemTest, testSplitEdgePath)
 
 
   // TODO edge split
+  bool normalize_vectors = false;
 
 
   auto vis_mesh = [&]()
@@ -98,9 +103,10 @@ TEST(afemTest, testSplitEdgePath)
     auto orth_h_basis = orthonormal_hom_basis(mesh,intrTri,h_basis);
     g.requireFaceTangentBasis();
     FaceData<Vector3> e1(mesh),e2(mesh);
-    for (Face f: mesh.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1]; }
+    for (Face f: mesh.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
     std::size_t i = 0;
-    for (const auto& b: orth_h_basis) {
+    for (auto& b: orth_h_basis) {
+      if (normalize_vectors) for (Face f: mesh.faces()) { b[f] *= 1./g.faceArea(f); }
       polym->addFaceTangentVectorQuantity("Hom basis" + std::to_string(i),b,e1,e2);
       i++;
     }
@@ -116,6 +122,7 @@ TEST(afemTest, testSplitEdgePath)
       refine_mesh();
       vis_mesh();
     }
+    if (ImGui::Checkbox("Normalize",&normalize_vectors)) { vis_mesh(); }
   };
 
   polyscope::show();
