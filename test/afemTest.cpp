@@ -78,8 +78,11 @@ TEST(afemTest, testSplitEdgePath)
       auto& h = homology_b[h_idx];
       auto& n = h.next;
       HalfedgeData<int> nextInt(mesh,0);
-      for (Edge e: mesh.edges())
-        if (n[e] != Halfedge()) nextInt[n[e]] =1;
+      for (Edge e: mesh.edges()){
+          if (n[e] != Halfedge()) nextInt[n[e]] =1;
+          if(e == h.start_e) nextInt[n[e]] = 2;
+      }
+
       polym->addHalfedgeScalarQuantity("h_b " + std::to_string(h_idx),nextInt);
     }
 
