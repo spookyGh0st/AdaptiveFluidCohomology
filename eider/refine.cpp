@@ -118,7 +118,7 @@ FaceData<double> poisson_residual_error_sqr(ManifoldSurfaceMesh &mesh, Intrinsic
     return eta;
 }
 
-std::vector<Face> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, double theta) {
+std::vector<Face> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, double theta, double threshold) {
     if (mesh.nFaces() == 0)
         return {};
     std::vector<Face> faces;
@@ -135,6 +135,7 @@ std::vector<Face> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> re
     result.reserve(theta * mesh.nFaces());
     double accum_res = 0;
     for (int i = faces.size() - 1; i >= 0; --i) {
+        if (residual[faces[i]] < threshold) break;
         result.push_back(faces[i]);
         accum_res += residual[faces[i]];
         if (accum_res >= theta * total_res)

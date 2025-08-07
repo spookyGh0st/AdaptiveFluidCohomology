@@ -147,7 +147,7 @@ TEST(refineTest, testSplit)
         ImGui::SameLine();
         if (ImGui::Button("Select doerfler"))
         {
-            auto faces = select_doerfler(m,residual,theta);
+            auto faces = select_doerfler(m, residual, theta, 1);
             selection.fill(0);
             for (Face f:faces) {
                 selection[f] = 1;
@@ -315,7 +315,7 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         StreamFunctionSolver S {}; S.compute(adaptive_m, adaptive_g); S.solve(adaptive_m,adaptive_g,u,f);
 
         res_a = poisson_residual_error_sqr(adaptive_m, adaptive_g, u, f);
-        auto faces = select_doerfler(adaptive_m,res_a,theta);
+        auto faces = select_doerfler(adaptive_m, res_a, theta, 1);
         refine(adaptive_g,faces);
     };
 

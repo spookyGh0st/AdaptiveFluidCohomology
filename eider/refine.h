@@ -11,4 +11,4 @@ gcs::FaceData<double> poisson_residual_error_sqr(
     gcs::IntrinsicGeometryInterface &geom,
     const gcs::VertexData<double> &u,
     const gcs::VertexData<double> &f);
-std::vector<gcs::Face> select_doerfler(gcs::ManifoldSurfaceMesh &mesh, gcs::FaceData<double> residual, double theta);
+std::vector<gcs::Face> select_doerfler(gcs::ManifoldSurfaceMesh &mesh, gcs::FaceData<double> residual, double theta, double threshold);
