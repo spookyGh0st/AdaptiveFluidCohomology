@@ -1,36 +1,33 @@
 #pragma once
 
-#include <geometrycentral/utilities/vector2.h>
 #include <geometrycentral/surface/intrinsic_geometry_interface.h>
 #include <geometrycentral/surface/manifold_surface_mesh.h>
+#include <geometrycentral/utilities/vector2.h>
 
-namespace geometrycentral::surface
-{
-    /**
-     * Compute the gradient of a scalar function f over a triangle face by
-     * \( \nabla f = \frac{1}{2A} \sum_{i=0}^2 f_i \cdot R_{90}(e_i^*),\)
-     * where \( f_i \) is the value at vertex \( i \), \( e_i^* \) is the edge vector
-     * opposite vertex \( i \), \( R_{90} \) is a 90° counter-clockwise rotation,
-     * and \( A \) is the triangle area.
-     *
-     * @param geom Intrinsic geometry data, requires halfedgeVectorsInFace and faceAreas
-     * @param face The triangle face.
-     * @param f Scalar function on vertices.
-     * @return Gradient of f over the face.
-     */
-    inline Vector2 grad(IntrinsicGeometryInterface& geom, Face face, const VertexData<double>& f)
-    {
-        assert(face.isTriangle());
-        Vector2 g = Vector2::zero();
-        for (Halfedge he : face.adjacentHalfedges())
-        {
-            Vector2 efp = geom.halfedgeVectorsInFace[he.next()];
-            g += (efp.rotate90()) * f[he.vertex()];
-        }
-        return g / (2 * geom.faceAreas[face]);
+namespace geometrycentral::surface {
+/**
+ * Compute the gradient of a scalar function f over a triangle face by
+ * \( \nabla f = \frac{1}{2A} \sum_{i=0}^2 f_i \cdot R_{90}(e_i^*),\)
+ * where \( f_i \) is the value at vertex \( i \), \( e_i^* \) is the edge vector
+ * opposite vertex \( i \), \( R_{90} \) is a 90° counter-clockwise rotation,
+ * and \( A \) is the triangle area.
+ *
+ * @param geom Intrinsic geometry data, requires halfedgeVectorsInFace and faceAreas
+ * @param face The triangle face.
+ * @param f Scalar function on vertices.
+ * @return Gradient of f over the face.
+ */
+inline Vector2 grad(IntrinsicGeometryInterface &geom, Face face, const VertexData<double> &f) {
+    assert(face.isTriangle());
+    Vector2 g = Vector2::zero();
+    for (Halfedge he : face.adjacentHalfedges()) {
+        Vector2 efp = geom.halfedgeVectorsInFace[he.next()];
+        g += (efp.rotate90()) * f[he.vertex()];
     }
+    return g / (2 * geom.faceAreas[face]);
+}
 
-    /**
+/**
  * Compute the scalar curl of a vector field u around a vertex v.
  *
  * The scalar curl is approximated as:
@@ -47,14 +44,13 @@ namespace geometrycentral::surface
  * @param v The vertex at which to compute the curl.
  * @param u Vector field defined per face.
  * @return Scalar curl at the vertex.
-     */
-    inline double curl(IntrinsicGeometryInterface& geom, Vertex v, const FaceData<Vector2>& u)
-    {
-      double sum = 0.0;
+ */
+inline double curl(IntrinsicGeometryInterface &geom, Vertex v, const FaceData<Vector2> &u) {
+    double sum = 0.0;
 
-      for (Halfedge he : v.outgoingHalfedges())
-      {
-        if (!he.isInterior()) continue;
+    for (Halfedge he : v.outgoingHalfedges()) {
+        if (!he.isInterior())
+            continue;
 
         Face f = he.face();
         Vector2 u_f = u[f]; // vector field in face
@@ -63,43 +59,41 @@ namespace geometrycentral::surface
         double len = edgeVec.norm();
 
         Vector2 tangent = edgeVec.unit().rotate90(); // CCW tangent vector along edge (boundary of face)
-        sum += dot(u_f,tangent) * len;
-      }
-
-      double area = geom.vertexDualAreas[v]; // should be precomputed, e.g., barycentric or Voronoi dual
-      return sum / area;
+        sum += dot(u_f, tangent) * len;
     }
 
-
-    inline double laplacian(IntrinsicGeometryInterface& geom, Vertex v, const VertexData<double>& f)
-    {
-        double sum = 0.0;
-
-        for (Halfedge he : v.outgoingHalfedges()) {
-            Vertex vi = he.tailVertex();
-            Vertex vj = he.tipVertex();
-            double wij =geom.edgeCotanWeights[he.edge()];
-            sum += wij * (f[vi] - f[vj]);
-        }
-        return sum;
-    }
-
-    inline double diameter(IntrinsicGeometryInterface& geom, Face f) {
-        assert(f.isTriangle());
-        double d = 0;
-        for (Edge e: f.adjacentEdges())
-            d = std::max(d,geom.edgeLengths[e]);
-        return d;
-    }
-
-    inline double diameter(IntrinsicGeometryInterface& geom, Edge e) {
-        return geom.edgeLengths[e];
-    }
-
-    inline double max_diameter(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom) {
-        double d = 0;
-        for (Face f: mesh.faces())
-            d = std::max(d,diameter(geom, f));
-        return d;
-    }
+    double area = geom.vertexDualAreas[v]; // should be precomputed, e.g., barycentric or Voronoi dual
+    return sum / area;
 }
+
+inline double laplacian(IntrinsicGeometryInterface &geom, Vertex v, const VertexData<double> &f) {
+    double sum = 0.0;
+
+    for (Halfedge he : v.outgoingHalfedges()) {
+        Vertex vi = he.tailVertex();
+        Vertex vj = he.tipVertex();
+        double wij = geom.edgeCotanWeights[he.edge()];
+        sum += wij * (f[vi] - f[vj]);
+    }
+    return sum;
+}
+
+inline double diameter(IntrinsicGeometryInterface &geom, Face f) {
+    assert(f.isTriangle());
+    double d = 0;
+    for (Edge e : f.adjacentEdges())
+        d = std::max(d, geom.edgeLengths[e]);
+    return d;
+}
+
+inline double diameter(IntrinsicGeometryInterface &geom, Edge e) {
+    return geom.edgeLengths[e];
+}
+
+inline double max_diameter(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
+    double d = 0;
+    for (Face f : mesh.faces())
+        d = std::max(d, diameter(geom, f));
+    return d;
+}
+} // namespace geometrycentral::surface

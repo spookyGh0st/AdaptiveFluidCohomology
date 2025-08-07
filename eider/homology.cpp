@@ -1,9 +1,9 @@
 #include "homology.h"
-#include <vector>
 #include <algorithm>
-#include <tuple>
-#include <numeric>
 #include <bitset>
+#include <numeric>
+#include <tuple>
+#include <vector>
 
 #include "geometrycentral/surface/barycentric_vector.h"
 #include "geometrycentral/surface/manifold_surface_mesh.h"
@@ -30,10 +30,10 @@ class DSU {
     }
 
     /**
-         * replaces the set containing i and the set containing y with their union.
-         * @param i first element
-         * @param j second element
-         * @return false, if already in same set, true if union was created
+     * replaces the set containing i and the set containing y with their union.
+     * @param i first element
+     * @param j second element
+     * @return false, if already in same set, true if union was created
      */
     bool unite(size_t i, size_t j) {
         size_t root_i = find(i);
@@ -56,8 +56,7 @@ class DSU {
 
 // --- Primal Graph MST Computation ---
 // Computes the Minimal Spanning Tree of the graph of edges, using edge lengths as weights.
-void computeMinimalSpanningTree(ManifoldSurfaceMesh &mesh, EdgeData<EdgeType> &edgeData,
-                                const sp_cmp &fn) {
+void computeMinimalSpanningTree(ManifoldSurfaceMesh &mesh, EdgeData<EdgeType> &edgeData, const sp_cmp &fn) {
 
     std::vector<Edge> weightedEdges;
     weightedEdges.reserve(mesh.nEdges());
@@ -251,8 +250,7 @@ class MinHeap {
 };
 
 std::pair<FaceData<Halfedge>, FaceData<double>>
-co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom,
-            EdgeData<EdgeType> &edgeData, Face orig_face) {
+co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeData<EdgeType> &edgeData, Face orig_face) {
     geom.requireDualEdgeLengths();
     FaceData<Halfedge> prev(mesh, Halfedge());
     FaceData<double> dist(mesh, std::numeric_limits<double>::max());
@@ -285,8 +283,7 @@ co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom,
 }
 
 // Compute for each edge e in G\T^*  the length of the shortest loop in T^* that contains e
-EdgeData<double> edge_coloop_lengths(ManifoldSurfaceMesh &mesh, FaceData<double> &dist,
-                                     const EdgeData<EdgeType> &data) {
+EdgeData<double> edge_coloop_lengths(ManifoldSurfaceMesh &mesh, FaceData<double> &dist, const EdgeData<EdgeType> &data) {
     EdgeData<double> loop_length(mesh, NAN);
     for (Edge e : mesh.edges()) {
         if (data[e] == EdgeType::maximal_co_st)
@@ -301,8 +298,7 @@ EdgeData<double> edge_coloop_lengths(ManifoldSurfaceMesh &mesh, FaceData<double>
 }
 
 // computes the shortest loop of G \ T^* that contains e and x
-std::vector<Halfedge> minimal_coloop(FaceData<Halfedge> prev, Edge bridge,
-                                     Halfedge x) {
+std::vector<Halfedge> minimal_coloop(FaceData<Halfedge> prev, Edge bridge, Halfedge x) {
     Halfedge start, end;
     std::vector<Halfedge> co_loop;
     if (bridge.isBoundary()) {
@@ -325,8 +321,7 @@ std::vector<Halfedge> minimal_coloop(FaceData<Halfedge> prev, Edge bridge,
     return co_loop;
 }
 
-std::vector<Halfedge> homotopy_co_loop(FaceData<Halfedge> &prev, Face x,
-                                       Edge bridge, Halfedge bound_dual_edge) {
+std::vector<Halfedge> homotopy_co_loop(FaceData<Halfedge> &prev, Face x, Edge bridge, Halfedge bound_dual_edge) {
     Halfedge he = bridge.halfedge();
     assert(he.isInterior());
     Face f = he.face();
@@ -398,8 +393,7 @@ Halfedge add_boundary_edge(Face x, EdgeData<EdgeType> &data) {
 }
 
 std::vector<std::vector<Halfedge>>
-greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom,
-                      Face x) {
+greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, Face x) {
     EdgeData<EdgeType> edge_data(mesh, EdgeType::bridge);
     geom.requireEdgeLengths();
     geom.requireDualEdgeLengths();
@@ -415,7 +409,8 @@ greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geo
     auto coloop_lengths =
         edge_coloop_lengths(mesh, prev_dist.second, edge_data);
     computeMinimalSpanningTree(
-        mesh, edge_data,
+        mesh,
+        edge_data,
         [&l = coloop_lengths](Edge a, const Edge &b) { return l[a] > l[b]; });
 
     auto dist_edges = distinctEdges(mesh, edge_data);
@@ -460,10 +455,12 @@ homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, Face
     geom.requireDualEdgeLengths();
 
     Halfedge b_halfedge = computePrimalEdgesOfDualMaxST(
-        mesh, edge_data,
+        mesh,
+        edge_data,
         [&l = geom.dualEdgeLengths](Edge a, Edge b) { return l[a] < l[b]; });
     computeMinimalSpanningTree(
-        mesh, edge_data,
+        mesh,
+        edge_data,
         [&l = geom.edgeLengths](Edge a, const Edge &b) { return l[a] > l[b]; });
     geom.unrequireEdgeLengths();
     geom.unrequireDualEdgeLengths();
@@ -600,8 +597,7 @@ using MatrixX2d = Eigen::Matrix<Vector2, -1, -1>;
 using InnerProductFn =
     std::function<double(const VectorX2d &, const VectorX2d &)>;
 
-void modifiedGramSchmidt(const MatrixX2d &A, MatrixX2d &Q, Eigen::MatrixXd &R,
-                         const InnerProductFn &innerProduct) {
+void modifiedGramSchmidt(const MatrixX2d &A, MatrixX2d &Q, Eigen::MatrixXd &R, const InnerProductFn &innerProduct) {
     const int m = A.rows();
     const int n = A.cols();
 
@@ -630,8 +626,7 @@ void modifiedGramSchmidt(const MatrixX2d &A, MatrixX2d &Q, Eigen::MatrixXd &R,
 }
 
 std::vector<FaceData<Vector2>>
-orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom,
-               const std::vector<FaceData<Vector2>> &X) {
+orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<FaceData<Vector2>> &X) {
     MatrixX2d matrix(mesh.nFaces(), X.size());
     // TODO: Think about indexing
     for (std::size_t m = 0; m < X.size(); m++) {
@@ -661,8 +656,7 @@ orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom,
 }
 
 std::vector<FaceData<Vector2>>
-orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom,
-                      const std::vector<Singular_Circle> &homology_b) {
+orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<Singular_Circle> &homology_b) {
     PressureProjectionSolver pp_solver{};
     pp_solver.compute(geom);
     std::vector<FaceData<Vector2>> h(homology_b.size());
@@ -681,9 +675,8 @@ orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geo
 std::vector<FaceData<Vector2>>
 orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
     assert(&mesh == &geom.mesh);
-    auto homotopy_b = homotopy_basis(mesh,geom,mesh.face(0));
-    auto homology_b = singular_homology_basis(mesh,homotopy_b);
+    auto homotopy_b = homotopy_basis(mesh, geom, mesh.face(0));
+    auto homology_b = singular_homology_basis(mesh, homotopy_b);
     return orthonormal_hom_basis(mesh, geom, homology_b);
 }
-}
-
+} // namespace geometrycentral::surface

@@ -1,8 +1,8 @@
 #include "singular_homology.h"
-namespace geometrycentral::surface{
-Singular_Circle::Singular_Circle(ManifoldSurfaceMesh& mesh, const std::vector<Halfedge> &circle): next(mesh,Halfedge()), start_e(circle.begin()->edge())  {
+namespace geometrycentral::surface {
+Singular_Circle::Singular_Circle(ManifoldSurfaceMesh &mesh, const std::vector<Halfedge> &circle) : next(mesh, Halfedge()), start_e(circle.begin()->edge()) {
     for (std::size_t i = 0; i < circle.size(); ++i) {
-        next[circle[i].edge()] = circle[(i+1)%circle.size()];
+        next[circle[i].edge()] = circle[(i + 1) % circle.size()];
     }
 }
 Singular_Circle_Iterator::Singular_Circle_Iterator(const Singular_Circle &c,
@@ -30,4 +30,4 @@ Singular_Circle_Iterator end(const Singular_Circle &circle) {
     Halfedge start = circle.next[circle.start_e];
     return Singular_Circle_Iterator(circle, start);
 }
-};
+}; // namespace geometrycentral::surface
