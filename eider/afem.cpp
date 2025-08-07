@@ -1,6 +1,6 @@
 #include "afem.h"
 
-void onSplit_boundary_e(EdgeData<Halfedge>& next, Edge e, Halfedge he) {
+void onSplit_boundary_e(EdgeData<Halfedge>& next, Edge e, Halfedge he, Edge* start_e) {
     if (!he.isInterior()) return;
     Halfedge out_he = next[e];
     next[e] = Halfedge();
@@ -21,13 +21,17 @@ void onSplit_boundary_e(EdgeData<Halfedge>& next, Edge e, Halfedge he) {
             assert(out_he == new_he.next().twin());
         }
     }
+
+    // The path now always goes over he.
+    // If we started at e, we now start at he.edge()
+    if(*start_e == e) *start_e = he.edge();
 }
 
-void onSplit_marked_e(EdgeData<Halfedge>& next, Edge e, Halfedge he1, Halfedge he2)
+void onSplit_marked_e(EdgeData<Halfedge>& next, Edge e, Halfedge he1, Halfedge he2, Edge* start_e)
 {
     if (e.isBoundary()) {
-        onSplit_boundary_e(next,e,he1);
-        onSplit_boundary_e(next,e,he2);
+        onSplit_boundary_e(next,e,he1,start_e);
+        onSplit_boundary_e(next,e,he2,start_e);
         return;
     }
     Halfedge out_e = next[e];
@@ -46,19 +50,29 @@ void onSplit_marked_e(EdgeData<Halfedge>& next, Edge e, Halfedge he1, Halfedge h
     }
     assert(in != Halfedge()); assert(out != Halfedge()); assert(in != out);
 
+    Halfedge inner_he;
     // 4 cases:
     if (in.tailVertex() == out.tipVertex())
     {
-        next[in.edge()] = in.next().next().twin();
-        next[in.next().next().edge()] = out_e;
+        inner_he = in.next().next().twin();
+        next[in.edge()] = inner_he;
+        next[inner_he.edge()] = out_e;
     } else if (in.tipVertex() == out.tailVertex()) {
-        next[in.edge()] = in.next().twin();
-        next[in.next().edge()] = out_e;
+        inner_he = in.next().twin();
+        next[in.edge()] = inner_he;
+        next[inner_he.edge()] = out_e;
     } else {
-        next[in.edge()] = in.next().twin();
-        const Halfedge nn = in.next().twin().next().next();
-        next[in.next().edge()] = nn.twin();
+        inner_he = in.next().twin();
+        Halfedge nn = in.next().twin().next().next();
+        next[in.edge()] = inner_he;
+        next[inner_he.edge()] = nn.twin();
         next[nn.edge()] =  out_e;
+    }
+
+    // In all cases the path goes over inner_he
+    // Update Start HE, in case the split edge was it
+    if(e == *start_e){
+        *start_e = inner_he.edge();
     }
 }
 
@@ -79,15 +93,15 @@ void onSplit_straight_face(EdgeData<Halfedge>& next, Halfedge he)
     }
 }
 
-void onSplit_unmarked_e(EdgeData<Halfedge>& next, Edge e, Halfedge he1, Halfedge he2) {
+void onSplit_unmarked_e(Edge e, Halfedge he1, Halfedge he2, EdgeData<Halfedge> &next) {
     onSplit_straight_face(next,he1);
     onSplit_straight_face(next,he2);
 }
 
-void onSplit(EdgeData<Halfedge>& next, Edge e, Halfedge he1, Halfedge he2)
+void onSplit(Edge e, Halfedge he1, Halfedge he2, EdgeData<Halfedge> &next, Edge *start_e)
 {
     if (next[e] == Halfedge())
-        onSplit_unmarked_e(next,e,he1,he2);
+        onSplit_unmarked_e(e, he1, he2, next);
     else
-        onSplit_marked_e(next,e,he1,he2);
+        onSplit_marked_e(next,e,he1,he2,start_e);
 }

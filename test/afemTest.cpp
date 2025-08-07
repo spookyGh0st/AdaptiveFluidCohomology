@@ -41,21 +41,12 @@ TEST(afemTest, testSplitEdgePath)
   intrTri.refreshQuantities();
   ManifoldSurfaceMesh& mesh = *intrTri.intrinsicMesh;
   mesh.compress();
-  auto h_basis = homotopy_basis(mesh,intrTri,mesh.face(0));
-  std::vector<EdgeData<Halfedge>> next(h_basis.size());
-  for (int h_idx = 0; h_idx< h_basis.size(); h_idx++) {
-    auto& h = h_basis[h_idx];
-    auto& n = next[h_idx];
-    h = reduce_co_loop(mesh,h);
-    n = EdgeData<Halfedge>(mesh,Halfedge());
-    for (int i = 0; i < h.size(); i++) {
-      n[h[i].edge()] = h[(i+1)%h.size()];
-    }
-    intrTri.edgeSplitCallbackList.push_back([&,h_idx](Edge e, Halfedge he1, Halfedge he2) { onSplit(next[h_idx],e,he1,he2); });
+  auto homotopy_b= homotopy_basis(mesh,intrTri,mesh.face(0));
+  auto homology_b = singular_homology_basis(mesh,homotopy_b);
+  for (int h_idx = 0; h_idx< homology_b.size(); h_idx++) {
+    intrTri.edgeSplitCallbackList.push_back([&,h_idx](Edge e, Halfedge he1, Halfedge he2) {
+            onSplit(e, he1, he2, homology_b[h_idx].next, &homology_b[h_idx].start_e); });
   }
-  std::cout << next[0][mesh.edge(5)].getIndex() << std::endl;
-
-
 
   auto refine_mesh = [&]()
   {
@@ -82,25 +73,17 @@ TEST(afemTest, testSplitEdgePath)
     VertexPositionGeometry g(mesh, int_positions);
 
     polyscope::SurfaceMesh* polym = polyscope::registerSurfaceMesh("M", g.vertexPositions,mesh.getFaceVertexList(), polyscopePermutations(mesh));
-    for (int h_idx = 0; h_idx< h_basis.size(); h_idx++)
+    for (int h_idx = 0; h_idx< homology_b.size(); h_idx++)
     {
-      auto& h = h_basis[h_idx];
-      auto& n = next[h_idx];
+      auto& h = homology_b[h_idx];
+      auto& n = h.next;
       HalfedgeData<int> nextInt(mesh,0);
       for (Edge e: mesh.edges())
         if (n[e] != Halfedge()) nextInt[n[e]] =1;
       polym->addHalfedgeScalarQuantity("h_b " + std::to_string(h_idx),nextInt);
-
-      HalfedgeData<int> inList(mesh,-100);
-      h.clear();
-      for (Edge e: mesh.edges()) {
-        if (n[e] == Halfedge()) continue;
-        h.push_back(n[e]);
-        inList[n[e]] = 1;
-      }
-      polym->addHalfedgeScalarQuantity("he " + std::to_string(h_idx),inList);
     }
-    auto orth_h_basis = orthonormal_hom_basis(mesh,intrTri,h_basis);
+
+    auto orth_h_basis = orthonormal_hom_basis(mesh,intrTri,homology_b);
     g.requireFaceTangentBasis();
     FaceData<Vector3> e1(mesh),e2(mesh);
     for (Face f: mesh.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }

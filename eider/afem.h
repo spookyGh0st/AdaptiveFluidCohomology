@@ -8,7 +8,7 @@
 using namespace geometrycentral::surface;
 
 
-void onSplit(EdgeData<Halfedge>& next, Edge e, Halfedge he1, Halfedge he2);
+void onSplit(Edge e, Halfedge he1, Halfedge he2, EdgeData<Halfedge> &next, Edge *start_he);
 
 
 inline void adaptMesh(IntrinsicTriangulation& Tri,VertexData<double>& f, double theta) {
