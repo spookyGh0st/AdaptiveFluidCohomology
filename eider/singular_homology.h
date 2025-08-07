@@ -11,6 +11,9 @@ struct Singular_Circle {
     EdgeData<Halfedge> next;
     Edge start_e;
 };
+
+using Homology_basis = std::vector<Singular_Circle>;
+
 // Iterator definition
 struct Singular_Circle_Iterator {
     const Singular_Circle &circle;

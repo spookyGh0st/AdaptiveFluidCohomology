@@ -4,31 +4,38 @@
 #include "geometrycentral/surface/transfer_functions.h"
 #include "poisson.h"
 #include "refine.h"
+#include "cfd.h"
+#include "homology.h"
 
 using namespace geometrycentral::surface;
 
 void onSplit(Edge e, Halfedge he1, Halfedge he2, EdgeData<Halfedge> &next, Edge *start_he);
 
-inline void adaptMesh(IntrinsicTriangulation &Tri, VertexData<double> &f, double theta) {
-    auto A = AttributeTransfer(Tri);
-
+inline void adaptMesh(IntrinsicTriangulation &Tri, wc_wrapper& wc, Homology_basis& h, double theta, double threshold) {
     ManifoldSurfaceMesh &mesh = *Tri.intrinsicMesh;
     IntrinsicGeometryInterface &geom = Tri;
 
+    // TODO: DEBUG only
+    Tri.edgeSplitCallbackList.resize(1);
+
     Tri.edgeSplitCallbackList.emplace_back([&](Edge, Halfedge he1, Halfedge he2) {
-        Vertex vb = he1.tailVertex(), ve = he2.tipVertex();
-        double e1 = Tri.edgeLengths[he1.edge()], e2 = Tri.edgeLengths[he2.edge()];
-        double f1 = e1 / (e1 + e2), f2 = 1 - f1;
-        f[he2.vertex()] = f[vb] * f1 + f[ve] * f2;
+      Vertex vb = he1.tipVertex(), ve = he2.tipVertex();
+      double e1 = Tri.edgeLengths[he1.edge()], e2 = Tri.edgeLengths[he2.edge()];
+      double f1 = e1 / (e1 + e2), f2 = 1 - f1;
+      wc.w[he2.vertex()] = wc.w[vb] * f1 + wc.w[ve] * f2;
     });
 
-    for (int i = 0; i < 10; ++i) {
-        VertexData<double> u(mesh, 0);
-        StreamFunctionSolver S;
-        S.compute(mesh, Tri);
-        S.solve(mesh, geom, u, f);
-        FaceData<double> res = poisson_residual_error_sqr(mesh, geom, u, f);
-        auto faces = select_doerfler(mesh, res, theta);
-        refine(Tri, faces);
+    for (int h_idx = 0; h_idx < h.size(); ++h_idx) {
+        Tri.edgeSplitCallbackList.push_back([&,h_idx](Edge e, Halfedge he1, Halfedge he2) {
+          onSplit(e, he1, he2, h[h_idx].next, &h[h_idx].start_e); });
     }
+
+    VertexData<double> u(mesh, 0);
+    StreamFunctionSolver S;
+    S.compute(mesh, Tri);
+    S.solve(mesh, geom, u, wc.w);
+
+    FaceData<double> res = poisson_residual_error_sqr(mesh, geom, u, wc.w);
+    auto faces = select_doerfler(mesh, res, theta, threshold);
+    refine(Tri, faces);
 }
