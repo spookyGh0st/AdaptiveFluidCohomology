@@ -265,10 +265,10 @@ co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeDat
     while (!Q.empty()) {
         auto u = Q.extractMin();
         for (Halfedge he : u.second.adjacentHalfedges()) {
-            // TODO: If using dijkstra for optimal, use if (he.edge().isBoundary()) continue;
-            if (he.edge().isBoundary() ||
-                edgeData[he.edge()] != EdgeType::maximal_co_st)
-                continue;
+            // TODO: If using dijkstra for optimal, use
+            if (he.edge().isBoundary()) continue;
+            // if (he.edge().isBoundary() || edgeData[he.edge()] != EdgeType::maximal_co_st)
+            //    continue;
             Face v = he.twin().face();
             double alt = u.first + geom.dualEdgeLengths[he.edge()];
             if (alt < dist[v]) {
@@ -675,7 +675,7 @@ orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geo
 std::vector<FaceData<Vector2>>
 orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
     assert(&mesh == &geom.mesh);
-    auto homotopy_b = homotopy_basis(mesh, geom, mesh.face(0));
+    auto homotopy_b = greedy_homotopy_basis(mesh, geom, mesh.face(0));
     auto homology_b = singular_homology_basis(mesh, homotopy_b);
     return orthonormal_hom_basis(mesh, geom, homology_b);
 }
