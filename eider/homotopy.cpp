@@ -241,7 +241,7 @@ class MinHeap {
 };
 
 std::pair<FaceData<Halfedge>, FaceData<double>>
-co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeData<EdgeType> &edgeData, Face orig_face) {
+co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeData<EdgeType> &edgeData, Face orig_face, bool skip_co) {
     geom.requireDualEdgeLengths();
     FaceData<Halfedge> prev(mesh, Halfedge());
     FaceData<double> dist(mesh, std::numeric_limits<double>::max());
@@ -259,8 +259,8 @@ co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeDat
             // TODO: If using dijkstra for optimal, use
             if (he.edge().isBoundary())
                 continue;
-            // if (he.edge().isBoundary() || edgeData[he.edge()] != EdgeType::maximal_co_st)
-            //    continue;
+            if (skip_co &&  edgeData[he.edge()] != EdgeType::maximal_co_st)
+                continue;
             Face v = he.twin().face();
             double alt = u.first + geom.dualEdgeLengths[he.edge()];
             if (alt < dist[v]) {
@@ -395,7 +395,7 @@ std::vector<std::vector<Halfedge>> homotopy_basis(ManifoldSurfaceMesh &mesh, Int
     geom.unrequireDualEdgeLengths();
 
     auto dist_edges = distinctEdges(mesh, edge_data);
-    auto prev = co_dijkstra(mesh, geom, edge_data, x);
+    auto prev = co_dijkstra(mesh, geom, edge_data, x, true);
     std::vector<std::vector<Halfedge>> co_loops;
     for (Edge e : dist_edges) {
         // co_loops.push_back(reduce_co_loop(mesh,minimal_co_loop(prev.first, x, e)));
@@ -408,7 +408,7 @@ std::vector<std::vector<Halfedge>> greedy_homotopy_basis(ManifoldSurfaceMesh &me
     EdgeData<EdgeType> edge_data(mesh, EdgeType::bridge);
     geom.requireEdgeLengths();
     geom.requireDualEdgeLengths();
-    auto prev_dist = co_dijkstra(mesh, geom, edge_data, x);
+    auto prev_dist = co_dijkstra(mesh, geom, edge_data, x, false);
     for (Face f : mesh.faces()) {
         if (f == x)
             continue;

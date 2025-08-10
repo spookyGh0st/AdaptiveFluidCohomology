@@ -11,6 +11,7 @@ enum EdgeType { minimal_st,
 // compare functions for the spanning tree and co spanning tree
 using sp_cmp = std::function<bool(Edge, Edge)>;
 
+
 // TODO: extend to relative homology
 // --- Primal Graph MST Computation ---
 void computeMinimalSpanningTree(ManifoldSurfaceMesh &mesh, EdgeData<EdgeType> &edgeData, const sp_cmp &fn);
@@ -22,7 +23,7 @@ Halfedge computePrimalEdgesOfDualMaxST(ManifoldSurfaceMesh &mesh, EdgeData<EdgeT
 std::vector<Edge> distinctEdges(ManifoldSurfaceMesh &mesh, EdgeData<EdgeType> &edgeData);
 
 // --- Dual Dijkstra ---
-std::pair<FaceData<Halfedge>, FaceData<double>> co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeData<EdgeType> &edgeData, Face orig_face);
+std::pair<FaceData<Halfedge>, FaceData<double>> co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeData<EdgeType> &edgeData, Face orig_face, bool skip_co);
 
 // --- Minimal Co-loop ---
 std::vector<Halfedge> homotopy_co_loop(FaceData<Halfedge> &prev, Face x, Edge bridge, Halfedge bound_dual_edge);

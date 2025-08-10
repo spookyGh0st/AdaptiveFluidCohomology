@@ -75,7 +75,7 @@ TEST(homologyTest, TestHomotopyBasis)
     auto d_edges = distinctEdges(*m,edge_data);
 
     Face x = m->face(0);
-    auto dijkstra = co_dijkstra(*m,*g,edge_data,x);
+    auto dijkstra = co_dijkstra(*m, *g, edge_data, x, true);
     FaceData<int> prev(*m, 0); for (Face f: m->faces()) {
         Halfedge he = dijkstra.first[f];
         if (he != Halfedge()) { prev[f] = he.face().getIndex(); } else { prev[f] = -1; }
