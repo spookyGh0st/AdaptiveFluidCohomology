@@ -45,6 +45,19 @@ class DSU {
     }
 };
 
+Face arbitrary_base_face(ManifoldSurfaceMesh &mesh) {
+    if (mesh.hasBoundary()) {
+        for (BoundaryLoop b: mesh.boundaryLoops()) {
+            assert(b.halfedge().twin().isInterior());
+            return b.halfedge().twin().face();
+        }
+    }
+    for (Face f: mesh.faces()) {
+        return f;
+    }
+    throw std::runtime_error("Huh, does the mesh not have faces");
+}
+
 // --- Primal Graph MST Computation ---
 // Computes the Minimal Spanning Tree of the graph of edges, using edge lengths as weights.
 void computeMinimalSpanningTree(ManifoldSurfaceMesh &mesh, EdgeData<EdgeType> &edgeData, const sp_cmp &fn) {
@@ -290,7 +303,7 @@ EdgeData<double> edge_coloop_lengths(ManifoldSurfaceMesh &mesh, FaceData<double>
 }
 
 // computes the shortest loop of G \ T^* that contains e and x
-std::vector<Halfedge> minimal_coloop(FaceData<Halfedge> prev, Edge bridge, Halfedge x) {
+Homotopy_cycle minimal_coloop(FaceData<Halfedge> prev, Edge bridge, Halfedge x) {
     Halfedge start, end;
     std::vector<Halfedge> co_loop;
     if (bridge.isBoundary()) {
@@ -313,7 +326,7 @@ std::vector<Halfedge> minimal_coloop(FaceData<Halfedge> prev, Edge bridge, Halfe
     return co_loop;
 }
 
-std::vector<Halfedge> homotopy_co_loop(FaceData<Halfedge> &prev, Face x, Edge bridge, Halfedge bound_dual_edge) {
+Homotopy_cycle homotopy_co_loop(FaceData<Halfedge> &prev, Face x, Edge bridge, Halfedge bound_dual_edge) {
     Halfedge he = bridge.halfedge();
     assert(he.isInterior());
     Face f = he.face();
@@ -344,7 +357,7 @@ std::vector<Halfedge> homotopy_co_loop(FaceData<Halfedge> &prev, Face x, Edge br
 }
 
 // TODO: move to down
-std::vector<Halfedge> reduce_co_loop(ManifoldSurfaceMesh &mesh,
+Homotopy_cycle reduce_co_loop(ManifoldSurfaceMesh &mesh,
                                      const std::vector<Halfedge> &co_loop) {
     // this is in O(n), could be improved to be in size of co_loop
     std::vector<Halfedge> reduced{};
@@ -384,7 +397,7 @@ Halfedge add_boundary_edge(Face x, EdgeData<EdgeType> &data) {
     return h;
 }
 
-std::vector<std::vector<Halfedge>> homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, Face x) {
+std::vector<Homotopy_cycle> homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, Face x) {
     EdgeData<EdgeType> edge_data(mesh, EdgeType::bridge);
     geom.requireEdgeLengths();
     geom.requireDualEdgeLengths();
@@ -404,7 +417,7 @@ std::vector<std::vector<Halfedge>> homotopy_basis(ManifoldSurfaceMesh &mesh, Int
     return co_loops;
 }
 
-std::vector<std::vector<Halfedge>> greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, Face x) {
+std::vector<Homotopy_cycle> greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, Face x) {
     EdgeData<EdgeType> edge_data(mesh, EdgeType::bridge);
     geom.requireEdgeLengths();
     geom.requireDualEdgeLengths();
@@ -417,6 +430,7 @@ std::vector<std::vector<Halfedge>> greedy_homotopy_basis(ManifoldSurfaceMesh &me
         edge_data[e] = EdgeType::maximal_co_st;
     }
     Halfedge x_he = add_boundary_edge(x, edge_data);
+    if (mesh.hasBoundary() && x_he == Halfedge()) throw std::runtime_error("Called with non-boundary face for mesh with boundary");
     auto coloop_lengths =
         edge_coloop_lengths(mesh, prev_dist.second, edge_data);
     computeMinimalSpanningTree( mesh, edge_data, [&l = coloop_lengths](Edge a, const Edge &b) { return l[a] > l[b]; });
@@ -429,7 +443,7 @@ std::vector<std::vector<Halfedge>> greedy_homotopy_basis(ManifoldSurfaceMesh &me
     return co_loops;
 }
 
-std::vector<std::vector<Halfedge>> minimal_greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
+std::vector<Homotopy_cycle> minimal_greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
     // TODO add logic for non-boundary case
     std::vector<std::vector<Halfedge>> basis;
     double basis_length = std::numeric_limits<double>::max();

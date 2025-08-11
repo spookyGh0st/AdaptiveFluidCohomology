@@ -167,7 +167,7 @@ orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geo
 std::vector<FaceData<Vector2>>
 orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
     assert(&mesh == &geom.mesh);
-    auto homotopy_b = greedy_homotopy_basis(mesh, geom, mesh.face(0));
+    std::vector<Homotopy_cycle> homotopy_b = greedy_homotopy_basis(mesh,geom,arbitrary_base_face(mesh));
     auto homology_b = singular_homology_basis(mesh, homotopy_b);
     return orthonormal_hom_basis(mesh, geom, homology_b);
 }

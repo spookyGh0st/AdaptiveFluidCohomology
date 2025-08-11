@@ -64,7 +64,7 @@ TEST(afemTest, testSplitEdgePath)
     intrTri.refreshQuantities();
     ManifoldSurfaceMesh& mesh = *intrTri.intrinsicMesh;
     mesh.compress();
-    auto homotopy_b= homotopy_basis(mesh,intrTri,mesh.face(0));
+    auto homotopy_b= greedy_homotopy_basis(mesh,intrTri,arbitrary_base_face(mesh));
     auto homology_b = singular_homology_basis(mesh,homotopy_b);
     auto harmonic_b = orthonormal_hom_basis(mesh,intrTri,homology_b);
 
