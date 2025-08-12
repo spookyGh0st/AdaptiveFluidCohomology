@@ -1,3 +1,5 @@
+#include "Stopwatch.h"
+
 #include <eider/afem.h>
 
 #include <filesystem>
