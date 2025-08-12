@@ -49,38 +49,5 @@ TEST(transfertTest,testL2Face) {
     polyscope::show();
 }
 
-TEST(transfertTest,testCoarseRefine) {
-    std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" / "quad.stl";
-    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
-
-    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
-    IntrinsicGeometryInterface& g = icit;
-
-    Edge c_edge; std::array<Edge,4> b_edges;
-    int i = 0; for (Edge e: m.edges()) if (e.isBoundary()) b_edges[i++] = e; else c_edge = e;
-
-    Halfedge he = icit.splitEdge(c_edge.halfedge(),0.5);
-    icit.intrinsicMesh->collapseEdgeTriangular(he.edge());
-    m.compress(); icit.refreshQuantities();
-
-    ASSERT_EQ(m.nEdges(), parent_m->nEdges());
-    // icit.joinEdge(he.vertex());
 
 
-
-    VertexData<Vector3> int_positions(m) ;
-    for (Vertex v : m.vertices()) {
-        int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
-    }
-
-    polyscope::init();
-    polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", parent_g->vertexPositions,parent_m->getFaceVertexList());
-    polyscope::SurfaceMesh* pm_B = polyscope::registerSurfaceMesh("Intrinsic", int_positions,m.getFaceVertexList());
-    pm_A->setEdgeWidth(1);
-    pm_B->setEdgeWidth(1);
-    pm_A->translate(glm::vec3(-1,0,0));
-    pm_B->translate(glm::vec3( 1,0,0));
-    polyscope::show();
-}

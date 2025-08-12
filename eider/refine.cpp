@@ -1,20 +1,17 @@
 #include "refine.h"
 
-#include <geometrycentral/surface/surface_mesh.h>
-#include <set>
-
+#include <unordered_set>
 #include "util.h"
 
-namespace gcs = geometrycentral::surface;
-
-void refine(gcs::IntrinsicTriangulation &tri, std::vector<gcs::Face> faces) {
+namespace geometrycentral::surface {
+void refine(IntrinsicTriangulation &tri, std::vector<Face> faces) {
     auto &M = tri.intrinsicMesh;
 
-    gcs::FaceData<gcs::Halfedge> refinement_edges(*M);
+    FaceData<Halfedge> refinement_edges(*M);
     tri.requireEdgeLengths();
-    for (gcs::Face f : M->faces()) {
+    for (Face f : M->faces()) {
         double maxEl = std::numeric_limits<double>::lowest();
-        for (gcs::Halfedge he : f.adjacentHalfedges()) {
+        for (Halfedge he : f.adjacentHalfedges()) {
             if (tri.edgeLengths[he.edge()] > maxEl) {
                 maxEl = tri.edgeLengths[he.edge()];
                 refinement_edges[f] = he;
@@ -23,10 +20,9 @@ void refine(gcs::IntrinsicTriangulation &tri, std::vector<gcs::Face> faces) {
     }
     tri.unrequireEdgeLengths();
 
-    using namespace gcs;
     ManifoldSurfaceMesh &mesh = *tri.intrinsicMesh;
-    std::set<Face> marked_faces;
-    std::set<Edge> start_edges;
+    std::unordered_set<Face> marked_faces;
+    std::unordered_set<Edge> start_edges;
     // marked_edges.reserve(faces.size()*2);
     while (!faces.empty()) {
         Face f = faces.back();
@@ -77,8 +73,59 @@ void refine(gcs::IntrinsicTriangulation &tri, std::vector<gcs::Face> faces) {
     tri.refreshQuantities();
 }
 
-using namespace geometrycentral::surface;
-using namespace geometrycentral;
+Halfedge coarse_halfedge(Vertex v) {
+    assert((!v.isBoundary() && v.faceDegree() == 4) || (v.isBoundary() && v.faceDegree() == 2));
+    size_t k = 0;
+    std::size_t min_idx = std::numeric_limits<std::size_t>::max();
+    Halfedge he;
+    for (Halfedge ohe : v.outgoingHalfedges()) {
+        if (!ohe.isInterior())
+            continue;
+        std::size_t f_idx = ohe.face().getIndex();
+        if (f_idx < min_idx) {
+            min_idx = f_idx;
+            he = ohe;
+        };
+    }
+    assert(he != Halfedge());
+    return he.twin().next();
+}
+
+inline bool vertex_is_good(IntrinsicTriangulation &T, Vertex v) {
+    if (v == Vertex())
+        return false;
+    if (T.vertexLocations[v].type == SurfacePointType::Vertex)
+        return false;
+    return (v.isBoundary() && v.degree() == 2) || (!v.isBoundary() && v.degree() == 4);
+}
+
+void coarse(IntrinsicTriangulation &m, const std::function<bool(Vertex)> &f) {
+    std::unordered_set<Vertex> good_vertices{};
+    for (Vertex v : m.intrinsicMesh->vertices()) {
+        if (vertex_is_good(m, v) && f(v))
+            good_vertices.insert(v);
+    }
+
+    while (!good_vertices.empty()) {
+        // pop element
+        Vertex v = *good_vertices.begin();
+        good_vertices.erase(v);
+
+        Halfedge he = coarse_halfedge(v);
+
+        std::array<Vertex, 2> adjacent_v;
+        adjacent_v[0] = he.next().tipVertex();
+        if (he.twin().isInterior())
+            adjacent_v[1] = he.twin().next().tipVertex();
+        Vertex cv = m.intrinsicMesh->collapseEdgeTriangular(he);
+        assert(cv != Vertex());
+
+        for (Vertex nv : adjacent_v) {
+            if (vertex_is_good(m, nv) && f(nv))
+                good_vertices.insert(nv);
+        }
+    }
+}
 
 double etaRSqr(Face T, IntrinsicGeometryInterface &geom, const VertexData<double> &f, const VertexData<double> &u) {
     double f_st = 0, h_t = diameter(geom, T);
@@ -135,11 +182,13 @@ std::vector<Face> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> re
     result.reserve(theta * mesh.nFaces());
     double accum_res = 0;
     for (int i = faces.size() - 1; i >= 0; --i) {
-        if (residual[faces[i]] < threshold) break;
+        if (residual[faces[i]] < threshold)
+            break;
         result.push_back(faces[i]);
         accum_res += residual[faces[i]];
         if (accum_res >= theta * total_res)
             break;
     }
     return result;
+}
 }

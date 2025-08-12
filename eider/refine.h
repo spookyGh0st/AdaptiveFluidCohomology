@@ -2,13 +2,21 @@
 #include <geometrycentral/surface/intrinsic_triangulation.h>
 #include <vector>
 
-namespace gcs = geometrycentral::surface;
+namespace geometrycentral::surface {
 
-void refine(gcs::IntrinsicTriangulation &tri, std::vector<gcs::Face> faces);
+void refine(IntrinsicTriangulation &tri, std::vector<Face> faces);
+
+// get halfedge that was used in the edgesplit resulting in vertex v
+Halfedge coarse_halfedge(Vertex v);
+
+void coarse(IntrinsicTriangulation& m, const std::function<bool(Vertex)>& f);
+
 /// Gives the residual error for Δu = f in Ω, u = 0 in ∂Ω
-gcs::FaceData<double> poisson_residual_error_sqr(
-    gcs::ManifoldSurfaceMesh &mesh,
-    gcs::IntrinsicGeometryInterface &geom,
-    const gcs::VertexData<double> &u,
-    const gcs::VertexData<double> &f);
-std::vector<gcs::Face> select_doerfler(gcs::ManifoldSurfaceMesh &mesh, gcs::FaceData<double> residual, double theta, double threshold);
+FaceData<double> poisson_residual_error_sqr(
+    ManifoldSurfaceMesh &mesh,
+    IntrinsicGeometryInterface &geom,
+    const VertexData<double> &u,
+    const VertexData<double> &f);
+
+std::vector<Face> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, double theta, double threshold);
+}

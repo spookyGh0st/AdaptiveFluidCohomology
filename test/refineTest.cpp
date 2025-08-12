@@ -3,7 +3,6 @@
 #include <polyscope/surface_mesh.h>
 #include <geometrycentral/surface/meshio.h>
 #include <geometrycentral/surface/integer_coordinates_intrinsic_triangulation.h>
-#include <geometrycentral/surface/signpost_intrinsic_triangulation.h>
 #include <filesystem>
 #include <eider/refine.h>
 
@@ -19,7 +18,7 @@
 using namespace geometrycentral::surface;
 using namespace geometrycentral;
 
-void updateTriagulationViz(gcs::IntrinsicTriangulation& signpostTri, gcs::VertexPositionGeometry& geometry) {
+void updateTriagulationViz(IntrinsicTriangulation& signpostTri, VertexPositionGeometry& geometry) {
     using namespace geometrycentral::surface;
     using namespace geometrycentral;
 
@@ -54,8 +53,8 @@ void updateTriagulationViz(gcs::IntrinsicTriangulation& signpostTri, gcs::Vertex
 }
 
 
-void uniform_refine(gcs::IntrinsicTriangulation& intrT) {
-    auto v = std::vector<gcs::Face>();
+void uniform_refine(IntrinsicTriangulation& intrT) {
+    auto v = std::vector<Face>();
     v.reserve(intrT.intrinsicMesh->nFaces());
     for (auto f: intrT.intrinsicMesh->faces()) {
         v.push_back(f);
@@ -382,14 +381,132 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
 
 }
 
-TEST(refineTest, laplacian_test)
-{
-    using namespace geometrycentral::surface;
+TEST(refineTest,testCollapsingSameElement) {
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" / "L.stl";
-    auto [m,g] = readManifoldSurfaceMesh(fds.string());
-    g->requireDECOperators();
-    Eigen::MatrixXd L = g->L1;
+    fds = fds.parent_path()/ "models" / "quad.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
+    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
+
+    Edge c_edge; std::array<Edge,4> b_edges;
+    int i = 0; for (Edge e: m.edges()) if (e.isBoundary()) b_edges[i++] = e; else c_edge = e;
+
+    Halfedge he = icit.splitEdge(c_edge.halfedge(),0.5);
+    Halfedge phe = he.prevOrbitFace().twin().prevOrbitFace();
+    i = 0; for (Edge e: he.vertex().adjacentEdges()) b_edges[i++] = e;
+    Vertex v = icit.intrinsicMesh->collapseEdgeTriangular(he);
+    Edge a_edge;
+    i = 0; for (Edge e: b_edges) if (!e.isDead()) a_edge = e;
+
+    ASSERT_TRUE(he.isDead());
+    ASSERT_FALSE(phe.edge().isDead());
+    ASSERT_FALSE(a_edge.isDead());
+    ASSERT_EQ(phe.edge(),a_edge);
+
+    EdgeData<double> d(m,0);
+    d[a_edge] = 1;
+
+    icit.refreshQuantities(); m.compress();
 
 
+    VertexData<Vector3> int_positions(m) ;
+    for (Vertex v : m.vertices()) {
+        int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
+    }
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", parent_g->vertexPositions,parent_m->getFaceVertexList());
+    polyscope::SurfaceMesh* pm_B = polyscope::registerSurfaceMesh("Intrinsic", int_positions,m.getFaceVertexList());
+    pm_B->setAllPermutations(polyscopePermutations(m));
+    pm_A->addFaceScalarQuantity("index",parent_m->getFaceIndices())->setEnabled(true);
+    pm_B->addFaceScalarQuantity("index",m.getFaceIndices())->setEnabled(true);
+    pm_B->addEdgeScalarQuantity("d",d)->setEnabled(true);
+    pm_A->setEdgeWidth(1);
+    pm_B->setEdgeWidth(1);
+    pm_A->translate(glm::vec3(-1,0,0));
+    pm_B->translate(glm::vec3( 1,0,0));
+    polyscope::show();
+}
+
+TEST(refineTest,testCoarsingCondition) {
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "quad.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
+    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
+
+    Edge c_edge; std::array<Edge,4> b_edges;
+    int i = 0; for (Edge e: m.edges()) if (e.isBoundary()) b_edges[i++] = e; else c_edge = e;
+
+    Halfedge he = icit.splitEdge(c_edge.halfedge(),0.5);
+    ASSERT_EQ(icit.intrinsicMesh->nFaces(),4);
+    ASSERT_FALSE(he.vertex().isBoundary());
+    Face f1 = he.face(), f2 = he.prevOrbitFace().twin().face();
+    Face f3 = he.twin().next().twin().face(), f4 = he.twin().face();
+    ASSERT_GT(f1.getIndex(),f2.getIndex());
+    ASSERT_GT(f3.getIndex(),f4.getIndex());
+    he = icit.splitEdge(he.next(),0.5);
+    ASSERT_TRUE(he.isInterior());
+    ASSERT_NE(he,Halfedge());
+    auto nhe = coarse_halfedge(he.vertex());
+    ASSERT_EQ(nhe, he);
+   Vertex v = icit.intrinsicMesh->collapseEdgeTriangular(he);
+   ASSERT_NE(v, Vertex());
+
+    icit.refreshQuantities(); m.compress();
+
+
+    VertexData<Vector3> int_positions(m) ;
+    for (Vertex v : m.vertices()) {
+        int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
+    }
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", parent_g->vertexPositions,parent_m->getFaceVertexList());
+    polyscope::SurfaceMesh* pm_B = polyscope::registerSurfaceMesh("Intrinsic", int_positions,m.getFaceVertexList());
+    pm_B->setAllPermutations(polyscopePermutations(m));
+    pm_A->addFaceScalarQuantity("index",parent_m->getFaceIndices())->setEnabled(true);
+    pm_B->addFaceScalarQuantity("index",m.getFaceIndices())->setEnabled(true);
+    pm_A->setEdgeWidth(1);
+    pm_B->setEdgeWidth(1);
+    pm_A->translate(glm::vec3(-1,0,0));
+    pm_B->translate(glm::vec3( 1,0,0));
+    polyscope::show();
+}
+
+TEST(refineTest,testCoarseRefine) {
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "nvb-coarsening.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+
+    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
+    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
+    IntrinsicGeometryInterface& g = icit;
+
+    Edge c_edge; std::array<Edge,4> b_edges;
+    // int i = 0; for (Edge e: m.edges()) if (e.isBoundary()) b_edges[i++] = e; else c_edge = e;
+    c_edge = m.edge(0);
+
+    Halfedge he1 = icit.splitEdge(c_edge.halfedge(),0.5);
+    Halfedge he2 = icit.splitEdge(he1.next(),0.5);
+    coarse(icit,[](Vertex v) {return true; });
+    icit.refreshQuantities(); m.compress();
+
+    ASSERT_EQ(m.nEdges(), parent_m->nEdges());
+
+    VertexData<Vector3> int_positions(m) ;
+    for (Vertex v : m.vertices()) {
+        int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
+    }
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", parent_g->vertexPositions,parent_m->getFaceVertexList());
+    polyscope::SurfaceMesh* pm_B = polyscope::registerSurfaceMesh("Intrinsic", int_positions,m.getFaceVertexList());
+    pm_A->addFaceScalarQuantity("index",parent_m->getFaceIndices())->setEnabled(true);
+    pm_B->addFaceScalarQuantity("index",m.getFaceIndices())->setEnabled(true);
+    pm_A->setEdgeWidth(1);
+    pm_B->setEdgeWidth(1);
+    pm_A->translate(glm::vec3(-1,0,0));
+    pm_B->translate(glm::vec3( 1,0,0));
+    polyscope::show();
 }
