@@ -3,13 +3,13 @@
 #include <geometrycentral/surface/intrinsic_geometry_interface.h>
 #include <geometrycentral/surface/manifold_surface_mesh.h>
 #include <vector>
+#include <optional>
 
 namespace geometrycentral::surface {
 struct Singular_Circle {
     Singular_Circle(ManifoldSurfaceMesh &mesh, const std::vector<Halfedge> &circle);
     Singular_Circle() = default;
-    EdgeData<Halfedge> next;
-    Edge start_e;
+    HalfedgeData<std::optional<bool>> nextLeft;
 };
 
 using Homology_basis = std::vector<Singular_Circle>;
@@ -17,7 +17,7 @@ using Homology_basis = std::vector<Singular_Circle>;
 // Iterator definition
 struct Singular_Circle_Iterator {
     const Singular_Circle &circle;
-    Halfedge current;
+    Halfedge current, start;
     bool started = false;
 
     Singular_Circle_Iterator(const Singular_Circle &c, Halfedge start);

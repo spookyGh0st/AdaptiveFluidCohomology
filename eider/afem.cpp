@@ -1,111 +1,104 @@
 #include "afem.h"
+#include <span>
 
-void onSplit_boundary_e(EdgeData<Halfedge> &next, Edge e, Halfedge he, Edge *start_e) {
-    if (!he.isInterior())
-        return;
-    Halfedge out_he = next[e];
-    next[e] = Halfedge();
-    if (next[he.next().edge()] != Halfedge()) {
-        next[he.edge()] = out_he;
+void connect_split_path(std::span<Halfedge> b_halfedges, HalfedgeData<std::optional<bool>>&nextLeft) {
+    Halfedge in, out;
+    for (Halfedge b_he: b_halfedges){
+        GC_SAFETY_ASSERT(!b_he.isDead(), "all adjacent hes should be alive");
+        GC_SAFETY_ASSERT(b_he.isInterior(), "all adjacent hes should be interior");
+        if (nextLeft[b_he].has_value()) in = b_he;
+        else if (nextLeft[b_he.twin()].has_value()) out = b_he;
+    }
+    if (in == Halfedge() && out == Halfedge()) return;
+    GC_SAFETY_ASSERT(in != Halfedge(), "in  must be set")
+    GC_SAFETY_ASSERT(out != Halfedge(), "out  must be set")
+
+    // Three cases, this should also work for the boundary case
+    if(in.nextLeft().face() == out.face()){
+        nextLeft[in] = true;
+        nextLeft[in.nextLeft()] = true;
+    } else if (in.nextRight().face() == out.face()){
+        nextLeft[in] = false;
+        nextLeft[in.nextRight()] = false;
     } else {
-        Halfedge new_he = he.next().next().twin();
-        Halfedge side_he = new_he.next();
-        if (next[side_he.edge()].edge().isBoundary()) {
-            // Path leads to boundary
-            next[side_he.edge()] = new_he.twin();
-            next[new_he.edge()] = he.twin();
-            next[he.edge()] = out_he;
-        } else {
-            // TODO: If boundary, connect other end to new he;
-            next[he.edge()] = new_he;
-            next[new_he.edge()] = out_he;
-            assert(out_he == new_he.next().twin());
+        nextLeft[in] = true;
+        nextLeft[in.nextLeft()] = false;
+        nextLeft[in.nextLeft().nextRight()] = true;
+        GC_SAFETY_ASSERT(in.nextLeft().nextRight().nextLeft() == out.twin(), "Path malformed");
+    }
+}
+
+void onSplit(Edge e, Halfedge he1, Halfedge he2, HalfedgeData<std::optional<bool>> &nextLeft) {
+    if(!e.isBoundary()){
+        for (Halfedge he: he1.vertex().outgoingHalfedges()) {
+            nextLeft[he] = {};
+            nextLeft[he.twin()] = {};
+        }
+        Halfedge b1 = he1.next();
+        Halfedge b2 = b1.next().twin().next();
+        Halfedge b3 = b2.next().twin().next();
+        Halfedge b4 = b3.next().twin().next();
+        assert(b4.next().twin().next() == b1);
+        std::array<Halfedge, 4> cyc_edges{ b1,b2,b3,b4 };
+        connect_split_path(cyc_edges,nextLeft);
+    } else{
+        // TODO: clear previos data
+        Halfedge he = (e == he1.edge())? he1 : he2; // Abuse bug in splitBoundaryEdge
+        assert(he.isInterior() && he.twin().isInterior());
+        std::array<Halfedge, 2> cyc_edges{
+            he.twin().prevOrbitFace(),
+            he.next(),
+        };
+        connect_split_path(cyc_edges,nextLeft);
+    }
+}
+
+
+void connect_collapsed_path(std::span<Halfedge> b_halfedges, HalfedgeData<std::optional<bool>>&nextLeft) {
+    Halfedge in, out;
+    for (Halfedge b_he: b_halfedges){
+        GC_SAFETY_ASSERT(!b_he.isDead(), "all adjacent hes should be alive");
+        GC_SAFETY_ASSERT(b_he.isInterior(), "all adjacent hes should be interior");
+        if (nextLeft[b_he].has_value()) in = b_he;
+        else if (nextLeft[b_he.twin()].has_value()) out = b_he;
+    }
+    if (in == Halfedge() && out == Halfedge()) return;
+    GC_SAFETY_ASSERT(in != Halfedge(), "in  must be set")
+    GC_SAFETY_ASSERT(out != Halfedge(), "out  must be set")
+
+    if(in.nextLeft() == out.twin()){
+        nextLeft[in] = true;
+    } else if (in.nextRight() == out.twin()){
+        nextLeft[in] = false;
+    } else {
+        auto twin = out.twin();
+        if (in.nextLeft().nextRight() == twin) {
+            nextLeft[in] = true;
+            nextLeft[in.nextLeft()] = false;
+        } else if (in.nextRight().nextLeft() == twin) {
+            nextLeft[in] = false;
+            nextLeft[in.nextRight()] = true;
+        } else if (in.nextLeft().nextLeft() == twin) {
+            nextLeft[in] = true;
+            nextLeft[in.nextLeft()] = true;
+        } else if (in.nextRight().nextRight() == twin) {
+            nextLeft[in] = false;
+            nextLeft[in.nextRight()] = false;
         }
     }
-
-    // The path now always goes over he.
-    // If we started at e, we now start at he.edge()
-    if (*start_e == e)
-        *start_e = he.edge();
 }
 
-void onSplit_marked_e(EdgeData<Halfedge> &next, Edge e, Halfedge he1, Halfedge he2, Edge *start_e) {
-    if (e.isBoundary()) {
-        onSplit_boundary_e(next, e, he1, start_e);
-        onSplit_boundary_e(next, e, he2, start_e);
-        return;
-    }
-    Halfedge out_e = next[e];
-    next[e] = Halfedge(); // clear data;
-    std::array<Halfedge, 4> cyc_edges{
-        he1.next(),
-        he1.next().next().twin().next(),
-        he2.next(),
-        he2.next().next().twin().next(),
-    };
-    Halfedge in, out;
-    for (Halfedge be : cyc_edges) {
-        if (next[be.edge()] == Halfedge())
-            continue;
-        if (next[be.edge()].edge() == e)
-            in = be;
-        else if (be == out_e.twin())
-            out = be;
-    }
-    assert(in != Halfedge());
-    assert(out != Halfedge());
-    assert(in != out);
-
-    Halfedge inner_he;
-    // 4 cases:
-    if (in.tailVertex() == out.tipVertex()) {
-        inner_he = in.next().next().twin();
-        next[in.edge()] = inner_he;
-        next[inner_he.edge()] = out_e;
-    } else if (in.tipVertex() == out.tailVertex()) {
-        inner_he = in.next().twin();
-        next[in.edge()] = inner_he;
-        next[inner_he.edge()] = out_e;
+void onCollapse(Halfedge he, HalfedgeData<std::optional<bool>> &next) {
+    GC_SAFETY_ASSERT(!he.isDead(), "he must be allive");
+    if (he.edge().isBoundary()){
+        if (!he.isInterior()) he = he.twin();
+        std::array<Halfedge,2> b_halfedges = { he.next(), he.next().next(), };
+        connect_collapsed_path(b_halfedges,next);
     } else {
-        inner_he = in.next().twin();
-        Halfedge nn = in.next().twin().next().next();
-        next[in.edge()] = inner_he;
-        next[inner_he.edge()] = nn.twin();
-        next[nn.edge()] = out_e;
+        std::array<Halfedge,4> b_halfedges = {
+            he.next(), he.next().next(),
+            he.twin().next(), he.twin().next().next()
+        };
+        connect_collapsed_path(b_halfedges,next);
     }
-
-    // In all cases the path goes over inner_he
-    // Update Start HE, in case the split edge was it
-    if (e == *start_e) {
-        *start_e = inner_he.edge();
-    }
-}
-
-void onSplit_straight_face(EdgeData<Halfedge> &next, Halfedge he) {
-    if (!he.isInterior())
-        return;
-    Halfedge bhe1 = he.next();
-    Halfedge bhe2 = he.next().next().twin().next();
-    if (next[bhe1.edge()] == Halfedge()) {
-        assert(next[bhe2.edge()] == Halfedge());
-    } else if (next[bhe1.edge()] == bhe2.twin()) {
-        next[bhe1.edge()] = bhe1.next().twin();
-        next[bhe1.next().edge()] = bhe2.twin();
-    } else {
-        assert(next[bhe2.edge()] == bhe1.twin());
-        next[bhe2.edge()] = bhe2.prevOrbitFace().twin();
-        next[bhe2.prevOrbitFace().edge()] = bhe1.twin();
-    }
-}
-
-void onSplit_unmarked_e(Edge e, Halfedge he1, Halfedge he2, EdgeData<Halfedge> &next) {
-    onSplit_straight_face(next, he1);
-    onSplit_straight_face(next, he2);
-}
-
-void onSplit(Edge e, Halfedge he1, Halfedge he2, EdgeData<Halfedge> &next, Edge *start_e) {
-    if (next[e] == Halfedge())
-        onSplit_unmarked_e(e, he1, he2, next);
-    else
-        onSplit_marked_e(next, e, he1, he2, start_e);
 }

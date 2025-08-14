@@ -9,7 +9,9 @@
 
 using namespace geometrycentral::surface;
 
-void onSplit(Edge e, Halfedge he1, Halfedge he2, EdgeData<Halfedge> &next, Edge *start_he);
+void onSplit(Edge e, Halfedge he1, Halfedge he2, HalfedgeData<std::optional<bool>> &nextLeft);
+
+void onCollapse(Halfedge he, HalfedgeData<std::optional<bool>> &nextLeft);
 
 inline void adaptMesh(IntrinsicTriangulation &Tri, wc_wrapper& wc, Homology_basis& h, double theta, double threshold) {
     ManifoldSurfaceMesh &mesh = *Tri.intrinsicMesh;
@@ -27,14 +29,17 @@ inline void adaptMesh(IntrinsicTriangulation &Tri, wc_wrapper& wc, Homology_basi
 
     for (int h_idx = 0; h_idx < h.size(); ++h_idx) {
         Tri.edgeSplitCallbackList.push_back([&,h_idx](Edge e, Halfedge he1, Halfedge he2) {
-          onSplit(e, he1, he2, h[h_idx].next, &h[h_idx].start_e); });
+          onSplit(e, he1, he2, h[h_idx].nextLeft); });
+    }
+    for (int h_idx = 0; h_idx < h.size(); ++h_idx) {
+        Tri.edgeCollapseCallbackList.push_back([&,h_idx](Halfedge he) {
+          onCollapse(he, h[h_idx].nextLeft); });
     }
 
     VertexData<double> u(mesh, 0);
     StreamFunctionSolver S;
     S.compute(mesh, Tri);
     S.solve(mesh, geom, u, wc.w);
-
     FaceData<double> res = poisson_residual_error_sqr(mesh, geom, u, wc.w);
     auto faces = select_doerfler(mesh, res, theta, threshold);
     refine(Tri, faces);

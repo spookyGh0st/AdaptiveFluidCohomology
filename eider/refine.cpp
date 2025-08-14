@@ -117,13 +117,15 @@ void coarse(IntrinsicTriangulation &m, const std::function<bool(Vertex)> &f) {
         adjacent_v[0] = he.next().tipVertex();
         if (he.twin().isInterior())
             adjacent_v[1] = he.twin().next().tipVertex();
-        Vertex cv = m.intrinsicMesh->collapseEdgeTriangular(he);
+        Vertex cv = m.collapseEdgeTriangular(he);
         assert(cv != Vertex());
 
+        /*
         for (Vertex nv : adjacent_v) {
             if (vertex_is_good(m, nv) && f(nv))
                 good_vertices.insert(nv);
         }
+         */
     }
 }
 

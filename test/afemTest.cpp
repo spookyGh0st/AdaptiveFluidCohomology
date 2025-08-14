@@ -80,6 +80,12 @@ TEST(afemTest, testSplitEdgePath)
       adaptMesh(intrTri,wc,homology_b,theta, error_threshold);
       harmonic_b = orthonormal_hom_basis(mesh,intrTri,homology_b);
     };
+    auto coarse_mesh = [&]()
+    {
+      coarse(intrTri,[](Vertex v) {return true;});
+      mesh.compress();
+      harmonic_b = orthonormal_hom_basis(mesh,intrTri,homology_b);
+    };
 
 
     // TODO edge split
@@ -99,11 +105,11 @@ TEST(afemTest, testSplitEdgePath)
       for (int h_idx = 0; h_idx< homology_b.size(); h_idx++)
       {
           auto& h = homology_b[h_idx];
-          auto& n = h.next;
+          auto& n = h.nextLeft;
           HalfedgeData<int> nextInt(mesh,0);
-          for (Edge e: mesh.edges()){
-              if (n[e] != Halfedge()) nextInt[n[e]] =1;
-              if(e == h.start_e) nextInt[n[e]] = 2;
+          for (Halfedge e: mesh.halfedges()){
+              if (n[e].has_value() && *n[e]) nextInt[e] =1;
+              if (n[e].has_value() && !(*n[e])) nextInt[e] =2;
           }
 
           polym->addHalfedgeScalarQuantity("h_b " + std::to_string(h_idx),nextInt);
@@ -138,6 +144,9 @@ TEST(afemTest, testSplitEdgePath)
           refine_mesh();
           vis_mesh();
       }
+      if (ImGui::Button("Coarse")) {
+          coarse_mesh(); vis_mesh();
+      }
       if (ImGui::Checkbox("Normalize",&normalize_vectors)) { vis_mesh(); }
       ImGui::Checkbox("Run", &running);
       ImGui::Checkbox("Refine while running", &adaptive_run);
@@ -155,6 +164,84 @@ TEST(afemTest, testSplitEdgePath)
       ImGui::Text("dt: %.6f", dt);
       for (auto& c: wc.c) {
           ImGui::Text("c: %.6f", c);
+      }
+    };
+
+    polyscope::show();
+}
+
+TEST(afemTest, testPathConsistency){
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "torus_min.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+
+    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
+    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
+    IntrinsicGeometryInterface& g = icit;
+
+    auto homotopy_b= greedy_homotopy_basis(m,g, arbitrary_base_face(m));
+    auto homologyBasis = singular_homology_basis(m,homotopy_b);
+
+    auto& h = homologyBasis;
+    for (int h_idx = 0; h_idx < h.size(); ++h_idx) {
+        icit.edgeSplitCallbackList.emplace_back([&,h_idx](Edge e, Halfedge he1, Halfedge he2) {
+          onSplit(e, he1, he2, h[h_idx].nextLeft); });
+    }
+    for (int h_idx = 0; h_idx < h.size(); ++h_idx) {
+        icit.edgeCollapseCallbackList.push_back([&,h_idx](Halfedge he) {
+          onCollapse(he, h[h_idx].nextLeft); });
+    }
+
+    bool first = true;
+    auto vis = [& ](){
+      m.compress();
+      VertexData<Vector3> int_positions(m) ;
+      for (Vertex v : m.vertices()) {
+          int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
+      }
+
+
+
+      polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", parent_g->vertexPositions,parent_m->getFaceVertexList());
+      polyscope::SurfaceMesh* pm_B = polyscope::registerSurfaceMesh("Intrinsic", int_positions,m.getFaceVertexList());
+      pm_B->setAllPermutations(polyscopePermutations(m));
+      pm_A->addFaceScalarQuantity("index",parent_m->getFaceIndices())->setEnabled(true);
+      pm_B->addFaceScalarQuantity("index",m.getFaceIndices())->setEnabled(true);
+      pm_B->addEdgeScalarQuantity("edgeCoords",icit.normalCoordinates.edgeCoords);
+      pm_B->addHalfedgeScalarQuantity("roundabouts",icit.normalCoordinates.roundabouts);
+      pm_B->addEdgeScalarQuantity("lenghts",icit.edgeLengths);
+      pm_A->setEdgeWidth(1);
+      pm_B->setEdgeWidth(1);
+      if(first){
+          pm_A->translate(glm::vec3(-1,0,0));
+          pm_B->translate(glm::vec3( 1,0,0)); first = false;
+      }
+      HalfedgeData<int> d(m,0);
+      for (int i = 0; i < homologyBasis.size(); ++i) {
+          for (Halfedge e: m.halfedges()){
+              if(homologyBasis[i].nextLeft[e].has_value())
+                  d[e] = i+1;
+
+          }
+      }
+      pm_B->addHalfedgeScalarQuantity("Hom", d)->setEnabled(true);
+    };
+
+
+    polyscope::init();
+    vis();
+
+    polyscope::state::userCallback = [&]()
+    {
+      if (ImGui::Button("Refine"))
+      {
+          std::vector<Face> faces { m.face(0) };
+          refine(icit,faces);
+          vis();
+      }
+      if (ImGui::Button("Coarse")) {
+          coarse(icit, [](Vertex v)->bool { return true;});
+          vis();
       }
     };
 

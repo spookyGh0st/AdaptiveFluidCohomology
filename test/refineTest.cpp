@@ -394,7 +394,7 @@ TEST(refineTest,testCollapsingSameElement) {
     Halfedge he = icit.splitEdge(c_edge.halfedge(),0.5);
     Halfedge phe = he.prevOrbitFace().twin().prevOrbitFace();
     i = 0; for (Edge e: he.vertex().adjacentEdges()) b_edges[i++] = e;
-    Vertex v = icit.intrinsicMesh->collapseEdgeTriangular(he);
+    Vertex v = icit.collapseEdgeTriangular(he);
     Edge a_edge;
     i = 0; for (Edge e: b_edges) if (!e.isDead()) a_edge = e;
 
@@ -450,7 +450,7 @@ TEST(refineTest,testCoarsingCondition) {
     ASSERT_NE(he,Halfedge());
     auto nhe = coarse_halfedge(he.vertex());
     ASSERT_EQ(nhe, he);
-   Vertex v = icit.intrinsicMesh->collapseEdgeTriangular(he);
+   Vertex v = icit.collapseEdgeTriangular(he);
    ASSERT_NE(v, Vertex());
 
     icit.refreshQuantities(); m.compress();
