@@ -124,6 +124,8 @@ Halfedge AdaptiveTriangulation::coarse_halfedge(Vertex v) {
 
 Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he) {
     // TODO: Assert left face has smaller idx then right face
+    std::size_t l_idx = idx[he.prevOrbitFace().twin().face()];
+    std::size_t r_idx = he.twin().isInterior()? idx[he.twin().face()] : -1;
 
     // Assert all adjacent faces have the refinement edges opposite to this vertex
     for (Halfedge ohe: he.vertex().outgoingHalfedges()) {
@@ -131,15 +133,17 @@ Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he) {
         assert(getRefinementEdge(ohe.face()) == ohe.next());
     }
 
+    Vertex vj = he.tipVertex();
     he = tri.collapseEdgeTriangular(he);
+    assert(vj == he.tipVertex());
 
     // update refinement edges
     for (Halfedge ahe: he.edge().adjacentHalfedges()) { if (ahe.isInterior()) setRefinementEdge(ahe); }
 
     // update index;
+    idx[he.face()] = l_idx;
     if (he.twin().isInterior()) {
-        if (idx[he.face()] > idx[he.twin().face()])
-            std::swap(idx[he.face()], idx[he.twin().face()]);
+        idx[he.twin().face()] = r_idx;
     }
 
     return he;

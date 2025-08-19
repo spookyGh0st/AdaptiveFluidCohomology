@@ -173,7 +173,7 @@ TEST(afemTest, testSplitEdgePath)
 
 TEST(afemTest, testPathConsistency){
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" / "quad.stl";
+    fds = fds.parent_path()/ "models" / "disk.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
     IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
