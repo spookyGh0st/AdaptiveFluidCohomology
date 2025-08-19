@@ -70,11 +70,11 @@ TEST(refineTest, testSplit)
     using namespace geometrycentral;
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" / "L_coarse.stl";
+    fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
     IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    icit.flipToDelaunay();
+    // icit.flipToDelaunay();
 
     AdaptiveTriangulation atri(icit);
 
@@ -85,7 +85,7 @@ TEST(refineTest, testSplit)
     polyscope::SurfaceMesh* pm;
     std::vector<double> n_tri, error, h1, h2;
     auto vis_mg = [&m,&icit,&parent_g,&selection, &pm,&n_tri, &error, &h1, &h2,&residual, &atri]() {
-        m.compress();
+        m.compress(); icit.refreshQuantities();
         VertexData<Vector3> int_positions(m) ;
         for (Vertex v : m.vertices()) {
             int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);

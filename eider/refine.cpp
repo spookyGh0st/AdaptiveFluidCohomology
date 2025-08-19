@@ -31,22 +31,21 @@ Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he) {
 
     // TODO: does this return the right he?
     he = tri.splitEdge(he, 0.5);
-    Vertex new_v = he.vertex();
-
     // ensure indices are kept in order
-    assert(he.tailVertex() == new_v && he.tipVertex() == tip_vertex );
+    assert(twin_he.tipVertex() == he.tailVertex());
+    assert(he.tipVertex() == tip_vertex );
     if (he.isInterior()) {
         Face fl = he.prevOrbitFace().twin().face(), fr = he.face();
         if (idx[fl] > idx[fr]) std::swap(idx[fl],idx[fr]);
     }
-    assert(twin_he.tailVertex() == tip_vertex && twin_he.tipVertex() == new_v  );
+    assert(twin_he.tailVertex() == tip_vertex );
     if (twin_he.isInterior()) {
         Face fl = twin_he.face(), fr = twin_he.next().twin().face();
          if (idx[fl] > idx[fr]) std::swap(idx[fl],idx[fr]);
     }
 
     // Update refinement edges
-    for (Halfedge he_o : new_v.outgoingHalfedges()) {
+    for (Halfedge he_o : he.vertex().outgoingHalfedges()) {
         if (!he_o.isInterior()) continue;
         setRefinementEdge(he_o.next());
     }
@@ -74,6 +73,7 @@ void AdaptiveTriangulation::refine(std::vector<Face> faces) {
     while (!start_edges.empty()) {
         Edge e = *start_edges.begin();
         start_edges.erase(start_edges.begin());
+
         marked_faces.erase(e.halfedge().face());
         marked_faces.erase(e.halfedge().twin().face());
 
@@ -218,7 +218,7 @@ void AdaptiveTriangulation::setRefinementEdge(Halfedge he) {
 
 Halfedge AdaptiveTriangulation::getRefinementEdge(Face f) {
     Halfedge he;
-    for (Halfedge fhe: he.face().adjacentHalfedges())
+    for (Halfedge fhe: f.adjacentHalfedges())
         if (marked_corner[fhe.oppositeCorner()]) he= fhe;
     return he;
 }
