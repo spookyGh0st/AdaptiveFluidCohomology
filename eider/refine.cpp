@@ -4,23 +4,57 @@
 #include "util.h"
 
 namespace geometrycentral::surface {
-void refine(IntrinsicTriangulation &tri, std::vector<Face> faces) {
-    auto &M = tri.intrinsicMesh;
 
-    FaceData<Halfedge> refinement_edges(*M);
+AdaptiveTriangulation::AdaptiveTriangulation(IntrinsicTriangulation &tri): tri(tri), idx(*tri.intrinsicMesh), marked_corner(*tri.intrinsicMesh,false) {
     tri.requireEdgeLengths();
-    for (Face f : M->faces()) {
+    for (Face f : tri.intrinsicMesh->faces()) {
         double maxEl = std::numeric_limits<double>::lowest();
+        Corner c;
         for (Halfedge he : f.adjacentHalfedges()) {
             if (tri.edgeLengths[he.edge()] > maxEl) {
                 maxEl = tri.edgeLengths[he.edge()];
-                refinement_edges[f] = he;
+                c = he.oppositeCorner();
             }
         }
+        marked_corner[c] = true;
     }
     tri.unrequireEdgeLengths();
+}
 
-    ManifoldSurfaceMesh &mesh = *tri.intrinsicMesh;
+Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he) {
+    assert (he.isInterior());
+    assert(marked_corner[he.oppositeCorner()]);
+    if (he.twin().isInterior()) { assert(marked_corner[he.twin().oppositeCorner()]); }
+
+    Halfedge twin_he = he.twin();
+    Vertex  tip_vertex = he.tipVertex();
+
+    // TODO: does this return the right he?
+    he = tri.splitEdge(he, 0.5);
+    Vertex new_v = he.vertex();
+
+    // ensure indices are kept in order
+    assert(he.tailVertex() == new_v && he.tipVertex() == tip_vertex );
+    if (he.isInterior()) {
+        Face fl = he.prevOrbitFace().twin().face(), fr = he.face();
+        if (idx[fl] > idx[fr]) std::swap(idx[fl],idx[fr]);
+    }
+    assert(twin_he.tailVertex() == tip_vertex && twin_he.tipVertex() == new_v  );
+    if (twin_he.isInterior()) {
+        Face fl = twin_he.face(), fr = twin_he.next().twin().face();
+         if (idx[fl] > idx[fr]) std::swap(idx[fl],idx[fr]);
+    }
+
+    // Update refinement edges
+    for (Halfedge he_o : new_v.outgoingHalfedges()) {
+        if (!he_o.isInterior()) continue;
+        setRefinementEdge(he_o.next());
+    }
+
+    return he;
+}
+
+void AdaptiveTriangulation::refine(std::vector<Face> faces) {
     std::unordered_set<Face> marked_faces;
     std::unordered_set<Edge> start_edges;
     // marked_edges.reserve(faces.size()*2);
@@ -28,11 +62,11 @@ void refine(IntrinsicTriangulation &tri, std::vector<Face> faces) {
         Face f = faces.back();
         faces.pop_back();
         marked_faces.insert(f);
-        Halfedge he = refinement_edges[f];
+        Halfedge he = getRefinementEdge(f);
         if (!he.edge().isBoundary() && !marked_faces.contains(he.twin().face())) {
             faces.push_back(he.twin().face());
         }
-        if (he.edge().isBoundary() || refinement_edges[he.twin().face()] == he.twin()) {
+        if (he.edge().isBoundary() || getRefinementEdge(he.twin().face()) == he.twin()) {
             start_edges.insert(he.edge());
         }
     }
@@ -43,14 +77,9 @@ void refine(IntrinsicTriangulation &tri, std::vector<Face> faces) {
         marked_faces.erase(e.halfedge().face());
         marked_faces.erase(e.halfedge().twin().face());
 
-        Vertex new_v = tri.splitEdge(e.halfedge(), 0.5).vertex();
+        Halfedge split_he = e.halfedge().isInterior() ? e.halfedge() : e.halfedge().twin();
+        Vertex new_v = vertex_bisection(split_he).vertex();
 
-        // Update refinement edges
-        for (Halfedge he_o : new_v.outgoingHalfedges()) {
-            if (!he_o.isInterior())
-                continue;
-            refinement_edges[he_o.face()] = he_o.next();
-        }
 
         // Check if we can now refine one of the neighbours, i.e.
         // if the primal edge of one of the neighbours is one
@@ -64,7 +93,7 @@ void refine(IntrinsicTriangulation &tri, std::vector<Face> faces) {
             Face side_f = side_he.twin().face();
             if (!marked_faces.contains(side_f))
                 continue;
-            if (refinement_edges[side_f].edge() == side_he.edge())
+            if (getRefinementEdge(side_f).edge() == side_he.edge())
                 start_edges.insert(side_he.edge());
         }
     }
@@ -73,22 +102,47 @@ void refine(IntrinsicTriangulation &tri, std::vector<Face> faces) {
     tri.refreshQuantities();
 }
 
-Halfedge coarse_halfedge(Vertex v) {
+Halfedge AdaptiveTriangulation::coarse_halfedge(Vertex v) {
     assert((!v.isBoundary() && v.faceDegree() == 4) || (v.isBoundary() && v.faceDegree() == 2));
     size_t k = 0;
     std::size_t min_idx = std::numeric_limits<std::size_t>::max();
     Halfedge he;
     for (Halfedge ohe : v.outgoingHalfedges()) {
-        if (!ohe.isInterior())
-            continue;
-        std::size_t f_idx = ohe.face().getIndex();
+        if (!ohe.isInterior()) continue;
+        std::size_t f_idx = idx[ohe.face()];
         if (f_idx < min_idx) {
             min_idx = f_idx;
             he = ohe;
         };
     }
+    // TODO: This should not be necessary
+    // if (v.isBoundary()) { for (Halfedge ohe: v.outgoingHalfedges()) if (!ohe.edge().isBoundary()) he = ohe; }
     assert(he != Halfedge());
+    assert(!he.edge().isBoundary());
     return he.twin().next();
+}
+
+Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he) {
+    // TODO: Assert left face has smaller idx then right face
+
+    // Assert all adjacent faces have the refinement edges opposite to this vertex
+    for (Halfedge ohe: he.vertex().outgoingHalfedges()) {
+        if (!ohe.isInterior()) continue;
+        assert(getRefinementEdge(ohe.face()) == ohe.next());
+    }
+
+    he = tri.collapseEdgeTriangular(he);
+
+    // update refinement edges
+    for (Halfedge ahe: he.edge().adjacentHalfedges()) { if (ahe.isInterior()) setRefinementEdge(ahe); }
+
+    // update index;
+    if (he.twin().isInterior()) {
+        if (idx[he.face()] > idx[he.twin().face()])
+            std::swap(idx[he.face()], idx[he.twin().face()]);
+    }
+
+    return he;
 }
 
 inline bool vertex_is_good(IntrinsicTriangulation &T, Vertex v) {
@@ -96,13 +150,13 @@ inline bool vertex_is_good(IntrinsicTriangulation &T, Vertex v) {
         return false;
     if (T.vertexLocations[v].type == SurfacePointType::Vertex)
         return false;
-    return (v.isBoundary() && v.degree() == 2) || (!v.isBoundary() && v.degree() == 4);
+    return (v.isBoundary() && v.faceDegree() == 2) || (!v.isBoundary() && v.faceDegree() == 4);
 }
 
-void coarse(IntrinsicTriangulation &m, const std::function<bool(Vertex)> &f) {
+void AdaptiveTriangulation::coarse(const std::function<bool(Vertex)> &f) {
     std::unordered_set<Vertex> good_vertices{};
-    for (Vertex v : m.intrinsicMesh->vertices()) {
-        if (vertex_is_good(m, v) && f(v))
+    for (Vertex v : tri.intrinsicMesh->vertices()) {
+        if (vertex_is_good(tri, v) && f(v))
             good_vertices.insert(v);
     }
 
@@ -117,8 +171,8 @@ void coarse(IntrinsicTriangulation &m, const std::function<bool(Vertex)> &f) {
         adjacent_v[0] = he.next().tipVertex();
         if (he.twin().isInterior())
             adjacent_v[1] = he.twin().next().tipVertex();
-        Vertex cv = m.collapseEdgeTriangular(he);
-        assert(cv != Vertex());
+        Halfedge cv = vertex_biunion(he);
+        assert(he != Halfedge());
 
         /*
         for (Vertex nv : adjacent_v) {
@@ -127,6 +181,7 @@ void coarse(IntrinsicTriangulation &m, const std::function<bool(Vertex)> &f) {
         }
          */
     }
+    tri.refreshQuantities();
 }
 
 double etaRSqr(Face T, IntrinsicGeometryInterface &geom, const VertexData<double> &f, const VertexData<double> &u) {
@@ -153,6 +208,19 @@ double etaRSqr(Face T, IntrinsicGeometryInterface &geom, const VertexData<double
     }
     jump_sum *= 1. / 2.;
     return h_t * h_t * (std::pow(f_st + lu, 2) * geom.faceAreas[T]) + jump_sum;
+}
+
+void AdaptiveTriangulation::setRefinementEdge(Halfedge he) {
+    for (Halfedge fhe: he.face().adjacentHalfedges())
+        marked_corner[fhe.corner()] = false;
+    marked_corner[he.oppositeCorner()] = true;
+}
+
+Halfedge AdaptiveTriangulation::getRefinementEdge(Face f) {
+    Halfedge he;
+    for (Halfedge fhe: he.face().adjacentHalfedges())
+        if (marked_corner[fhe.oppositeCorner()]) he= fhe;
+    return he;
 }
 
 FaceData<double> poisson_residual_error_sqr(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const VertexData<double> &u, const VertexData<double> &f) {

@@ -64,7 +64,8 @@ TEST(afemTest, testSplitEdgePath)
     intrTri.flipToDelaunay();
     intrTri.delaunayRefine(20);
     intrTri.refreshQuantities();
-    ManifoldSurfaceMesh& mesh = *intrTri.intrinsicMesh;
+    AdaptiveTriangulation atri(intrTri);
+    ManifoldSurfaceMesh& mesh = atri.mesh();
     mesh.compress();
     auto homotopy_b= greedy_homotopy_basis(mesh,intrTri,arbitrary_base_face(mesh));
     auto homology_b = singular_homology_basis(mesh,homotopy_b);
@@ -77,12 +78,12 @@ TEST(afemTest, testSplitEdgePath)
     double theta = 0.1;
     auto refine_mesh = [&]()
     {
-      adaptMesh(intrTri,wc,homology_b,theta, error_threshold);
+      // TODO: adaptMesh(intrTri,wc,homology_b,theta, error_threshold);
       harmonic_b = orthonormal_hom_basis(mesh,intrTri,homology_b);
     };
     auto coarse_mesh = [&]()
     {
-      coarse(intrTri,[](Vertex v) {return true;});
+      atri.coarse([](Vertex v) {return true;});
       mesh.compress();
       harmonic_b = orthonormal_hom_basis(mesh,intrTri,homology_b);
     };
@@ -172,12 +173,13 @@ TEST(afemTest, testSplitEdgePath)
 
 TEST(afemTest, testPathConsistency){
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" / "torus_min.stl";
+    fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
     IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
-    IntrinsicGeometryInterface& g = icit;
+    AdaptiveTriangulation atri(icit);
+    ManifoldSurfaceMesh& m = atri.mesh();
+    IntrinsicGeometryInterface& g = atri.geom();
 
     auto homotopy_b= greedy_homotopy_basis(m,g, arbitrary_base_face(m));
     auto homologyBasis = singular_homology_basis(m,homotopy_b);
@@ -205,10 +207,11 @@ TEST(afemTest, testPathConsistency){
       polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", parent_g->vertexPositions,parent_m->getFaceVertexList());
       polyscope::SurfaceMesh* pm_B = polyscope::registerSurfaceMesh("Intrinsic", int_positions,m.getFaceVertexList());
       pm_B->setAllPermutations(polyscopePermutations(m));
-      pm_A->addFaceScalarQuantity("index",parent_m->getFaceIndices())->setEnabled(true);
-      pm_B->addFaceScalarQuantity("index",m.getFaceIndices())->setEnabled(true);
+      pm_A->addFaceScalarQuantity("index",parent_m->getFaceIndices());
+      pm_B->addFaceScalarQuantity("index",m.getFaceIndices());
       pm_B->addEdgeScalarQuantity("edgeCoords",icit.normalCoordinates.edgeCoords);
       pm_B->addHalfedgeScalarQuantity("roundabouts",icit.normalCoordinates.roundabouts);
+      pm_B->addVertexScalarQuantity("roundabouts degree",icit.normalCoordinates.roundaboutDegrees);
       pm_B->addEdgeScalarQuantity("lenghts",icit.edgeLengths);
       pm_A->setEdgeWidth(1);
       pm_B->setEdgeWidth(1);
@@ -219,28 +222,32 @@ TEST(afemTest, testPathConsistency){
       HalfedgeData<int> d(m,0);
       for (int i = 0; i < homologyBasis.size(); ++i) {
           for (Halfedge e: m.halfedges()){
-              if(homologyBasis[i].nextLeft[e].has_value())
-                  d[e] = i+1;
-
+              if(homologyBasis[i].nextLeft[e].has_value()) {
+                  if (*homologyBasis[i].nextLeft[e]) d[e] = i*2+1; else d[e] = i*2+2;
+                  if (!e.isInterior()) d[e.twin()] = i*2+3;
+              }
           }
       }
-      pm_B->addHalfedgeScalarQuantity("Hom", d)->setEnabled(true);
+      pm_B->addHalfedgeScalarQuantity("Hom", d);
     };
 
 
     polyscope::init();
+    std::vector<Face> faces {  };
+    for (Face f: m.faces()) faces.push_back(f);
     vis();
 
     polyscope::state::userCallback = [&]()
     {
       if (ImGui::Button("Refine"))
       {
-          std::vector<Face> faces { m.face(0) };
-          refine(icit,faces);
+          std::vector<Face> faces {  };
+          for (Face f: m.faces()) faces.push_back(f);
+          atri.refine(faces);
           vis();
       }
       if (ImGui::Button("Coarse")) {
-          coarse(icit, [](Vertex v)->bool { return true;});
+          atri.coarse([](Vertex v)->bool { return true;});
           vis();
       }
     };

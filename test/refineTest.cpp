@@ -53,13 +53,13 @@ void updateTriagulationViz(IntrinsicTriangulation& signpostTri, VertexPositionGe
 }
 
 
-void uniform_refine(IntrinsicTriangulation& intrT) {
+void uniform_refine(AdaptiveTriangulation& intrT) {
     auto v = std::vector<Face>();
-    v.reserve(intrT.intrinsicMesh->nFaces());
-    for (auto f: intrT.intrinsicMesh->faces()) {
+    v.reserve(intrT.mesh().nFaces());
+    for (auto f: intrT.mesh().faces()) {
         v.push_back(f);
     }
-    refine(intrT,v);
+    intrT.refine(v);
 
 }
 
@@ -75,23 +75,31 @@ TEST(refineTest, testSplit)
 
     IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
     icit.flipToDelaunay();
-    // icit.delaunayRefine();
 
-    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
+    AdaptiveTriangulation atri(icit);
+
+    ManifoldSurfaceMesh& m = atri.mesh();
     FaceData<int> selection(m,0);
     FaceData<double> residual(m,0);
 
     polyscope::SurfaceMesh* pm;
     std::vector<double> n_tri, error, h1, h2;
-    auto vis_mg = [&m,&icit,&parent_g,&selection, &pm,&n_tri, &error, &h1, &h2,&residual]() {
+    auto vis_mg = [&m,&icit,&parent_g,&selection, &pm,&n_tri, &error, &h1, &h2,&residual, &atri]() {
         m.compress();
         VertexData<Vector3> int_positions(m) ;
         for (Vertex v : m.vertices()) {
             int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
         }
         pm = polyscope::registerSurfaceMesh("M", int_positions,m.getFaceVertexList());
+        pm->setAllPermutations(polyscopePermutations(m));
         pm->setSelectionMode(polyscope::MeshSelectionMode::FacesOnly);
-        pm->addFaceScalarQuantity("selected faces", selection)->setEnabled(true);
+        pm->addFaceScalarQuantity("selected faces", selection);
+        HalfedgeData<int> he_d(atri.mesh(),0);
+        for (Face f: atri.mesh().faces()) {
+            he_d[atri.getRefinementEdge(f)] = 1;
+        }
+        pm->addHalfedgeScalarQuantity("refinement edges", he_d);
+
 
         VertexData<double> f(m,1);
         VertexData<double> u(m,0);
@@ -161,7 +169,7 @@ TEST(refineTest, testSplit)
             for (Face f:m.faces()) {
                 if (selection[f] == 1) faces.push_back(f);
             }
-            refine(icit, faces);
+            atri.refine(faces);
             selection.fill(0);
             vis_mg();
         }
@@ -170,7 +178,7 @@ TEST(refineTest, testSplit)
         {
             {
                 Stopwatch sw(refinement_ms);
-                uniform_refine(icit);
+                uniform_refine(atri);
             }
             vis_mg();
         }
@@ -214,10 +222,10 @@ TEST(refineTest, perf_test)
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
 
     IntegerCoordinatesIntrinsicTriangulation icit(*m,*g);
-    icit.requireHalfedgeVectorsInFace();
+    AdaptiveTriangulation atri(icit);
     for (int i = 0; i< 10; i++)
     {
-        uniform_refine(icit);
+        uniform_refine(atri);
     }
 }
 
@@ -273,8 +281,9 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
     IntegerCoordinatesIntrinsicTriangulation uniform_g(*parent_m,*parent_g), adaptive_g(*parent_m, *parent_g);
+    AdaptiveTriangulation uniform_a(uniform_g), adaptive_a(adaptive_g);
     ManifoldSurfaceMesh &uniform_m = *uniform_g.intrinsicMesh, &adaptive_m = *adaptive_g.intrinsicMesh;
-    while (uniform_m.nFaces() < 3072) {uniform_refine(uniform_g); uniform_refine(adaptive_g); }
+    while (uniform_m.nFaces() < 3072) {uniform_refine(uniform_a); uniform_refine(adaptive_a); }
     FaceData<double> res_u(uniform_m,0), res_a(adaptive_m,0);
     struct Data
     {
@@ -315,7 +324,7 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
 
         res_a = poisson_residual_error_sqr(adaptive_m, adaptive_g, u, f);
         auto faces = select_doerfler(adaptive_m, res_a, theta, 1);
-        refine(adaptive_g,faces);
+        adaptive_a.refine(faces);
     };
 
     polyscope::init();
@@ -328,7 +337,7 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         if (ImGui::Button("Refine until 2xT"))
         {
             adaptive_refine();
-            while (uniform_m.nFaces()*2 < adaptive_m.nFaces()) uniform_refine(uniform_g);
+            while (uniform_m.nFaces()*2 < adaptive_m.nFaces()) uniform_refine(uniform_a);
             vis_all();
         }
 
@@ -386,15 +395,16 @@ TEST(refineTest,testCollapsingSameElement) {
     fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
     IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
+    AdaptiveTriangulation atri(icit);
+    ManifoldSurfaceMesh& m = atri.mesh();
 
     Edge c_edge; std::array<Edge,4> b_edges;
     int i = 0; for (Edge e: m.edges()) if (e.isBoundary()) b_edges[i++] = e; else c_edge = e;
 
-    Halfedge he = icit.splitEdge(c_edge.halfedge(),0.5);
+    Halfedge he = atri.vertex_bisection(c_edge.halfedge());
     Halfedge phe = he.prevOrbitFace().twin().prevOrbitFace();
     i = 0; for (Edge e: he.vertex().adjacentEdges()) b_edges[i++] = e;
-    Vertex v = icit.collapseEdgeTriangular(he);
+    Vertex v = atri.vertex_biunion(he).vertex();
     Edge a_edge;
     i = 0; for (Edge e: b_edges) if (!e.isDead()) a_edge = e;
 
@@ -407,7 +417,6 @@ TEST(refineTest,testCollapsingSameElement) {
     d[a_edge] = 1;
 
     icit.refreshQuantities(); m.compress();
-
 
     VertexData<Vector3> int_positions(m) ;
     for (Vertex v : m.vertices()) {
@@ -433,25 +442,26 @@ TEST(refineTest,testCoarsingCondition) {
     fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
     IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
+    AdaptiveTriangulation atri(icit);
     ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
 
     Edge c_edge; std::array<Edge,4> b_edges;
     int i = 0; for (Edge e: m.edges()) if (e.isBoundary()) b_edges[i++] = e; else c_edge = e;
 
-    Halfedge he = icit.splitEdge(c_edge.halfedge(),0.5);
-    ASSERT_EQ(icit.intrinsicMesh->nFaces(),4);
+    Halfedge he = atri.vertex_bisection(c_edge.halfedge());
+    ASSERT_EQ(atri.mesh().nFaces(),4);
     ASSERT_FALSE(he.vertex().isBoundary());
     Face f1 = he.face(), f2 = he.prevOrbitFace().twin().face();
     Face f3 = he.twin().next().twin().face(), f4 = he.twin().face();
-    ASSERT_GT(f1.getIndex(),f2.getIndex());
-    ASSERT_GT(f3.getIndex(),f4.getIndex());
-    he = icit.splitEdge(he.next(),0.5);
+    ASSERT_GT(atri.idx[f1],atri.idx[f2]);
+    ASSERT_GT(atri.idx[f3],atri.idx[f4]);
+    he = atri.vertex_bisection(he.next());
     ASSERT_TRUE(he.isInterior());
     ASSERT_NE(he,Halfedge());
-    auto nhe = coarse_halfedge(he.vertex());
+    auto nhe = atri.coarse_halfedge(he.vertex());
     ASSERT_EQ(nhe, he);
-   Vertex v = icit.collapseEdgeTriangular(he);
-   ASSERT_NE(v, Vertex());
+    Halfedge v = atri.vertex_biunion(he);
+    ASSERT_NE(v, Halfedge());
 
     icit.refreshQuantities(); m.compress();
 
@@ -465,8 +475,9 @@ TEST(refineTest,testCoarsingCondition) {
     polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", parent_g->vertexPositions,parent_m->getFaceVertexList());
     polyscope::SurfaceMesh* pm_B = polyscope::registerSurfaceMesh("Intrinsic", int_positions,m.getFaceVertexList());
     pm_B->setAllPermutations(polyscopePermutations(m));
-    pm_A->addFaceScalarQuantity("index",parent_m->getFaceIndices())->setEnabled(true);
-    pm_B->addFaceScalarQuantity("index",m.getFaceIndices())->setEnabled(true);
+    FaceData<std::size_t> face_idx(m);
+    for (Face f:m.faces()) { face_idx[f] = atri.idx[f];}
+    pm_B->addFaceScalarQuantity("index",face_idx)->setEnabled(true);
     pm_A->setEdgeWidth(1);
     pm_B->setEdgeWidth(1);
     pm_A->translate(glm::vec3(-1,0,0));
@@ -480,19 +491,18 @@ TEST(refineTest,testCoarseRefine) {
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
     IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
-    IntrinsicGeometryInterface& g = icit;
+    AdaptiveTriangulation atri(icit);
+    ManifoldSurfaceMesh& m = atri.mesh();
+    IntrinsicGeometryInterface& g = atri.geom();
 
     Edge c_edge; std::array<Edge,4> b_edges;
     // int i = 0; for (Edge e: m.edges()) if (e.isBoundary()) b_edges[i++] = e; else c_edge = e;
     c_edge = m.edge(0);
 
-    Halfedge he1 = icit.splitEdge(c_edge.halfedge(),0.5);
-    Halfedge he2 = icit.splitEdge(he1.next(),0.5);
-    coarse(icit,[](Vertex v) {return true; });
+    Halfedge he1 = atri.vertex_bisection(c_edge.halfedge());
+    Halfedge he2 = atri.vertex_bisection(he1.next());
+    atri.coarse([](Vertex v) {return true; });
     icit.refreshQuantities(); m.compress();
-
-    ASSERT_EQ(m.nEdges(), parent_m->nEdges());
 
     VertexData<Vector3> int_positions(m) ;
     for (Vertex v : m.vertices()) {

@@ -4,12 +4,38 @@
 
 namespace geometrycentral::surface {
 
-void refine(IntrinsicTriangulation &tri, std::vector<Face> faces);
+struct IncrementingIndex {
+    static constexpr std::size_t invalidIdx = std::numeric_limits<std::size_t>::max();
+    std::size_t& operator[](Face f) {
+        if (idx[f] == invalidIdx) idx[f] = current++;
+        return idx[f];
+    }
+    IncrementingIndex(ManifoldSurfaceMesh& mesh): idx(mesh,invalidIdx) {}
+private:
+    FaceData<std::size_t> idx;
+    std::size_t current = 0;;
+};
 
-// get halfedge that was used in the edgesplit resulting in vertex v
-Halfedge coarse_halfedge(Vertex v);
+class AdaptiveTriangulation {
+public:
+    AdaptiveTriangulation(IntrinsicTriangulation& tri);
+    Halfedge vertex_bisection(Halfedge he);
+    void refine(std::vector<Face> faces);
 
-void coarse(IntrinsicTriangulation& m, const std::function<bool(Vertex)>& f);
+
+    // get halfedge that was used in the edgesplit resulting in vertex v
+    Halfedge coarse_halfedge(Vertex v);
+    Halfedge vertex_biunion(Halfedge he);
+    void coarse(const std::function<bool(Vertex)> &f);
+    ManifoldSurfaceMesh& mesh() { return *tri.intrinsicMesh; }
+    IntrinsicGeometryInterface& geom() { return tri; }
+    IncrementingIndex idx;
+    CornerData<bool> marked_corner;
+    Halfedge getRefinementEdge(Face f);
+private:
+    void setRefinementEdge(Halfedge he);
+    IntrinsicTriangulation& tri;
+};
 
 /// Gives the residual error for Δu = f in Ω, u = 0 in ∂Ω
 FaceData<double> poisson_residual_error_sqr(
