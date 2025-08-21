@@ -26,8 +26,8 @@ public:
     // get halfedge that was used in the edgesplit resulting in vertex v
     Halfedge coarse_halfedge(Vertex v);
     Halfedge vertex_biunion(Halfedge he);
-    void coarse(const std::function<bool(Vertex)> &f);
-    ManifoldSurfaceMesh& mesh() { return *tri.intrinsicMesh; }
+    void coarse(const std::vector<Face> &f);
+    ManifoldSurfaceMesh& mesh() const { return *tri.intrinsicMesh; }
     IntrinsicGeometryInterface& geom() { return tri; }
     IncrementingIndex idx;
     CornerData<bool> marked_corner;

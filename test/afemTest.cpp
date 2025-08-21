@@ -83,7 +83,7 @@ TEST(afemTest, testSplitEdgePath)
     };
     auto coarse_mesh = [&]()
     {
-      atri.coarse([](Vertex v) {return true;});
+      // TODO: atri.coarse([](Vertex v) {return true;});
       mesh.compress();
       harmonic_b = orthonormal_hom_basis(mesh,intrTri,homology_b);
     };
@@ -247,7 +247,9 @@ TEST(afemTest, testPathConsistency){
           vis();
       }
       if (ImGui::Button("Coarse")) {
-          atri.coarse([](Vertex v)->bool { return true;});
+          std::vector<Face> faces {  };
+          for (Face f: m.faces()) faces.push_back(f);
+          atri.coarse(faces);
           vis();
       }
     };

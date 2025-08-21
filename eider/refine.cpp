@@ -54,15 +54,15 @@ Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he) {
 }
 
 void AdaptiveTriangulation::refine(std::vector<Face> faces) {
-    std::unordered_set<Face> marked_faces;
+    FaceData<bool> marked_faces (mesh(),false);
     std::unordered_set<Edge> start_edges;
     // marked_edges.reserve(faces.size()*2);
     while (!faces.empty()) {
         Face f = faces.back();
         faces.pop_back();
-        marked_faces.insert(f);
+        marked_faces[f] = true;
         Halfedge he = getRefinementEdge(f);
-        if (!he.edge().isBoundary() && !marked_faces.contains(he.twin().face())) {
+        if (!he.edge().isBoundary() && !marked_faces[he.twin().face()]) {
             faces.push_back(he.twin().face());
         }
         if (he.edge().isBoundary() || getRefinementEdge(he.twin().face()) == he.twin()) {
@@ -74,8 +74,8 @@ void AdaptiveTriangulation::refine(std::vector<Face> faces) {
         Edge e = *start_edges.begin();
         start_edges.erase(start_edges.begin());
 
-        marked_faces.erase(e.halfedge().face());
-        marked_faces.erase(e.halfedge().twin().face());
+        if(e.halfedge().isInterior()) marked_faces[e.halfedge().face()] = false;
+        if(e.halfedge().twin().isInterior()) marked_faces[e.halfedge().twin().face()] = false;
 
         Halfedge split_he = e.halfedge().isInterior() ? e.halfedge() : e.halfedge().twin();
         Vertex new_v = vertex_bisection(split_he).vertex();
@@ -91,14 +91,13 @@ void AdaptiveTriangulation::refine(std::vector<Face> faces) {
             if (side_he.edge().isBoundary())
                 continue;
             Face side_f = side_he.twin().face();
-            if (!marked_faces.contains(side_f))
+            if (!marked_faces[side_f])
                 continue;
             if (getRefinementEdge(side_f).edge() == side_he.edge())
                 start_edges.insert(side_he.edge());
         }
     }
-
-    assert(marked_faces.empty());
+    assert(!marked_faces.raw().any());
     tri.refreshQuantities();
 }
 
@@ -157,10 +156,20 @@ inline bool vertex_is_good(IntrinsicTriangulation &T, Vertex v) {
     return (v.isBoundary() && v.faceDegree() == 2) || (!v.isBoundary() && v.faceDegree() == 4);
 }
 
-void AdaptiveTriangulation::coarse(const std::function<bool(Vertex)> &f) {
+inline bool vertexMarked(Vertex v, const FaceData<bool>& marked_faces){
+    for(Face f:v.adjacentFaces()) if (!marked_faces[f]) return false;
+    return true;
+}
+
+void AdaptiveTriangulation::coarse(const std::vector<Face> &faces) {
+
+    // Mark all potential good vertices, i.e. these vertices with only marked faces around it
+    FaceData<bool> marked_faces(mesh(),false);
+    for (Face f: faces){ marked_faces[f] = true;}
+
     std::unordered_set<Vertex> good_vertices{};
     for (Vertex v : tri.intrinsicMesh->vertices()) {
-        if (vertex_is_good(tri, v) && f(v))
+        if (vertex_is_good(tri, v) && vertexMarked(v,marked_faces))
             good_vertices.insert(v);
     }
 
@@ -170,20 +179,24 @@ void AdaptiveTriangulation::coarse(const std::function<bool(Vertex)> &f) {
         good_vertices.erase(v);
 
         Halfedge he = coarse_halfedge(v);
+        he = vertex_biunion(he);
+        assert(he != Halfedge());
 
         std::array<Vertex, 2> adjacent_v;
         adjacent_v[0] = he.next().tipVertex();
-        if (he.twin().isInterior())
+        if (he.twin().isInterior()){
             adjacent_v[1] = he.twin().next().tipVertex();
-        Halfedge cv = vertex_biunion(he);
-        assert(he != Halfedge());
 
-        /*
+        }
+
         for (Vertex nv : adjacent_v) {
-            if (vertex_is_good(m, nv) && f(nv))
+            if (vertex_is_good(tri, nv) && vertexMarked(nv,marked_faces))
                 good_vertices.insert(nv);
         }
-         */
+
+        // unmark adjacent faces
+        for(Halfedge he: he.edge().adjacentHalfedges())
+            if(he.isInterior()) marked_faces[he.face()] = false;
     }
     tri.refreshQuantities();
 }

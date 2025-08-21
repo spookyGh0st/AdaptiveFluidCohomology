@@ -501,7 +501,8 @@ TEST(refineTest,testCoarseRefine) {
 
     Halfedge he1 = atri.vertex_bisection(c_edge.halfedge());
     Halfedge he2 = atri.vertex_bisection(he1.next());
-    atri.coarse([](Vertex v) {return true; });
+    std::vector<Face> faces { }; for (Face f: m.faces()) faces.push_back(f);
+    atri.coarse(faces);
     icit.refreshQuantities(); m.compress();
 
     VertexData<Vector3> int_positions(m) ;
