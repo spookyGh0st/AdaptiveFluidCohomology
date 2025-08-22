@@ -21,24 +21,27 @@ AdaptiveTriangulation::AdaptiveTriangulation(IntrinsicTriangulation &tri): tri(t
     tri.unrequireEdgeLengths();
 }
 
-Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he) {
+Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer* transfer) {
     assert (he.isInterior());
     assert(marked_corner[he.oppositeCorner()]);
     if (he.twin().isInterior()) { assert(marked_corner[he.twin().oppositeCorner()]); }
 
     Halfedge twin_he = he.twin();
-    Vertex  tip_vertex = he.tipVertex();
+    Vertex vi = he.tailVertex(), vj = he.tipVertex();
 
-    // TODO: does this return the right he?
     he = tri.splitEdge(he, 0.5);
+
+    // If transfer is supplied, update that
+    if(transfer) { transfer->refineEdge(vi,vj,he.tailVertex()); }
+
     // ensure indices are kept in order
     assert(twin_he.tipVertex() == he.tailVertex());
-    assert(he.tipVertex() == tip_vertex );
+    assert(he.tipVertex() == vj );
     if (he.isInterior()) {
         Face fl = he.prevOrbitFace().twin().face(), fr = he.face();
         if (idx[fl] > idx[fr]) std::swap(idx[fl],idx[fr]);
     }
-    assert(twin_he.tailVertex() == tip_vertex );
+    assert(twin_he.tailVertex() == vj );
     if (twin_he.isInterior()) {
         Face fl = twin_he.face(), fr = twin_he.next().twin().face();
          if (idx[fl] > idx[fr]) std::swap(idx[fl],idx[fr]);
@@ -53,10 +56,14 @@ Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he) {
     return he;
 }
 
-void AdaptiveTriangulation::refine(std::vector<Face> faces) {
+void AdaptiveTriangulation::refine(std::vector<Face> faces, AdaptiveTransfer* transfer) {
     FaceData<bool> marked_faces (mesh(),false);
     std::unordered_set<Edge> start_edges;
-    // marked_edges.reserve(faces.size()*2);
+
+    start_edges.reserve(faces.size()*2);
+
+    if(transfer) transfer->startRefine();
+
     while (!faces.empty()) {
         Face f = faces.back();
         faces.pop_back();
@@ -78,7 +85,7 @@ void AdaptiveTriangulation::refine(std::vector<Face> faces) {
         if(e.halfedge().twin().isInterior()) marked_faces[e.halfedge().twin().face()] = false;
 
         Halfedge split_he = e.halfedge().isInterior() ? e.halfedge() : e.halfedge().twin();
-        Vertex new_v = vertex_bisection(split_he).vertex();
+        Vertex new_v = vertex_bisection(split_he,transfer).vertex();
 
 
         // Check if we can now refine one of the neighbours, i.e.
@@ -97,7 +104,9 @@ void AdaptiveTriangulation::refine(std::vector<Face> faces) {
                 start_edges.insert(side_he.edge());
         }
     }
-    assert(!marked_faces.raw().any());
+    assert(!marked_faces.raw().any()); // If this is the case, then we didn't process all faces!
+
+    if(transfer) transfer->endRefine();
     tri.refreshQuantities();
 }
 
@@ -121,8 +130,9 @@ Halfedge AdaptiveTriangulation::coarse_halfedge(Vertex v) {
     return he.twin().next();
 }
 
-Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he) {
+Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveTransfer* transfer) {
     // TODO: Assert left face has smaller idx then right face
+    assert(he.isInterior());
     std::size_t l_idx = idx[he.prevOrbitFace().twin().face()];
     std::size_t r_idx = he.twin().isInterior()? idx[he.twin().face()] : -1;
 
@@ -132,9 +142,15 @@ Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he) {
         assert(getRefinementEdge(ohe.face()) == ohe.next());
     }
 
+    Vertex vi = he.prevOrbitFace().twin().next().tipVertex();
     Vertex vj = he.tipVertex();
+    Vertex vp = he.tailVertex();
     he = tri.collapseEdgeTriangular(he);
+    assert(vi == he.tailVertex());
     assert(vj == he.tipVertex());
+
+    // Update Inverse coarsening map
+    if(transfer){ transfer->coarseEdge(vi,vj,vp); }
 
     // update refinement edges
     for (Halfedge ahe: he.edge().adjacentHalfedges()) { if (ahe.isInterior()) setRefinementEdge(ahe); }
@@ -161,7 +177,8 @@ inline bool vertexMarked(Vertex v, const FaceData<bool>& marked_faces){
     return true;
 }
 
-void AdaptiveTriangulation::coarse(const std::vector<Face> &faces) {
+void AdaptiveTriangulation::coarse(const std::vector<Face> &faces, AdaptiveTransfer* transfer) {
+    if(transfer) transfer->startCoarse();
 
     // Mark all potential good vertices, i.e. these vertices with only marked faces around it
     FaceData<bool> marked_faces(mesh(),false);
@@ -179,7 +196,7 @@ void AdaptiveTriangulation::coarse(const std::vector<Face> &faces) {
         good_vertices.erase(v);
 
         Halfedge he = coarse_halfedge(v);
-        he = vertex_biunion(he);
+        he = vertex_biunion(he,transfer);
         assert(he != Halfedge());
 
         std::array<Vertex, 2> adjacent_v;
@@ -198,6 +215,7 @@ void AdaptiveTriangulation::coarse(const std::vector<Face> &faces) {
         for(Halfedge he: he.edge().adjacentHalfedges())
             if(he.isInterior()) marked_faces[he.face()] = false;
     }
+    if (transfer) transfer->endCoarse();
     tri.refreshQuantities();
 }
 
@@ -277,5 +295,24 @@ std::vector<Face> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> re
             break;
     }
     return result;
+}
+
+IncrementingIndex::IncrementingIndex(ManifoldSurfaceMesh &mesh) : idx(mesh,invalidIdx) {}
+
+std::size_t &IncrementingIndex::operator[](Face f) {
+    if (idx[f] == invalidIdx) idx[f] = current++;
+    return idx[f];
+}
+
+void IncrementingIndex::compress() {
+    std::vector<Face> faces;
+    faces.reserve(idx.getMesh()->nVertices());
+    for(Face f: idx.getMesh()->faces()){
+        faces.push_back(f);
+    }
+    std::ranges::sort(faces,[&](Face f1, Face f2) { return this->operator[](f1) < this->operator[](f2); } );
+    for (int i = 0; i < faces.size(); ++i) {
+        idx[faces[i]] = i;
+    }
 }
 }

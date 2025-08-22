@@ -16,6 +16,14 @@
 
 using namespace geometrycentral::surface;
 using namespace geometrycentral;
+#include <eider/refine.h>
+
+VertexData<Vector3> intrinsic_position(IntrinsicTriangulation& Tri, VertexPositionGeometry& inputG){
+    auto& mesh = *Tri.intrinsicMesh;
+    VertexData<Vector3> int_positions(mesh) ;
+    for (Vertex v : mesh.vertices()) { int_positions[v] = Tri.vertexLocations[v].interpolate(inputG.vertexPositions); }
+    return int_positions;
+}
 
 TEST(transfertTest,testL2Face) {
     std::filesystem::path fds(__FILE__);
@@ -47,6 +55,67 @@ TEST(transfertTest,testL2Face) {
 
 
     polyscope::show();
+}
+
+TEST(transfertTest,deadVerticesRetainValues) {
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "quad.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+
+    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
+    AdaptiveTriangulation atri(icit);
+    ManifoldSurfaceMesh& m = atri.mesh();
+    VertexData<std::size_t> idx(m,0);
+    std::vector<Face> faces { }; for (Face f: m.faces()) faces.push_back(f);
+    atri.refine(faces);
+    Vertex center_v;
+    for (Vertex v: m.vertices()) if(!v.isBoundary()) center_v = v;
+    ASSERT_NE(center_v,Vertex());
+    idx[center_v] = 1;
+    faces.clear();for (Face f: m.faces()) faces.push_back(f);
+    atri.coarse(faces);
+    ASSERT_TRUE(center_v.isDead());
+    ASSERT_EQ(idx[center_v],1);
+}
+
+TEST(transfertTest,testL2VerticesCoarse) {
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "grid.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+
+    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
+    AdaptiveTriangulation atri(icit);
+
+    ManifoldSurfaceMesh& m = atri.mesh();
+    IntrinsicGeometryInterface& g = atri.geom();
+
+
+
+    std::vector<Face> faces;
+    for (Face f: m.faces()){ faces.push_back(f); }
+    atri.refine(faces);
+
+    VertexData<Vector3> int_positions_A = intrinsic_position(icit,*parent_g);
+    VertexData<double> fA(m,0);
+    for(Vertex v: m.vertices()){
+        fA[v] = int_positions_A[v].x;
+    }
+
+    std::vector<Face> facesR, facesC; for (Face f: m.faces()){
+        Vector3 pos = SurfacePoint(f,Vector3::constant(1./3)).interpolate(int_positions_A);
+        if(pos.x < 0) facesR.push_back(f);
+        else facesC.push_back(f);
+    }
+
+    AdaptiveTransfer transfer(icit,fA);
+    atri.refine(facesR,&transfer);
+    atri.coarse(facesC,&transfer);
+    VertexData<double> fB = transfer.transfer();
+
+    int_positions_A = intrinsic_position(icit,*parent_g);
+    for(Vertex v: m.vertices()){
+        ASSERT_NEAR(fB[v],int_positions_A[v].x,0.000001);
+    }
 }
 
 
