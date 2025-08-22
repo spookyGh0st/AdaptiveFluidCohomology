@@ -12,8 +12,8 @@ struct AdaptiveTriplet{
     Vertex j;
     double value;
     AdaptiveTriplet(const Vertex &i, const Vertex &j, double value) : i(i), j(j), value(value) {}
-    Eigen::Triplet<double> toEigen(const VertexData<std::size_t>& idx_i, const VertexData<std::size_t>& idx_j) const{
-        return Eigen::Triplet<double>(int(idx_i[i]),int(idx_j[j]),value);
+    Eigen::Triplet<double,Eigen::Index> toEigen(const VertexData<std::size_t>& idx_i, const VertexData<std::size_t>& idx_j) const{
+        return Eigen::Triplet<double,Eigen::Index>(Eigen::Index(idx_i[i]),Eigen::Index(idx_j[j]),value);
     }
 };
 

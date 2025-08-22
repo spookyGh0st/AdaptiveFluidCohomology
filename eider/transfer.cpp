@@ -1,5 +1,6 @@
 #include "transfer.h"
 #include <geometrycentral/numerical/linear_solvers.h>
+#include <cassert>
 
 namespace geometrycentral::surface {
 
@@ -16,7 +17,7 @@ void AdaptiveTransfer::endRefine() {
     refined_idx = mesh.getVertexIndices();
     nR = mesh.nVertices();
 
-    std::vector<Eigen::Triplet<double>> triplets;
+    std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
     triplets.reserve(triplets_B.size());
     for (const AdaptiveTriplet& at: triplets_B) {
         triplets.emplace_back(at.toEigen(refined_idx,base_Idx));
@@ -49,7 +50,7 @@ void AdaptiveTransfer::endCoarse() {
     for (Vertex v: mesh.vertices()) {
         triplets_C.emplace_back(v,v,1);
     }
-    std::vector<Eigen::Triplet<double>> triplets;
+    std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
     triplets.reserve(triplets_C.size());
     for (const AdaptiveTriplet& at: triplets_C) {
         triplets.emplace_back(at.toEigen(refined_idx,coarse_idx));

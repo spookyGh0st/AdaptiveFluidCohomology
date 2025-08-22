@@ -270,7 +270,7 @@ FaceData<double> poisson_residual_error_sqr(ManifoldSurfaceMesh &mesh, Intrinsic
     return eta;
 }
 
-std::vector<Face> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, double theta, double threshold) {
+std::array<std::vector<Face>,2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, const DoeflerConf& conf) {
     if (mesh.nFaces() == 0)
         return {};
     std::vector<Face> faces;
@@ -283,18 +283,30 @@ std::vector<Face> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> re
 
     std::ranges::sort(faces, [&residual](const Face &a, const Face &b) -> bool { return residual[a] * residual[a] < residual[b] * residual[b]; });
 
-    std::vector<Face> result;
-    result.reserve(theta * mesh.nFaces());
+    std::vector<Face> mark_refine;
+    mark_refine.reserve(conf.theta_refine * mesh.nFaces());
     double accum_res = 0;
     for (int i = faces.size() - 1; i >= 0; --i) {
-        if (residual[faces[i]] < threshold)
+        if (residual[faces[i]] < conf.threshold_refine)
             break;
-        result.push_back(faces[i]);
+        mark_refine.push_back(faces[i]);
         accum_res += residual[faces[i]];
-        if (accum_res >= theta * total_res)
+        if (accum_res >= conf.theta_refine * total_res)
             break;
     }
-    return result;
+
+    std::vector<Face> mark_coarse;
+    mark_coarse.reserve(conf.theta_coarse * mesh.nFaces());
+    accum_res = 0;
+    for (int i = 0; i < faces.size(); ++i) {
+        if (residual[faces[i]] > conf.threshold_coarse)
+            break;
+        mark_coarse.push_back(faces[i]);
+        accum_res += residual[faces[i]];
+        if (accum_res >= conf.theta_coarse * total_res)
+            break;
+    }
+    return { mark_refine, mark_coarse };
 }
 
 IncrementingIndex::IncrementingIndex(ManifoldSurfaceMesh &mesh) : idx(mesh,invalidIdx) {}

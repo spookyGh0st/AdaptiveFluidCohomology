@@ -1,4 +1,5 @@
-#include "afem.h"
+#include "AdaptiveHomologyBasis.h"
+#include "homotopy.h"
 #include <span>
 
 void connect_split_path(Halfedge in, Halfedge out, HalfedgeData<std::optional<bool>>&nextLeft) {
@@ -164,4 +165,21 @@ void onCollapse(Halfedge he, HalfedgeData<std::optional<bool>> &next) {
         };
         connect_collapsed_path(b_halfedges,next);
     }
+}
+AdaptiveHomologyBasis::AdaptiveHomologyBasis(IntrinsicTriangulation &icit) : mesh(*icit.intrinsicMesh), geom(icit) {
+    Face b_face = arbitrary_base_face(mesh);
+    auto homotopy = greedy_homotopy_basis(mesh, geom,b_face);
+    homologyB = singular_homology_basis(mesh, homotopy);
+
+    for (auto &b : homologyB) {
+        icit.edgeSplitCallbackList.emplace_back([&b](Edge e, Halfedge he1, Halfedge he2) {
+          onSplit(e, he1, he2, b.nextLeft); });
+    }
+    for (auto &b : homologyB) {
+        icit.edgeCollapseCallbackList.emplace_back([&b](Halfedge he) { onCollapse(he, b.nextLeft); });
+    }
+}
+
+Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() const {
+    return orthonormal_hom_basis(mesh,geom);
 }

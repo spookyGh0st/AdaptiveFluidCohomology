@@ -1,14 +1,11 @@
 #include "homology.h"
+#include "homotopy.h"
 #include <algorithm>
 #include <bitset>
 #include <numeric>
 #include <tuple>
 #include <vector>
 
-#include "geometrycentral/surface/barycentric_vector.h"
-#include "geometrycentral/surface/manifold_surface_mesh.h"
-#include "geometrycentral/surface/surface_mesh.h"
-#include "geometrycentral/surface/surface_point.h"
 
 namespace geometrycentral::surface {
 

@@ -9,6 +9,7 @@
 #include <chrono>
 
 #include "Stopwatch.h"
+#include "eider/homotopy.h"
 #include "polyscope/curve_network.h"
 
 using namespace geometrycentral;

@@ -1,7 +1,6 @@
 #pragma once
 #include "geometrycentral/surface/intrinsic_geometry_interface.h"
 #include "geometrycentral/surface/manifold_surface_mesh.h"
-#include "homotopy.h"
 #include "singular_homology.h"
 #include <vector>
 
@@ -22,11 +21,13 @@ struct PressureProjectionSolver {
     // Eigen::SparseQR<SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
 };
 
+using Harmonic_basis = std::vector<FaceData<Vector2>>;
+
 FaceData<Vector2> whitney_interpolation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeData<double> &h);
 
-std::vector<FaceData<Vector2>> orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<FaceData<Vector2>> &h);
+Harmonic_basis orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<FaceData<Vector2>> &h);
 
-std::vector<FaceData<Vector2>> orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<Singular_Circle> &homology_basis);
+Harmonic_basis orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<Singular_Circle> &homology_basis);
 
-std::vector<FaceData<Vector2>> orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom);
+Harmonic_basis orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom);
 } // namespace geometrycentral::surface

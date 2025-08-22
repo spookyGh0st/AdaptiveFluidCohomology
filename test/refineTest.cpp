@@ -124,6 +124,7 @@ TEST(refineTest, testSplit)
     vis_mg();
 
     float theta = 0.6;
+    DoeflerConf conf;
 
 
     polyscope::state::userCallback = [&]()
@@ -150,17 +151,6 @@ TEST(refineTest, testSplit)
             }
         }
 
-        ImGui::DragFloat("etha",&theta,0.025,0,1);
-        ImGui::SameLine();
-        if (ImGui::Button("Select doerfler"))
-        {
-            auto faces = select_doerfler(m, residual, theta, 1);
-            selection.fill(0);
-            for (Face f:faces) {
-                selection[f] = 1;
-            }
-            vis_mg();
-        }
         // Build a UI element to edit a parameter, which will
         // appear in the onscreen panel
         if (ImGui::Button("Refine Selected"))
@@ -323,8 +313,9 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         StreamFunctionSolver S {}; S.compute(adaptive_m, adaptive_g); S.solve(adaptive_m,adaptive_g,u,f);
 
         res_a = poisson_residual_error_sqr(adaptive_m, adaptive_g, u, f);
-        auto faces = select_doerfler(adaptive_m, res_a, theta, 1);
-        adaptive_a.refine(faces);
+        DoeflerConf conf;
+        auto faces = select_doerfler(adaptive_m, res_a,conf);
+        adaptive_a.refine(faces[0]);
     };
 
     polyscope::init();
