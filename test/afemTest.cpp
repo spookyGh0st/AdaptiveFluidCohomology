@@ -52,6 +52,92 @@ VertexData<Vector3> intrinsic_geom(IntrinsicTriangulation& Tri, VertexPositionGe
     return int_positions;
 }
 
+struct MeshSelecter {
+    std::vector<std::string> names;
+    std::vector<std::filesystem::path> paths;
+    int selected_mesh = -1;
+    std::vector<bool> toggles;
+    MeshSelecter() {
+        namespace fs = std::filesystem;
+        std::filesystem::path dir(__FILE__);
+        dir = dir.parent_path()/ "models";
+        for (const auto &entry : fs::recursive_directory_iterator(dir)) {
+            if (fs::is_regular_file(entry.path()) && entry.path().extension() == ".stl") {
+                names.emplace_back(entry.path().filename());
+                paths.emplace_back(entry.path());
+            }
+        }
+        toggles = std::vector<bool>(names.size(), false);
+    }
+    bool select(std::unique_ptr<ManifoldSurfaceMesh>& mesh, std::unique_ptr<VertexPositionGeometry>& geom) {
+        // Simple selection popup (if you want to show the current selection inside the Button itself,
+        // you may want to build a string using the "###" operator to preserve a constant ID with a variable label)
+        bool changed = false;
+        if (ImGui::Button("Select Mesh"))
+            ImGui::OpenPopup("my_select_popup");
+        ImGui::SameLine();
+        ImGui::TextUnformatted(selected_mesh == -1 ? "<None>" : names[selected_mesh].c_str());
+        if (ImGui::BeginPopup("my_select_popup"))
+        {
+            ImGui::SeparatorText("Select Mesh");
+            for (int i = 0; i < names.size(); i++) {
+                changed = changed = ImGui::Selectable(names[i].c_str());
+                if (changed) {
+                    selected_mesh = i;
+                    std::tie(mesh,geom) = readManifoldSurfaceMesh(paths[selected_mesh].string());
+                    std::cout << "Selected " << names[selected_mesh] << std::endl;
+                }
+            }
+            ImGui::EndPopup();
+        }
+        return changed;
+    }
+};
+
+struct AdaptiveFluidVisualization {
+    std::unique_ptr<ManifoldSurfaceMesh> pMesh;
+    std::unique_ptr<VertexPositionGeometry> pGeom;
+    std::unique_ptr<IntrinsicTriangulation> intrT;
+    std::unique_ptr<AdaptiveTriangulation> aTri;
+    std::unique_ptr<AdaptiveFluidSolver> solver;
+    DOPRI5_conf dopri5;
+    DoeflerConf doefler;
+    void load() {
+        intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
+        aTri = std::make_unique<AdaptiveTriangulation>(*intrT);
+        wc_wrapper wc;
+        solver = std::make_unique<AdaptiveFluidSolver>(*aTri,wc,dopri5,doefler);
+    }
+
+    void visualize() {
+        if (!aTri) return;
+
+        ManifoldSurfaceMesh& mesh = aTri->mesh();
+        mesh.compress();
+        VertexData<Vector3> int_positions = intrinsic_geom(*intrT,*pGeom);
+        VertexPositionGeometry g(mesh,int_positions);
+        polyscope::SurfaceMesh* polym = polyscope::registerSurfaceMesh("M", int_positions,mesh.getFaceVertexList(), polyscopePermutations(mesh));
+
+        g.requireFaceTangentBasis();
+        FaceData<Vector3> e1(mesh),e2(mesh);
+        for (Face f: mesh.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
+
+        auto v = solver->velocity();
+        polym->addFaceTangentVectorQuantity("velocity",v.u,e1,e2);
+        polym->addVertexScalarQuantity("vorticity",solver->wc.w);
+        polym->addFaceScalarQuantity("residual",v.residual);
+
+        for (int i = 0; i < solver->h.size(); ++i) {
+            polym->addFaceTangentVectorQuantity("harmonic form " + std::to_string(i),solver->h[i],e1,e2);
+        }
+    }
+
+    void callBack() {
+
+    }
+
+};
+
 TEST(afemTest, AdaptiveFluidCohomology)
 {
     std::filesystem::path fds(__FILE__);
@@ -196,6 +282,7 @@ TEST(afemTest, testPathConsistency){
           atri.coarse(faces);
           vis();
       }
+        ImGui::ShowDemoWindow();
     };
 
     polyscope::show();
