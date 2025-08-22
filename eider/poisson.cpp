@@ -9,6 +9,9 @@
 
 namespace geometrycentral::surface {
 void StreamFunctionSolver::compute(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
+    boundaryVertices.clear();
+    interiorVertices.clear();
+
     if (mesh.hasBoundary()) {
         compute_dirichlet(mesh, geom);
     } else {
@@ -25,6 +28,7 @@ void StreamFunctionSolver::solve(SurfaceMesh &mesh, IntrinsicGeometryInterface &
 }
 
 void StreamFunctionSolver::compute_dirichlet(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
+    assert(boundaryVertices.empty()); // must always be created new
     geom.requireCotanLaplacian();
 
     size_t nVertices = mesh.nVertices();

@@ -4,6 +4,10 @@
 
 namespace geometrycentral::surface {
 
+AdaptiveTransfer::AdaptiveTransfer(IntrinsicTriangulation &tri, VertexData<double> f_B)
+    :mesh(*tri.intrinsicMesh), geom(tri), base_Idx ( mesh.getVertexIndices()), nB(mesh.nVertices()), vecfB(f_B.toVector(base_Idx)) {
+}
+
 void AdaptiveTransfer::startRefine() {
     for (Vertex v: mesh.vertices()) {
         triplets_B.emplace_back(v,v,1);
@@ -14,8 +18,10 @@ void AdaptiveTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
     triplets_B.emplace_back(vp,vj,0.5);
 }
 void AdaptiveTransfer::endRefine() {
-    refined_idx = mesh.getVertexIndices();
     nR = mesh.nVertices();
+
+    geom.refreshQuantities();
+    refined_idx = mesh.getVertexIndices();
 
     std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
     triplets.reserve(triplets_B.size());
@@ -28,6 +34,8 @@ void AdaptiveTransfer::endRefine() {
     geom.requireVertexGalerkinMassMatrix();
     GLMM = geom.vertexGalerkinMassMatrix;
     geom.unrequireVertexGalerkinMassMatrix();
+    assert(GLMM.rows() == nR);
+    assert(GLMM.cols() == nR);
 }
 void AdaptiveTransfer::startCoarse() {
     if(nR != 0){
@@ -58,10 +66,6 @@ void AdaptiveTransfer::endCoarse() {
     triplets_C.clear(); // clear elements
     P_C = SparseMatrix<double>(nR,nC);
     P_C.setFromTriplets(triplets.begin(),triplets.end());
-}
-AdaptiveTransfer::AdaptiveTransfer(IntrinsicTriangulation &tri, VertexData<double> f_B)
-    :mesh(*tri.intrinsicMesh), geom(tri), base_Idx ( mesh.getVertexIndices()), nB(mesh.nVertices()), vecfB(f_B.toVector(base_Idx)) {
-
 }
 
 VertexData<double> AdaptiveTransfer::transfer() {

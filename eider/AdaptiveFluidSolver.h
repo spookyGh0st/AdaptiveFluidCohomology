@@ -10,6 +10,7 @@
 namespace geometrycentral::surface{
 
 class AdaptiveFluidSolver {
+  public:
     AdaptiveTriangulation& tri;
     wc_wrapper wc;
     DOPRI5_conf conf;
@@ -21,7 +22,6 @@ class AdaptiveFluidSolver {
     double dt, elapsed_time = 0;
     StreamFunctionSolver S;
 
-  public:
     velocity_wrapper velocity();
 
     AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper wc, const DOPRI5_conf &conf, const DoeflerConf &doerflerConf);

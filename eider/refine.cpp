@@ -283,28 +283,16 @@ std::array<std::vector<Face>,2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceD
 
     std::ranges::sort(faces, [&residual](const Face &a, const Face &b) -> bool { return residual[a] * residual[a] < residual[b] * residual[b]; });
 
-    std::vector<Face> mark_refine;
+    std::vector<Face> mark_refine, mark_coarse;
     mark_refine.reserve(conf.theta_refine * mesh.nFaces());
+    mark_coarse.reserve(conf.theta_refine * mesh.nFaces());
     double accum_res = 0;
     for (int i = faces.size() - 1; i >= 0; --i) {
-        if (residual[faces[i]] < conf.threshold_refine)
-            break;
-        mark_refine.push_back(faces[i]);
+        if (residual[faces[i]] > conf.threshold_refine && accum_res <= conf.theta_refine * total_res)
+            mark_refine.push_back(faces[i]);
+        else if (residual[faces[i]]< conf.threshold_coarse && accum_res >= conf.theta_coarse*total_res)
+            mark_coarse.push_back(faces[i]);
         accum_res += residual[faces[i]];
-        if (accum_res >= conf.theta_refine * total_res)
-            break;
-    }
-
-    std::vector<Face> mark_coarse;
-    mark_coarse.reserve(conf.theta_coarse * mesh.nFaces());
-    accum_res = 0;
-    for (int i = 0; i < faces.size(); ++i) {
-        if (residual[faces[i]] > conf.threshold_coarse)
-            break;
-        mark_coarse.push_back(faces[i]);
-        accum_res += residual[faces[i]];
-        if (accum_res >= conf.theta_coarse * total_res)
-            break;
     }
     return { mark_refine, mark_coarse };
 }

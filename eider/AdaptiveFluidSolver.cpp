@@ -14,9 +14,14 @@ AdaptiveFluidSolver::AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper 
 }
 
 void AdaptiveFluidSolver::adapt() {
+    tri.mesh().compress();
+    tri.intrinsicTriangulation().refreshQuantities();
+
     AdaptiveTransfer transfer(tri.intrinsicTriangulation(), wc.w);
 
     VertexData<double> u(tri.mesh(), 0);
+    // TODO: duplicate, but im unsure about indices
+    S.compute(tri.mesh(), tri.geom());
     S.solve(tri.mesh(), tri.geom(), u, wc.w);
     FaceData<double> eta = poisson_residual_error_sqr(tri.mesh(), tri.geom(), u, wc.w);
     std::array<std::vector<Face>, 2> ref_coarse = select_doerfler(tri.mesh(), eta, doerflerConf);

@@ -60,9 +60,8 @@ TEST(afemTest, AdaptiveFluidCohomology)
 
     auto intrTri = IntegerCoordinatesIntrinsicTriangulation(*pm,*pg);
     intrTri.flipToDelaunay();
-    intrTri.intrinsicMesh->compress();
-    intrTri.refreshQuantities();
     AdaptiveTriangulation atri(intrTri);
+    std::vector<Face> faces; for (Face f:atri.mesh().faces()) faces.push_back(f);
     ManifoldSurfaceMesh& mesh = atri.mesh();
 
 
@@ -79,6 +78,7 @@ TEST(afemTest, AdaptiveFluidCohomology)
 
     auto vis_mesh = [&]()
     {
+        mesh.compress();
       VertexData<Vector3> int_positions = intrinsic_geom(intrTri,*pg);
       VertexPositionGeometry g(atri.mesh(),int_positions);
       polyscope::SurfaceMesh* polym = polyscope::registerSurfaceMesh("M", int_positions,mesh.getFaceVertexList(), polyscopePermutations(mesh));
@@ -88,7 +88,7 @@ TEST(afemTest, AdaptiveFluidCohomology)
       for (Face f: mesh.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
       auto v = a.velocity();
       polym->addFaceTangentVectorQuantity("velocity",v.u,e1,e2);
-      polym->addVertexScalarQuantity("vorticity",wc.w);
+      polym->addVertexScalarQuantity("vorticity",a.wc.w);
       polym->addFaceScalarQuantity("residual",v.residual);
     };
 
@@ -97,7 +97,7 @@ TEST(afemTest, AdaptiveFluidCohomology)
 
     polyscope::state::userCallback = [&]()
     {
-      if (ImGui::Button("adapt")) { a.adapt(); }
+      if (ImGui::Button("adapt")) { a.adapt(); vis_mesh(); }
       if (ImGui::Checkbox("Normalize",&normalize_vectors)) { vis_mesh(); }
       ImGui::Checkbox("Run", &running);
       ImGui::Checkbox("Refine while running", &adaptive_run);
@@ -106,8 +106,8 @@ TEST(afemTest, AdaptiveFluidCohomology)
           if (adaptive_run) a.adapt();
           vis_mesh();
       }
-      ImGui::Text("dt: %.6f", dt);
-      for (auto& c: wc.c) {
+      ImGui::Text("dt: %.6f", a.dt);
+      for (auto& c: a.wc.c) {
           ImGui::Text("c: %.6f", c);
       }
     };
