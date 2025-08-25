@@ -40,6 +40,7 @@ class AdaptiveTransfer {
 
     VertexData<double> transfer();
   private:
+    VertexData<double> f_B;
     ManifoldSurfaceMesh& mesh; IntrinsicGeometryInterface& geom;
     VertexData<std::size_t> base_Idx, refined_idx, coarse_idx;
     // Interpolation Matrixes from base/coarse T to Refined T

@@ -181,5 +181,5 @@ AdaptiveHomologyBasis::AdaptiveHomologyBasis(IntrinsicTriangulation &icit) : mes
 }
 
 Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() const {
-    return orthonormal_hom_basis(mesh,geom);
+    return orthonormal_hom_basis(mesh,geom,homologyB);
 }

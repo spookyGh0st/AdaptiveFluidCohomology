@@ -36,12 +36,12 @@ EdgeData<double> delta_form(ManifoldSurfaceMesh &mesh,
 }
 
 void PressureProjectionSolver::compute(IntrinsicGeometryInterface &geom) {
-    geom.requireDECOperators();
+    geom.required0();
     A = geom.d0;
     AT = A.transpose();
     solver.compute(AT * A);
     // TODO: QR - solver.compute(A);
-    geom.unrequireDECOperators();
+    geom.unrequired0();
 }
 
 EdgeData<double>
@@ -50,6 +50,20 @@ PressureProjectionSolver::solve(ManifoldSurfaceMesh &mesh,
     Eigen::VectorXd x = co_loop.toVector();
     // TODO: QR - Eigen::VectorXd c = solver.solve(x);
     Eigen::VectorXd c = solver.solve(AT * x);
+    return EdgeData<double>(mesh, x - A * c);
+}
+
+void AdaptivePressureProjectionSolver::compute(IntrinsicGeometryInterface &geom) {
+    geom.required0();
+    A = geom.d0;
+    AT = A.transpose();
+    solver.compute(AT * A);
+    geom.unrequired0();
+}
+EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, EdgeData<double> &guess) {
+    Eigen::VectorXd x = co_loop.toVector();
+    Eigen::VectorXd c = solver.solveWithGuess(AT * x,guess.toVector());
+    guess = EdgeData<double>(mesh,c);
     return EdgeData<double>(mesh, x - A * c);
 }
 

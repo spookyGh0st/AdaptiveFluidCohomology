@@ -21,6 +21,13 @@ struct PressureProjectionSolver {
     // Eigen::SparseQR<SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
 };
 
+struct AdaptivePressureProjectionSolver {
+    void compute(IntrinsicGeometryInterface &geom);
+    EdgeData<double> solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, EdgeData<double>& guess);
+    Eigen::SparseMatrix<double> A, AT;
+    Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver {};
+};
+
 using Harmonic_basis = std::vector<FaceData<Vector2>>;
 
 FaceData<Vector2> whitney_interpolation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeData<double> &h);
