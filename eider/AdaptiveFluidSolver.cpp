@@ -16,7 +16,6 @@ AdaptiveFluidSolver::AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper 
 
 void AdaptiveFluidSolver::adapt() {
     tri.mesh().compress();
-    tri.intrinsicTriangulation().refreshQuantities();
 
     AdaptiveTransfer transfer(tri.intrinsicTriangulation(), wc.w);
 
