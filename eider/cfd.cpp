@@ -55,7 +55,6 @@ velocity_wrapper velocity(
     geom.requireHalfedgeVectorsInFace();
     VertexData<double> f(mesh, 0);
     S.solve(mesh, geom, f, wc.w);
-    FaceData<double> res = poisson_residual_error_sqr(mesh, geom, f, wc.w);
     FaceData<Vector2> u(mesh, Vector2::zero());
     for (Face face : mesh.faces()) {
         u[face] = -grad(geom, face, f).rotate90();
@@ -67,7 +66,7 @@ velocity_wrapper velocity(
             u[face] += wc.c[i] * h[i][face];
 
     geom.unrequireHalfedgeVectorsInFace();
-    return {f, u, res};
+    return {f, u };
 }
 
 wc_wrapper evalRHS(

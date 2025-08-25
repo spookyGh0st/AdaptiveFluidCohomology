@@ -10,6 +10,7 @@ AdaptiveFluidSolver::AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper 
     : tri(tri), wc(std::move(wc)), conf(conf), doerflerConf(doerflerConf),
       hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()),
       dt(0.0001) {
+    if (this->wc.c.empty()) this->wc.c = std::vector<double>(hom.homologyB.size(),0);
     S.compute(tri.mesh(), tri.geom());
 }
 

@@ -10,11 +10,11 @@ void onSplit(Edge e, Halfedge he1, Halfedge he2, HalfedgeData<std::optional<bool
 void onCollapse(Halfedge he, HalfedgeData<std::optional<bool>> &nextLeft);
 
 class AdaptiveHomologyBasis{
-    Homology_basis homologyB;
     ManifoldSurfaceMesh& mesh;
     IntrinsicGeometryInterface& geom;
 
   public:
+    Homology_basis homologyB;
     explicit AdaptiveHomologyBasis(IntrinsicTriangulation& icit);
     [[nodiscard]] Harmonic_basis harmonicBasis() const;
 };

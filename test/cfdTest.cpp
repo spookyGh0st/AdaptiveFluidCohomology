@@ -155,7 +155,6 @@ TEST(cfdTest, IntrinsicHole)
     auto vispm = [&](){
       pm->addVertexScalarQuantity("vorticity",wc.w);
       pm->addFaceTangentVectorQuantity("velocity",vel.u,e1,e2);
-      pm->addFaceScalarQuantity("error",vel.residual);
       pm->addVertexScalarQuantity("stream_function",vel.stream_function);
       VertexData<double> curlU(m,0);
       for (Vertex v: m.vertices()) { curlU[v] = curl(g,v,vel.u) ;}

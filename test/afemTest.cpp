@@ -29,7 +29,7 @@ TEST(afemTest, testDefaultBehauvior)
   ASSERT_EQ(f[v], 2);
 }
 
-wc_wrapper init_taylor(SurfaceMesh& mesh, VertexData<Vector3> geo, int genus, double vorticity_distance, Vector2 offset, Vector2 cuttof, Vector2 cuttof_offset) {
+wc_wrapper init_taylor(SurfaceMesh& mesh, VertexData<Vector3> geo, double vorticity_distance, Vector2 offset, Vector2 cuttof, Vector2 cuttof_offset) {
     VertexData<double> w(mesh,0);
     double k = 2*PI / vorticity_distance;
     double A = 1;
@@ -42,7 +42,6 @@ wc_wrapper init_taylor(SurfaceMesh& mesh, VertexData<Vector3> geo, int genus, do
     }
     wc_wrapper wc;
     wc.w = w;
-    wc.c = std::vector<double>(genus, 0);
     return wc;
 }
 VertexData<Vector3> intrinsic_geom(IntrinsicTriangulation& Tri, VertexPositionGeometry& inputG){
@@ -51,6 +50,22 @@ VertexData<Vector3> intrinsic_geom(IntrinsicTriangulation& Tri, VertexPositionGe
     for (Vertex v : mesh.vertices()) { int_positions[v] = Tri.vertexLocations[v].interpolate(inputG.vertexPositions); }
     return int_positions;
 }
+
+struct TaylorInitializer {
+    float v_dist  = 0.5, x_add = v_dist/4, y_add = 0, x_cuttof = v_dist/2, y_cuttof = v_dist/4, x_cutt_offset = 0, y_cutt_offset = 0.5;
+    wc_wrapper wc(IntrinsicTriangulation& intTri, VertexPositionGeometry& pg) {
+        return init_taylor(*intTri.intrinsicMesh, intrinsic_geom(intTri,pg), v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
+    }
+    void callback() {
+        if (ImGui::TreeNode("Initial Taylor Vorticises")) {
+            ImGui::InputFloat("vorticity distance",&v_dist,0.125,0.5);
+            ImGui::InputFloat("x_add",&x_add,0.125,0.5); ImGui::InputFloat("y_add",&y_add,0.125,0.5);
+            ImGui::InputFloat("x_cuttof",&x_cuttof,0.125,0.5); ImGui::InputFloat("y_cuttoff",&y_cuttof,0.125,0.5);
+            ImGui::InputFloat("x_cut offset",&x_cutt_offset,0.125,0.5); ImGui::InputFloat("y_cut offset",&y_cutt_offset,0.125,0.5);
+            ImGui::TreePop();
+        }
+    }
+};
 
 struct MeshSelecter {
     std::vector<std::string> names;
@@ -81,8 +96,8 @@ struct MeshSelecter {
         {
             ImGui::SeparatorText("Select Mesh");
             for (int i = 0; i < names.size(); i++) {
-                changed = changed = ImGui::Selectable(names[i].c_str());
-                if (changed) {
+                if (ImGui::Selectable(names[i].c_str())) {
+                    changed = true;
                     selected_mesh = i;
                     std::tie(mesh,geom) = readManifoldSurfaceMesh(paths[selected_mesh].string());
                     std::cout << "Selected " << names[selected_mesh] << std::endl;
@@ -94,7 +109,28 @@ struct MeshSelecter {
     }
 };
 
+void visDopriConf(DOPRI5_conf &conf) {
+    if (ImGui::TreeNode("Dopri56 Configuration")) {
+        ImGui::InputDouble("Absolut Error", &conf.Atol_i, 0, 0, "%.10f");
+        ImGui::InputDouble("relative Error", &conf.Rtol_i, 0, 0, "%.10f");
+        ImGui::InputDouble("fac Min", &conf.facmin);
+        ImGui::InputDouble("fac max", &conf.faxmax);
+        ImGui::TreePop();
+    }
+}
+void visDoerflerConf(DoeflerConf &conf) {
+    if (ImGui::TreeNode("Doerfler Configuration")) {
+        ImGui::InputDouble("Coarse: theta",&conf.theta_coarse);
+        ImGui::InputDouble("Coarse: threshold",&conf.threshold_coarse);
+        ImGui::InputDouble("Refine: theta",&conf.theta_refine);
+        ImGui::InputDouble("Refine: threshold",&conf.threshold_refine);
+        ImGui::TreePop();
+    }
+}
+
 struct AdaptiveFluidVisualization {
+    MeshSelecter selecter;
+    TaylorInitializer taylor;
     std::unique_ptr<ManifoldSurfaceMesh> pMesh;
     std::unique_ptr<VertexPositionGeometry> pGeom;
     std::unique_ptr<IntrinsicTriangulation> intrT;
@@ -104,10 +140,18 @@ struct AdaptiveFluidVisualization {
     DoeflerConf doefler;
     void load() {
         intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
+        intrT->flipToDelaunay();
         aTri = std::make_unique<AdaptiveTriangulation>(*intrT);
-        wc_wrapper wc;
+        wc_wrapper wc = taylor.wc(*intrT,*pGeom);
         solver = std::make_unique<AdaptiveFluidSolver>(*aTri,wc,dopri5,doefler);
     }
+
+    struct SolverState {
+        bool running = false;
+        bool adaptive_run = false;
+        int adapt_after = 1;
+        int step= 0;
+    } state;
 
     void visualize() {
         if (!aTri) return;
@@ -117,6 +161,7 @@ struct AdaptiveFluidVisualization {
         VertexData<Vector3> int_positions = intrinsic_geom(*intrT,*pGeom);
         VertexPositionGeometry g(mesh,int_positions);
         polyscope::SurfaceMesh* polym = polyscope::registerSurfaceMesh("M", int_positions,mesh.getFaceVertexList(), polyscopePermutations(mesh));
+        // polym->setAllPermutations(polyscopePermutations(mesh));
 
         g.requireFaceTangentBasis();
         FaceData<Vector3> e1(mesh),e2(mesh);
@@ -125,77 +170,55 @@ struct AdaptiveFluidVisualization {
         auto v = solver->velocity();
         polym->addFaceTangentVectorQuantity("velocity",v.u,e1,e2);
         polym->addVertexScalarQuantity("vorticity",solver->wc.w);
-        polym->addFaceScalarQuantity("residual",v.residual);
 
         for (int i = 0; i < solver->h.size(); ++i) {
             polym->addFaceTangentVectorQuantity("harmonic form " + std::to_string(i),solver->h[i],e1,e2);
         }
+
+        HalfedgeData<int> d(mesh,0);
+        for (int i = 0; i < solver->hom.homologyB.size(); ++i) {
+            for (Halfedge e: mesh.halfedges()){
+                if(solver->hom.homologyB[i].nextLeft[e].has_value()) {
+                    if (*solver->hom.homologyB[i].nextLeft[e]) d[e] = i*2+1; else d[e] = i*2+2;
+                }
+            }
+        }
+        polym->addHalfedgeScalarQuantity("Hom", d);
     }
 
     void callBack() {
+        if (selecter.select(pMesh,pGeom) ||ImGui::Button("reset")) { load(); visualize(); }
+        taylor.callback();
 
+        if (!aTri) return;
+
+        if (ImGui::Button("adapt")) { solver->adapt(); visualize(); }
+        ImGui::Checkbox("Run", &state.running);
+        ImGui::Checkbox("Refine while running", &state.adaptive_run);
+        ImGui::InputInt("Adapt after:", &state.adapt_after);
+        if (state.running || ImGui::Button("Advance")) {
+            solver->step(); state.step++;
+            if (state.adaptive_run && state.step % state.adapt_after == 0) solver->adapt();
+            visualize();
+        }
+        ImGui::Text("dt: %.6f", solver->dt);
+        for (auto& c: solver->wc.c) {
+            ImGui::Text("c: %.6f", c);
+        }
+
+        visDoerflerConf(solver->doerflerConf);
+        visDopriConf(solver->conf);
     }
-
 };
 
 TEST(afemTest, AdaptiveFluidCohomology)
 {
-    std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"grid_hole.stl";
-    auto [pm,pg] = readManifoldSurfaceMesh(fds.string());
-
-    auto intrTri = IntegerCoordinatesIntrinsicTriangulation(*pm,*pg);
-    intrTri.flipToDelaunay();
-    AdaptiveTriangulation atri(intrTri);
-    std::vector<Face> faces; for (Face f:atri.mesh().faces()) faces.push_back(f);
-    ManifoldSurfaceMesh& mesh = atri.mesh();
-
-
-    float dt = 0.001, v_dist  = 0.5, x_add = v_dist/4, y_add = 0, x_cuttof = v_dist/2, y_cuttof = v_dist/4, x_cutt_offset = 0, y_cutt_offset = 0.5;
-    wc_wrapper wc = init_taylor(mesh, intrinsic_geom(intrTri,*pg), 2, v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-
-    DOPRI5_conf conf=  DOPRI5_conf();
-    DoeflerConf conf_doerfler = DoeflerConf();
-
-    bool normalize_vectors = false;
-    bool running = false, fix_c = false, force_c = false, adaptive_run = false;
-
-    AdaptiveFluidSolver a = AdaptiveFluidSolver(atri,wc,conf,conf_doerfler);
-
-    auto vis_mesh = [&]()
-    {
-        mesh.compress();
-      VertexData<Vector3> int_positions = intrinsic_geom(intrTri,*pg);
-      VertexPositionGeometry g(atri.mesh(),int_positions);
-      polyscope::SurfaceMesh* polym = polyscope::registerSurfaceMesh("M", int_positions,mesh.getFaceVertexList(), polyscopePermutations(mesh));
-
-      g.requireFaceTangentBasis();
-      FaceData<Vector3> e1(mesh),e2(mesh);
-      for (Face f: mesh.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
-      auto v = a.velocity();
-      polym->addFaceTangentVectorQuantity("velocity",v.u,e1,e2);
-      polym->addVertexScalarQuantity("vorticity",a.wc.w);
-      polym->addFaceScalarQuantity("residual",v.residual);
-    };
-
+    AdaptiveFluidVisualization vis;
     polyscope::init();
-    vis_mesh();
 
     polyscope::state::userCallback = [&]()
     {
-      if (ImGui::Button("adapt")) { a.adapt(); vis_mesh(); }
-      if (ImGui::Checkbox("Normalize",&normalize_vectors)) { vis_mesh(); }
-      ImGui::Checkbox("Run", &running);
-      ImGui::Checkbox("Refine while running", &adaptive_run);
-      if (running || ImGui::Button("Advance")) {
-          a.step();
-          if (adaptive_run) a.adapt();
-          vis_mesh();
-      }
-      ImGui::Text("dt: %.6f", a.dt);
-      for (auto& c: a.wc.c) {
-          ImGui::Text("c: %.6f", c);
-      }
+      vis.callBack();
     };
 
     polyscope::show();

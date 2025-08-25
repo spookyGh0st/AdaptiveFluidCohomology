@@ -15,7 +15,6 @@ struct wc_wrapper {
 struct velocity_wrapper {
     VertexData<double> stream_function;
     FaceData<Vector2> u;
-    FaceData<double> residual;
 };
 
 velocity_wrapper velocity(

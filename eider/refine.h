@@ -66,10 +66,10 @@ FaceData<double> poisson_residual_error_sqr(
  * - threshold_coarse  : absolute upper bound for coarsening marking
  */
 struct DoeflerConf {
-    double theta_coarse = 0.8;                                              ///< θ_coarse: fraction of residual for coarsening
+    double theta_coarse = 0.6;                                              ///< θ_coarse: fraction of residual for coarsening
     double theta_refine = 0.2;                                              ///< θ_refine: fraction of residual for refinement
-    double threshold_refine = std::numeric_limits<double>::epsilon(); ///< refinement cutoff
-    double threshold_coarse = std::numeric_limits<double>::max();     ///< coarsening cutoff
+    double threshold_refine = 0.000001;                                     ///< refinement cutoff
+    double threshold_coarse = std::numeric_limits<double>::max();           ///< coarsening cutoff
 };
 
 /**
