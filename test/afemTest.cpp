@@ -144,6 +144,7 @@ struct AdaptiveFluidVisualization {
     std::vector<float> t_data;
     std::vector<std::vector<float>> c_data;
     void load() {
+        if(solver){ dopri5= solver->conf; doefler = solver->doerflerConf; }
         intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
         intrT->delaunayRefine(delauny_angle,delauny_circ);
         intrT->intrinsicMesh->compress();
