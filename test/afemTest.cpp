@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
+#include <implot.h>
 
 #include <gtest/gtest.h>
 
@@ -138,12 +139,30 @@ struct AdaptiveFluidVisualization {
     std::unique_ptr<AdaptiveFluidSolver> solver;
     DOPRI5_conf dopri5;
     DoeflerConf doefler;
+    double delauny_angle = 25, delauny_circ = std::numeric_limits<double>::infinity();
+
+    std::vector<float> t_data;
+    std::vector<std::vector<float>> c_data;
     void load() {
         intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
-        intrT->flipToDelaunay();
+        intrT->delaunayRefine(delauny_angle,delauny_circ);
+        intrT->intrinsicMesh->compress();
+        intrT->refreshQuantities();
+        auto nMesh = intrT->intrinsicMesh->copy();
+        pGeom = std::make_unique<VertexPositionGeometry>(*nMesh,intrinsic_geom(*intrT,*pGeom).reinterpretTo(*nMesh));
+        pMesh = std::move(nMesh);
+        intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
+
+        intrT->mesh.compress(); intrT->refreshQuantities();
         aTri = std::make_unique<AdaptiveTriangulation>(*intrT);
         wc_wrapper wc = taylor.wc(*intrT,*pGeom);
         solver = std::make_unique<AdaptiveFluidSolver>(*aTri,wc,dopri5,doefler);
+
+        t_data = std::vector<float>({0});
+        c_data.resize(solver->h.size());
+        for (int i = 0; i < solver->h.size(); ++i) {
+            c_data[i].push_back(float(solver->wc.c[i]));
+        }
     }
 
     struct SolverState {
@@ -184,9 +203,21 @@ struct AdaptiveFluidVisualization {
             }
         }
         polym->addHalfedgeScalarQuantity("Hom", d);
+
+        if (ImPlot::BeginPlot("Homology coefficient")) {
+            ImPlot::SetupAxis(ImAxis_X1, "Time",ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxis(ImAxis_Y1, "coefficient", ImPlotAxisFlags_AutoFit);
+            for (int j = 0; j < c_data.size() ; ++j) {
+                ImPlot::PlotLine(("c" + std::to_string(j)).c_str(), t_data.data(), c_data[j].data(),int(t_data.size()));
+            }
+            ImPlot::EndPlot();
+        }
     }
 
     void callBack() {
+        ImGui::InputDouble("Delauny Angle", &delauny_angle);
+        ImGui::SameLine();
+        ImGui::InputDouble("Delauny circ", &delauny_circ);
         if (selecter.select(pMesh,pGeom) ||ImGui::Button("reset")) { load(); visualize(); }
         taylor.callback();
 
@@ -199,7 +230,12 @@ struct AdaptiveFluidVisualization {
         if (state.running || ImGui::Button("Advance")) {
             solver->step(); state.step++;
             if (state.adaptive_run && state.step % state.adapt_after == 0) solver->adapt();
+            t_data.push_back(solver->elapsed_time);
+            for (int j = 0; j < solver->wc.c.size(); ++j) {
+                c_data[j].push_back(solver->wc.c[j]);
+            }
             visualize();
+
         }
         ImGui::Text("dt: %.6f", solver->dt);
         for (auto& c: solver->wc.c) {
@@ -215,6 +251,7 @@ TEST(afemTest, AdaptiveFluidCohomology)
 {
     AdaptiveFluidVisualization vis;
     polyscope::init();
+    ImPlot::CreateContext();
 
     polyscope::state::userCallback = [&]()
     {
