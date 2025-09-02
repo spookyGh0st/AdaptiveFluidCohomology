@@ -2,13 +2,13 @@
 
 namespace geometrycentral::surface {
 
-velocity_wrapper AdaptiveFluidSolver::velocity() {
-    return ::velocity(tri.mesh(), tri.geom(), wc, h, S);
+velocity_wrapper AdaptiveFluidSolver::velocity() const {
+    return ::geometrycentral::surface::velocity(tri.mesh(), tri.geom(), wc, h, S);
 }
 
 AdaptiveFluidSolver::AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper wc, const DOPRI5_conf &conf, const DoeflerConf &doerflerConf)
     : tri(tri), wc(std::move(wc)), conf(conf), doerflerConf(doerflerConf),
-      hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()),
+      hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()) ,
       dt(0.0001) {
     if (this->wc.c.empty()) this->wc.c = std::vector<double>(hom.homologyB.size(),0);
     S.compute(tri.mesh(), tri.geom());

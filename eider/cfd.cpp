@@ -7,24 +7,6 @@
 #include "refine.h"
 
 namespace geometrycentral::surface {
-inline double derive(Vertex p, FaceData<Vector2> &u, IntrinsicGeometryInterface &geom, const VertexData<double> &f) {
-    double a = 0, s = 0;
-    for (Face face : p.adjacentFaces()) {
-        s += geom.faceAreas[face] * dot(u[face], grad(geom, face, f));
-        a += geom.faceAreas[face];
-    }
-    return (1 / a) * s;
-}
-
-inline Vector2 Lamb(Face face, const VertexData<double> &w, const FaceData<Vector2> &u) {
-    double s = 0;
-    for (Vertex v : face.adjacentVertices()) {
-        s += w[v];
-    }
-    s = s / 3;
-
-    return -s * u[face].rotate90();
-};
 
 wc_wrapper operator+(const wc_wrapper &a, const wc_wrapper &b) {
     assert(a.c.size() == b.c.size());
@@ -74,7 +56,10 @@ wc_wrapper evalRHS(
     IntrinsicGeometryInterface &geom,
     const wc_wrapper &wc,
     const std::vector<FaceData<Vector2>> &h,
-    const StreamFunctionSolver &S) {
+    const StreamFunctionSolver &S,
+    std::vector<FaceData<double>>* face_dc
+    )
+{
     geom.requireFaceAreas();
     geom.requireHalfedgeVectorsInFace();
     auto u = velocity(mesh, geom, wc, h, S);
@@ -89,9 +74,12 @@ wc_wrapper evalRHS(
         dw[v] = -derive(v, u.u, geom, wc.w);
     }
     std::vector<double> dc(wc.c.size(), 0);
-    for (std::size_t i = 0; i < wc.c.size(); i++)
-        for (Face f : mesh.faces())
+    for (std::size_t i = 0; i < wc.c.size(); i++){
+        for (Face f : mesh.faces()){
+            if(face_dc) face_dc->at(i)[f] = dot(l[f], h[i][f]) * geom.faceAreas[f];
             dc[i] += dot(l[f], h[i][f]) * geom.faceAreas[f];
+        }
+    }
 
     geom.unrequireFaceAreas();
     geom.unrequireHalfedgeVectorsInFace();

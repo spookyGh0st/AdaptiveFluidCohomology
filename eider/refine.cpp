@@ -290,8 +290,14 @@ std::array<std::vector<Face>,2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceD
     for (int i = faces.size() - 1; i >= 0; --i) {
         if (residual[faces[i]] > conf.threshold_refine && accum_res <= conf.theta_refine * total_res)
             mark_refine.push_back(faces[i]);
-        else if (residual[faces[i]]< conf.threshold_coarse && accum_res >= conf.theta_coarse*total_res)
+        else break;
+        accum_res += residual[faces[i]];
+    }
+    accum_res = 0;
+    for (int i = 0; i < faces.size(); ++i) {
+        if (residual[faces[i]]< conf.threshold_coarse && accum_res <= conf.theta_coarse*total_res)
             mark_coarse.push_back(faces[i]);
+        else break;
         accum_res += residual[faces[i]];
     }
     return { mark_refine, mark_coarse };

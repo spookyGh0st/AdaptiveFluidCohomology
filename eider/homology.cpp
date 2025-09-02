@@ -5,6 +5,8 @@
 #include <numeric>
 #include <tuple>
 #include <vector>
+#include <Eigen/SVD>
+#include <Eigen/src/SVD/BDCSVD.h>
 
 
 namespace geometrycentral::surface {
@@ -35,12 +37,34 @@ EdgeData<double> delta_form(ManifoldSurfaceMesh &mesh,
     return delta;
 }
 
+void checkMatrixCriteria(const Eigen::MatrixXd &d) {
+    int m = d.rows();
+    int n = d.cols();
+
+    // Compute rank with SVD
+    Eigen::BDCSVD<Eigen::MatrixXd> svd = Eigen::BDCSVD<Eigen::MatrixXd>(d, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    double tol = 1e-10;  // tolerance threshold
+    int rank = (svd.singularValues().array() > tol).count();
+
+    std::cout << "Matrix is " << m << "x" << n << "\n";
+    std::cout << "Rank = " << rank << "\n";
+
+    if (m >= n && rank == n) {
+        std::cout << "-> Full column rank: use (d^T d)^(-1) d^T\n";
+    } else if (m <= n && rank == m) {
+        std::cout << "-> Full row rank: use d^T (d d^T)^(-1)\n";
+    } else {
+        std::cout << "-> Rank deficient: must use SVD or iterative solver for pseudoinverse\n";
+    }
+    std::cout << std::endl;
+}
+
 void PressureProjectionSolver::compute(IntrinsicGeometryInterface &geom) {
     geom.required0();
+    checkMatrixCriteria(geom.d0);
     A = geom.d0;
     AT = A.transpose();
     solver.compute(AT * A);
-    // TODO: QR - solver.compute(A);
     geom.unrequired0();
 }
 
@@ -48,7 +72,6 @@ EdgeData<double>
 PressureProjectionSolver::solve(ManifoldSurfaceMesh &mesh,
                                 const EdgeData<double> &co_loop) const {
     Eigen::VectorXd x = co_loop.toVector();
-    // TODO: QR - Eigen::VectorXd c = solver.solve(x);
     Eigen::VectorXd c = solver.solve(AT * x);
     return EdgeData<double>(mesh, x - A * c);
 }
@@ -60,10 +83,51 @@ void AdaptivePressureProjectionSolver::compute(IntrinsicGeometryInterface &geom)
     solver.compute(AT * A);
     geom.unrequired0();
 }
-EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, EdgeData<double> &guess) {
+
+EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, VertexData<double> *guess) {
+    if (guess == nullptr)
+        guess = new VertexData<double>(mesh, 0);
     Eigen::VectorXd x = co_loop.toVector();
-    Eigen::VectorXd c = solver.solveWithGuess(AT * x,guess.toVector());
-    guess = EdgeData<double>(mesh,c);
+    assert(x.size() == mesh.nEdges());
+    Eigen::VectorXd rhs = AT *x;
+    Eigen::VectorXd guessV = guess->toVector();
+    assert(guess->size() == rhs.size());
+    Eigen::VectorXd c = solver.solveWithGuess(AT * x, guess->toVector());
+
+    auto info = solver.info();
+    if (info != Eigen::Success) {
+        std::string msg = "Eigen iterative solver failed.\n";
+        msg += "  Solver type: LeastSquaresConjugateGradient (or your solver)\n";
+        msg += "  Iterations: " + std::to_string(solver.iterations()) + "\n";
+        msg += "  Max iterations: " + std::to_string(solver.maxIterations()) + "\n";
+        msg += "  Final error (rel. residual): " + std::to_string(solver.error()) + "\n";
+        msg += "  Issue: ";
+        if (info == Eigen::NoConvergence) {
+            msg += "No convergence (did not reach tolerance).\n";
+            msg += "). Retrying with regularization...\n";
+            // --- Fallback 1: add Tikhonov regularization ---
+            const double lambda = 1e-6; // tune as needed
+            SparseMatrix<double> Areg = AT * A + lambda * SparseMatrix<double>(A.cols(), A.cols());
+            Eigen::BiCGSTAB<SparseMatrix<double>> fallbackSolver;
+            fallbackSolver.compute(Areg);
+            c = fallbackSolver.solve(AT * x);
+
+            if (fallbackSolver.info() != Eigen::Success) {
+                throw std::runtime_error(msg);
+            }
+        } else if (info == Eigen::NumericalIssue) {
+            msg += "Numerical issue encountered (instability or breakdown).\n";
+            throw std::runtime_error(msg);
+        } else if (info == Eigen::InvalidInput) {
+            msg += "Invalid input or improper solver use.\n";
+            throw std::runtime_error(msg);
+        } else {
+            msg += "Unknown error code.\n";
+            throw std::runtime_error(msg);
+        }
+    }
+
+    *guess = VertexData<double>(mesh,c);
     return EdgeData<double>(mesh, x - A * c);
 }
 
@@ -130,12 +194,12 @@ void modifiedGramSchmidt(const MatrixX2d &A, MatrixX2d &Q, Eigen::MatrixXd &R, c
 
 std::vector<FaceData<Vector2>>
 orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<FaceData<Vector2>> &X) {
+    geom.requireFaceAreas();
     MatrixX2d matrix(mesh.nFaces(), X.size());
-    // TODO: Think about indexing
+    auto f_idx = mesh.getFaceIndices();
     for (std::size_t m = 0; m < X.size(); m++) {
-        for (std::size_t n = 0; n < mesh.nFaces(); n++) {
-            matrix(n, m) =
-                X[m][mesh.face(n)] * std::sqrt(geom.faceAreas[mesh.face(n)]);
+        for (Face f: mesh.faces()){
+            matrix(f_idx[f], m) = X[m][f] * std::sqrt(geom.faceAreas[f]);
         }
     }
     MatrixX2d Q{};
@@ -150,11 +214,15 @@ orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, cons
     std::vector<FaceData<Vector2>> h{};
     for (std::size_t m = 0; m < X.size(); m++) {
         FaceData<Vector2> &hm = h.emplace_back(mesh);
-        for (std::size_t n = 0; n < mesh.nFaces(); n++) {
-            Face f = mesh.face(n);
-            hm[f] = Q(n, m) * (1. / std::sqrt(geom.faceAreas[f]));
+        for (Face f: mesh.faces()){
+            hm[f] = Q(f_idx[f], m) * (1. / std::sqrt(geom.faceAreas[f]));
         }
+        // re-normalize
+        double norm = 0.0;
+        for (Face f: mesh.faces()) norm += geom.faceAreas[f] * dot(hm[f], hm[f]); // area-weighted
+        // for (Face f: mesh.faces()) hm[f] /= std::sqrt(norm);
     }
+    geom.unrequireFaceAreas();
     return h;
 }
 
