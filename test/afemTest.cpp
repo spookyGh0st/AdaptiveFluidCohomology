@@ -501,7 +501,8 @@ struct AdaptiveFluidVisualization {
             FaceData<Vector2> b = solver->h[i];
             if (normalize_basis) for (Face f: mesh.faces()) { b[f] /= g.faceArea(f); }
             polym->addFaceTangentVectorQuantity("harmonic form " + std::to_string(i),b,e1,e2);
-            polym->addFaceScalarQuantity("dw_face - " + std::to_string(i),dw_face[i]);
+            auto dwf = normalize_basis ? dw_face[i] / g.faceAreas : dw_face[i];
+            polym->addFaceScalarQuantity("dw_face - " + std::to_string(i),dwf);
         }
 
         polym->addFaceTangentVectorQuantity("Lamb Form ", lamb_form(mesh,solver->wc.w,v.u),e1,e2);

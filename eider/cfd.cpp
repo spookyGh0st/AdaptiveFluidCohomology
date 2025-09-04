@@ -76,8 +76,9 @@ wc_wrapper evalRHS(
     std::vector<double> dc(wc.c.size(), 0);
     for (std::size_t i = 0; i < wc.c.size(); i++){
         for (Face f : mesh.faces()){
-            if(face_dc) face_dc->at(i)[f] = dot(l[f], h[i][f]) * geom.faceAreas[f];
-            dc[i] += dot(l[f], h[i][f]) * geom.faceAreas[f];
+            auto dcf = dot(l[f], h[i][f]) * geom.faceAreas[f];
+            if(face_dc) face_dc->at(i)[f] = dcf;
+            dc[i] += dcf;
         }
     }
 

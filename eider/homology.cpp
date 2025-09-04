@@ -199,7 +199,7 @@ orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, cons
     auto f_idx = mesh.getFaceIndices();
     for (std::size_t m = 0; m < X.size(); m++) {
         for (Face f: mesh.faces()){
-            matrix(f_idx[f], m) = X[m][f] * std::sqrt(geom.faceAreas[f]);
+            matrix(f_idx[f], m) = X[m][f] /* std::sqrt(geom.faceAreas[f])*/;
         }
     }
     MatrixX2d Q{};
@@ -215,14 +215,16 @@ orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, cons
     for (std::size_t m = 0; m < X.size(); m++) {
         FaceData<Vector2> &hm = h.emplace_back(mesh);
         for (Face f: mesh.faces()){
-            hm[f] = Q(f_idx[f], m) * (1. / std::sqrt(geom.faceAreas[f]));
+            hm[f] = Q(f_idx[f], m) /* *(1. / std::sqrt(geom.faceAreas[f]))*/;
         }
         // re-normalize
         double norm = 0.0;
+        hm /= geom.faceAreas;
         for (Face f: mesh.faces()) norm += geom.faceAreas[f] * dot(hm[f], hm[f]); // area-weighted
-        // for (Face f: mesh.faces()) hm[f] /= std::sqrt(norm);
+        for (Face f: mesh.faces()) hm[f] /= std::sqrt(norm);
     }
     geom.unrequireFaceAreas();
+    // While I orthonormalize w.r.t. face are, I wan't to store my triangle as the constant value
     return h;
 }
 
