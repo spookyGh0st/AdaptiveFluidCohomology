@@ -16,6 +16,7 @@ class AdaptiveHomologyBasis{
   public:
     AdaptivePressureProjectionSolver pp_solver;
     std::vector<VertexData<double>> pf_guess;
+    std::vector<VertexData<double>> pf_guess_L2;
     Homology_basis homologyB;
     explicit AdaptiveHomologyBasis(IntrinsicTriangulation& icit);
     [[nodiscard]] Harmonic_basis harmonicBasis();

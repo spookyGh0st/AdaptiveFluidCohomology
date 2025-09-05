@@ -199,6 +199,7 @@ AdaptiveHomologyBasis::AdaptiveHomologyBasis(IntrinsicTriangulation &icit) : mes
 
     // initialize guesses with zero-vectors.
     pf_guess.resize(homologyB.size(), VertexData<double>(mesh, 0));
+    pf_guess_L2 = pf_guess;
 
     for (auto &b : homologyB) {
         icit.edgeSplitCallbackList.emplace_back([&b](Edge e, Halfedge he1, Halfedge he2) { onSplit(e, he1, he2, b.nextLeft); });
@@ -206,9 +207,17 @@ AdaptiveHomologyBasis::AdaptiveHomologyBasis(IntrinsicTriangulation &icit) : mes
     for (auto &b : homologyB) {
         icit.edgeCollapseCallbackList.emplace_back([&b](Halfedge he) { onCollapse(he, b.nextLeft); });
     }
+    for(auto &g: pf_guess){
+        icit.edgeSplitCallbackList.emplace_back([&icit,&g](Edge e, Halfedge he1, Halfedge he2) {
+          assert(he1.tailVertex() == he2.tailVertex());
+          g[he1.vertex()] = 0.5 * g[he1.tipVertex()] + 0.5 * g[he2.tipVertex()];
+          // TODO: Update neighboring vertex, these always have diff between guess and solution
+        });
+    }
 }
 
 Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() {
+    pf_guess_L2 = pf_guess;
     pp_solver.compute(geom);
     std::vector<FaceData<Vector2>> h(homologyB.size());
     for (std::size_t i = 0; i < homologyB.size(); i++) {

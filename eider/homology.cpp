@@ -93,8 +93,8 @@ EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfac
     Eigen::VectorXd guessV = guess->toVector();
     assert(guess->size() == rhs.size());
     Eigen::VectorXd c = solver.solveWithGuess(AT * x, guess->toVector());
-
     auto info = solver.info();
+    std::cout << solver.iterations() << std::endl;
     if (info != Eigen::Success) {
         std::string msg = "Eigen iterative solver failed.\n";
         msg += "  Solver type: LeastSquaresConjugateGradient (or your solver)\n";
@@ -191,6 +191,7 @@ void modifiedGramSchmidt(const MatrixX2d &A, MatrixX2d &Q, Eigen::MatrixXd &R, c
     }
 }
 
+// TODO: Use Hausedolder Decomp, it is faster and has better numerical properties.
 std::vector<FaceData<Vector2>>
 orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<FaceData<Vector2>> &X) {
     geom.requireFaceAreas();
