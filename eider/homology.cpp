@@ -152,7 +152,7 @@ FaceData<Vector2> whitney_interpolation(ManifoldSurfaceMesh &mesh,
             vT += wij / 6 * (nj - ni);
         }
         assert(vT.isFinite());
-        vField[f] = vT;
+        vField[f] = vT / A;
     }
 
     return vField;
@@ -181,7 +181,6 @@ void modifiedGramSchmidt(const MatrixX2d &A, MatrixX2d &Q, Eigen::MatrixXd &R, c
                 v[k] -= w[k] * R(i, j);
             }
         }
-
         R(j, j) = std::sqrt(innerProduct(v, v));
         if (R(j, j) == 0.0) {
             throw std::runtime_error("Linearly dependent column detected");
@@ -199,15 +198,16 @@ orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, cons
     auto f_idx = mesh.getFaceIndices();
     for (std::size_t m = 0; m < X.size(); m++) {
         for (Face f: mesh.faces()){
-            matrix(f_idx[f], m) = X[m][f] /* std::sqrt(geom.faceAreas[f])*/;
+            matrix(f_idx[f], m) = X[m][f];
         }
     }
     MatrixX2d Q{};
     Eigen::MatrixXd R{};
-    auto inner_product = [](const VectorX2d &a, const VectorX2d &b) -> double {
+    Eigen::VectorXd face_vec = geom.faceAreas.toVector(f_idx);
+    auto inner_product = [&face_vec](const VectorX2d &a, const VectorX2d &b) -> double {
         double s = 0;
         for (long i = 0; i < a.size(); i++)
-            s += dot(a[i], b[i]);
+            s += dot(a[i], b[i]) * face_vec[i];
         return s;
     };
     modifiedGramSchmidt(matrix, Q, R, inner_product);
@@ -215,16 +215,10 @@ orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, cons
     for (std::size_t m = 0; m < X.size(); m++) {
         FaceData<Vector2> &hm = h.emplace_back(mesh);
         for (Face f: mesh.faces()){
-            hm[f] = Q(f_idx[f], m) /* *(1. / std::sqrt(geom.faceAreas[f]))*/;
+            hm[f] = Q(f_idx[f], m);
         }
-        // re-normalize
-        double norm = 0.0;
-        hm /= geom.faceAreas;
-        for (Face f: mesh.faces()) norm += geom.faceAreas[f] * dot(hm[f], hm[f]); // area-weighted
-        for (Face f: mesh.faces()) hm[f] /= std::sqrt(norm);
     }
     geom.unrequireFaceAreas();
-    // While I orthonormalize w.r.t. face are, I wan't to store my triangle as the constant value
     return h;
 }
 

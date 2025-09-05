@@ -497,7 +497,16 @@ struct AdaptiveFluidVisualization {
         polym->addVertexScalarQuantity("vorticity - change",dwdc.w);
         polym->addVertexScalarQuantity("stream_function",v.stream_function);
 
+
+        AdaptivePressureProjectionSolver pp_solver;
+        pp_solver.compute(g);
         for (int i = 0; i < solver->h.size(); ++i) {
+            auto &basis = solver->hom.homologyB[i];
+            auto df = delta_form(mesh, basis);
+            EdgeData<double> pf = pp_solver.solveWithGuess(mesh, df, &solver->hom.pf_guess[i]);
+            FaceData<Vector2> h = whitney_interpolation(mesh, g, pf);
+            polym->addFaceTangentVectorQuantity("harmonic form Whitney" + std::to_string(i),h,e1,e2);
+
             FaceData<Vector2> b = solver->h[i];
             if (normalize_basis) for (Face f: mesh.faces()) { b[f] /= g.faceArea(f); }
             polym->addFaceTangentVectorQuantity("harmonic form " + std::to_string(i),b,e1,e2);
