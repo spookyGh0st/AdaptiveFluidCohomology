@@ -16,17 +16,20 @@ struct PressureProjectionSolver {
     EdgeData<double> solve(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop) const;
     Eigen::SparseMatrix<double> A, AT;
     // Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver {};
-    // Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver{};
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver{};
     // TODO: check wether i need QR to solve pseudoinverse - I hope not, but Im afraid I do!
-    Eigen::ConjugateGradient<SparseMatrix<double>> solver;
+    //Eigen::ConjugateGradient<SparseMatrix<double>> solver;
 };
 
 struct AdaptivePressureProjectionSolver {
     void compute(IntrinsicGeometryInterface &geom);
-    EdgeData<double> solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, VertexData<double>* guess);
+    EdgeData<double> solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, EdgeData<double>* guess);
     Eigen::SparseMatrix<double> A, AT;
     Eigen::ConjugateGradient<SparseMatrix<double>> solver {};
 };
+
+/// compute (I + dd^+) x  for a local edge split
+void project_local(Halfedge he, EdgeData<double>& delta_form);
 
 using Harmonic_basis = std::vector<FaceData<Vector2>>;
 

@@ -198,21 +198,16 @@ AdaptiveHomologyBasis::AdaptiveHomologyBasis(IntrinsicTriangulation &icit) : mes
     homologyB = singular_homology_basis(mesh, homotopy);
 
     // initialize guesses with zero-vectors.
-    pf_guess.resize(homologyB.size(), VertexData<double>(mesh, 0));
+    pf_guess.resize(homologyB.size(), EdgeData<double>(mesh, 0));
     pf_guess_L2 = pf_guess;
 
-    for (auto &b : homologyB) {
+    for (int i = 0; i < homologyB.size(); ++i) {
+        auto&b = homologyB[i]; auto& g = pf_guess[i];
         icit.edgeSplitCallbackList.emplace_back([&b](Edge e, Halfedge he1, Halfedge he2) { onSplit(e, he1, he2, b.nextLeft); });
+        // icit.edgeSplitCallbackList.emplace_back([&g](Edge e, Halfedge he1, Halfedge he2) { project_local(he1,g); });
     }
     for (auto &b : homologyB) {
         icit.edgeCollapseCallbackList.emplace_back([&b](Halfedge he) { onCollapse(he, b.nextLeft); });
-    }
-    for(auto &g: pf_guess){
-        icit.edgeSplitCallbackList.emplace_back([&icit,&g](Edge e, Halfedge he1, Halfedge he2) {
-          assert(he1.tailVertex() == he2.tailVertex());
-          g[he1.vertex()] = 0.5 * g[he1.tipVertex()] + 0.5 * g[he2.tipVertex()];
-          // TODO: Update neighboring vertex, these always have diff between guess and solution
-        });
     }
 }
 
@@ -224,7 +219,7 @@ Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() {
         auto &basis = homologyB[i];
         auto df = delta_form(mesh, basis);
         assert(df.raw().allFinite());
-        EdgeData<double> pf = pp_solver.solveWithGuess(mesh, df, &pf_guess[i]);
+        EdgeData<double> pf = pp_solver.solve(mesh, df);
         assert(pf.raw().allFinite());
         h[i] = whitney_interpolation(mesh, geom, pf);
         assert(h[i].raw().allFinite());

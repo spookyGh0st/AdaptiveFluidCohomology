@@ -37,12 +37,13 @@ EdgeData<double> delta_form(ManifoldSurfaceMesh &mesh,
     return delta;
 }
 
-void checkMatrixCriteria(const Eigen::MatrixXd &d) {
+#include <Eigen/src/SVD/JacobiSVD.h>
+void checkMatrixCriteria(const Eigen::Matrix<double,8,5> &d) {
     int m = d.rows();
     int n = d.cols();
 
     // Compute rank with SVD
-    Eigen::BDCSVD<Eigen::MatrixXd> svd = Eigen::BDCSVD<Eigen::MatrixXd>(d, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    Eigen::JacobiSVD svd (d);
     double tol = 1e-10;  // tolerance threshold
     int rank = (svd.singularValues().array() > tol).count();
 
@@ -59,9 +60,61 @@ void checkMatrixCriteria(const Eigen::MatrixXd &d) {
     std::cout << std::endl;
 }
 
+// [center, ohe1, ... , ohe[4]
+inline uint8_t ivHead(uint8_t iEdge) {
+    return iEdge < 4? 1+iEdge : 1+(iEdge+1)%4;
+}
+inline uint8_t ivTail(uint8_t iEdge) {
+    return iEdge < 4? 0 : iEdge-3;
+}
+
+void project_local(Halfedge he, EdgeData<double>& delta_form) {
+    using Mat85 = Eigen::Matrix<double,8,5>;
+    using Mat8 = Eigen::Matrix<double,8,8>;
+    using Vec8 = Eigen::Matrix<double,8,1>;
+
+    // Set up arrays
+    std::array<Vertex,5> vertices;
+    std::array<Halfedge,8> edges;
+    Vertex vi = he.vertex();
+    vertices[0] = vi;
+    {
+        int i = 0;
+        for (Halfedge he: vi.outgoingHalfedges()) { vertices[i++] = he.tipVertex();};
+        i = 0; for (Halfedge he:  vi.outgoingHalfedges()) { edges[i++] = he;};
+        for (Halfedge he:  vi.outgoingHalfedges()) { edges[i++] = he.next();};
+    }
+
+    // compute local d0
+    Mat85 localD = Mat85::Zero();
+    for (uint8_t iEdge = 0; iEdge < 8; ++iEdge) {
+        uint8_t iVHead = ivHead(iEdge);
+        uint8_t iVTail = ivTail(iEdge);
+        localD(iEdge, iVHead) = edges[iEdge].orientation() ? 1.0: -1.0;
+        localD(iEdge, iVTail) = edges[iEdge].orientation() ? -1.0: 1.0;
+    }
+
+
+    Vec8 x;
+    for (int i = 0; i < edges.size(); ++i) {
+        x[i] = delta_form[edges[i].edge()];
+    }
+    Eigen::JacobiSVD svd (localD , Eigen::ComputeFullU);
+
+    Mat8 U = svd.matrixU();
+    int r = svd.rank();
+    Mat8 Ur = Mat8::Zero();
+    Ur.leftCols(r) = U.leftCols(r);
+    Vec8 proj = Ur * (Ur.transpose() * x);
+    Vec8 result = x-proj;
+
+    for (uint8_t i = 0; i <edges.size(); i++) {
+        delta_form[edges[i].edge()] = result[i];
+    }
+}
+
 void PressureProjectionSolver::compute(IntrinsicGeometryInterface &geom) {
     geom.required0();
-    checkMatrixCriteria(geom.d0);
     A = geom.d0;
     AT = A.transpose();
     solver.compute(AT * A);
@@ -84,15 +137,13 @@ void AdaptivePressureProjectionSolver::compute(IntrinsicGeometryInterface &geom)
     geom.unrequired0();
 }
 
-EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, VertexData<double> *guess) {
-    if (guess == nullptr)
-        guess = new VertexData<double>(mesh, 0);
+EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, EdgeData<double> *guess) {
+    assert (guess != nullptr);
     Eigen::VectorXd x = co_loop.toVector();
     assert(x.size() == mesh.nEdges());
     Eigen::VectorXd rhs = AT *x;
     Eigen::VectorXd guessV = guess->toVector();
-    assert(guess->size() == rhs.size());
-    Eigen::VectorXd c = solver.solveWithGuess(AT * x, guess->toVector());
+    Eigen::VectorXd c = solver.solveWithGuess(AT * x, AT * (x-guess->toVector()));
     auto info = solver.info();
     std::cout << solver.iterations() << std::endl;
     if (info != Eigen::Success) {
@@ -127,7 +178,7 @@ EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfac
         }
     }
 
-    *guess = VertexData<double>(mesh,c);
+    *guess = EdgeData<double>(mesh,x-A*c);
     return EdgeData<double>(mesh, x - A * c);
 }
 

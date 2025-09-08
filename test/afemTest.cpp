@@ -468,6 +468,8 @@ struct AdaptiveFluidVisualization {
         plotter = std::make_unique<AdaptiveFluidPlotter>(*solver);
     }
 
+    bool init = true;
+
     struct SolverState {
         bool running = false;
         bool adaptive_run = false;
@@ -483,8 +485,6 @@ struct AdaptiveFluidVisualization {
         VertexData<Vector3> int_positions = intrinsic_geom(*intrT,*pGeom);
         VertexPositionGeometry g(mesh,int_positions);
         polyscope::SurfaceMesh* polym = polyscope::registerSurfaceMesh(name, int_positions,mesh.getFaceVertexList(), polyscopePermutations(mesh));
-        // polym->setAllPermutations(polyscopePermutations(mesh));
-
         g.requireFaceTangentBasis();
         FaceData<Vector3> e1(mesh),e2(mesh);
         for (Face f: mesh.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
@@ -499,22 +499,18 @@ struct AdaptiveFluidVisualization {
 
 
         for (int i = 0; i < solver->h.size(); ++i) {
-            /*
             auto &basis = solver->hom.homologyB[i];
             auto df = delta_form(mesh, basis);
-            EdgeData<double> pf = pp_solver.solveWithGuess(mesh, df, &solver->hom.pf_guess[i]);
-            FaceData<Vector2> h = whitney_interpolation(mesh, g, pf);
-            polym->addFaceTangentVectorQuantity("harmonic form Whitney" + std::to_string(i),h,e1,e2);
-             */
+            polym->addEdgeScalarQuantity("harmonic form Whitney" + std::to_string(i),df);
 
             FaceData<Vector2> b = solver->h[i];
             if (normalize_basis) for (Face f: mesh.faces()) { b[f] /= g.faceArea(f); }
             polym->addFaceTangentVectorQuantity("harmonic form " + std::to_string(i),b,e1,e2);
             auto dwf = normalize_basis ? dw_face[i] / g.faceAreas : dw_face[i];
             polym->addFaceScalarQuantity("dw_face - " + std::to_string(i),dwf);
-            polym->addVertexScalarQuantity("Guess - " + std::to_string(i),solver->hom.pf_guess[i]);
-            polym->addVertexScalarQuantity("Guess - L2" + std::to_string(i),solver->hom.pf_guess_L2[i]);
-            polym->addVertexScalarQuantity("Guess - Diff" + std::to_string(i),solver->hom.pf_guess[i] - solver->hom.pf_guess_L2[i]);
+            polym->addEdgeScalarQuantity("Guess - " + std::to_string(i),solver->hom.pf_guess[i]);
+            polym->addEdgeScalarQuantity("Guess - L2" + std::to_string(i),solver->hom.pf_guess_L2[i]);
+            polym->addEdgeScalarQuantity("Guess - Diff" + std::to_string(i),solver->hom.pf_guess[i] - solver->hom.pf_guess_L2[i]);
         }
 
         polym->addFaceTangentVectorQuantity("Lamb Form ", lamb_form(mesh,solver->wc.w,v.u),e1,e2);
