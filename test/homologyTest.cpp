@@ -284,6 +284,7 @@ void reportMatrix(std::string name, Eigen::MatrixXd A) {
     std::cout << "  Invertible: " << lu.isInvertible() << std::endl;
 }
 
+/// This test shows, That (I-AA^+) x is equivalent to solving the least square system, even if the matrixes are not invertible
 TEST(homologyTest, d0Test) {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
