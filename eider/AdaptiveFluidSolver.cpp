@@ -12,6 +12,10 @@ AdaptiveFluidSolver::AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper 
       dt(0.0001) {
     if (this->wc.c.empty()) this->wc.c = std::vector<double>(hom.homologyB.size(),0);
     S.compute(tri.mesh(), tri.geom());
+    // On split, lerp w s.t. guess is closer to actual solution.
+    tri.intrinsicTriangulation().edgeSplitCallbackList.push_back([&](Edge e, Halfedge he1, Halfedge he2) {
+        this->wc.w[he1.vertex()] = 0.5 * this->wc.w[he1.tipVertex()] + 0.5 * this->wc.w[he2.tipVertex()];
+    });
 }
 
 void AdaptiveFluidSolver::adapt() {

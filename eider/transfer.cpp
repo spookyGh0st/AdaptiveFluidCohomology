@@ -81,6 +81,7 @@ VertexData<double> AdaptiveTransfer::transfer() {
     lscg.compute(mat);
     Vector<double> vec = P_C.transpose() * GLMM * P_B * vecfB;
     Vector<double> vec_fC = lscg.solveWithGuess(vec,f_B.toVector(coarse_idx));
+    // TODO: debug std::cout << lscg.iterations() << std::endl;
     assert(vec_fC.allFinite());
     return VertexData<double>(mesh,vec_fC,coarse_idx);
 }
