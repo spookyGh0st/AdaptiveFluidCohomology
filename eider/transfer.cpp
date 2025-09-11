@@ -4,7 +4,7 @@
 
 namespace geometrycentral::surface {
 
-AdaptiveTransfer::AdaptiveTransfer(IntrinsicTriangulation &tri, VertexData<double> f_B)
+AdaptiveTransfer::AdaptiveTransfer(IntrinsicTriangulation &tri, VertexData<double>& f_B)
     :mesh(*tri.intrinsicMesh), geom(tri), base_Idx ( mesh.getVertexIndices()), nB(mesh.nVertices()), vecfB(f_B.toVector(base_Idx)), f_B(f_B) {
 }
 
@@ -75,13 +75,12 @@ VertexData<double> AdaptiveTransfer::transfer() {
     assert(GLMM.cols() == nR);
     assert(GLMM.rows() == nR);
 
-    SparseMatrix<double> mat = P_C.transpose() * GLMM * P_C;
+    // SparseMatrix<double> mat = P_C.transpose() * GLMM * P_C;
      //auto AtoB_L2_Solver_F = std::make_unique<SquareSolver<double>>(mat);
-    Eigen::BiCGSTAB<SparseMatrix<double>> lscg;
-    lscg.compute(mat);
+    Eigen::ConjugateGradient<SparseMatrix<double>> lscg;
+    lscg.compute(P_C.transpose() * GLMM * P_C);
     Vector<double> vec = P_C.transpose() * GLMM * P_B * vecfB;
     Vector<double> vec_fC = lscg.solveWithGuess(vec,f_B.toVector(coarse_idx));
-    // TODO: debug std::cout << lscg.iterations() << std::endl;
     assert(vec_fC.allFinite());
     return VertexData<double>(mesh,vec_fC,coarse_idx);
 }

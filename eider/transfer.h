@@ -25,7 +25,7 @@ struct AdaptiveTriplet{
 class AdaptiveTransfer {
   public:
     /// Initialize Adaptive Transfer with Vertexdata at base Triangulation
-    AdaptiveTransfer(IntrinsicTriangulation& tri, VertexData<double> f_B);
+    AdaptiveTransfer(IntrinsicTriangulation& tri, VertexData<double>& f_B);
 
     void startRefine();
 
@@ -40,7 +40,7 @@ class AdaptiveTransfer {
 
     VertexData<double> transfer();
   private:
-    VertexData<double> f_B;
+    VertexData<double>& f_B;
     ManifoldSurfaceMesh& mesh; IntrinsicGeometryInterface& geom;
     VertexData<std::size_t> base_Idx, refined_idx, coarse_idx;
     // Interpolation Matrixes from base/coarse T to Refined T
