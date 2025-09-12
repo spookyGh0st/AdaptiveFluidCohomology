@@ -2,6 +2,7 @@
 
 #include <eider/AdaptiveFluidSolver.h>
 
+#include "Evaluator.h"
 #include "eider/homotopy.h"
 #include "eider/util.h"
 #include "geometrycentral/surface/integer_coordinates_intrinsic_triangulation.h"
@@ -71,6 +72,7 @@ struct TaylorInitializer {
 };
 
 #include <cstddef> // for size_t
+#include <utility>
 
 void sortByNames(std::vector<std::string>& names,
                  std::vector<std::filesystem::path>& paths) {
@@ -274,8 +276,7 @@ double L2Norm(VertexData<double> d, IntrinsicGeometryInterface& geom){
     for (Face f: geom.mesh.faces()){
         double fs = 0;
         for(Vertex v: f.adjacentVertices()){
-            // TODO: abs only debug
-            fs += std::abs(d[v]);
+            fs += d[v];
         }
         s += fs/3*geom.faceAreas[f];
     }
@@ -298,102 +299,59 @@ struct AdaptiveFluidPlotter {
     int adapt = 0;
     std::vector<std::vector<float>> adapt_dc;
     std::vector<float> adapt_fluid_velocity, adapt_vorticity_data, adapt_stream_function_data, adapt_lamb, adapt_dw;
+    Evaluator evt, eva;
+    void registerAll(Evaluator& ev,int h_size){
+        ev.reg("dopri - dt", [](EvData d) { return d.dp5s.t_past; });
+        ev.reg("dopri - attempts", [](EvData d) { return d.dp5s.attempts; });
+        ev.reg("velocity", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
+        ev.reg("streamfunction", [](EvData d) { return L2Norm(d.vel.stream_function,d.geom); });
+        ev.reg("w", [](EvData d) { return L2Norm(d.wc.w,d.geom); });
+        ev.reg("dw", [](EvData d) { return L2Norm(d.rhs.w,d.geom); });
+        for (int i = 0; i < h_size; ++i) {
+            ev.reg("c"+std::to_string(i), [&i](EvData d) { return d.wc.c[i]; });
+            ev.reg("dc"+std::to_string(i), [&i](EvData d) { return d.rhs.c[i]; });
+        }
+
+    }
     AdaptiveFluidPlotter(AdaptiveFluidSolver& solver){
-        c_data.resize(solver.h.size());
-        hom_sum.resize(solver.h.size());
-        dc.resize(solver.h.size());
-        adapt_dc.resize(solver.h.size());
+        registerAll(evt,solver.h.size());
+        registerAll(eva,solver.h.size());
     }
 
     void onAdapt(AdaptiveFluidSolver& solver){
-        adapt_data.push_back(adapt++);
-
         ManifoldSurfaceMesh& mesh = solver.tri.mesh();
         IntrinsicGeometryInterface& geom = solver.tri.geom();
-
-        auto vel = solver.velocity();
-        adapt_fluid_velocity.push_back(L2Norm(vel.u,geom));
-        adapt_vorticity_data.push_back(L2Norm(solver.wc.w,geom));
-        adapt_stream_function_data.push_back(L2Norm(vel.stream_function,geom));
-        adapt_lamb.push_back(L2Norm(lamb_form(mesh,solver.wc.w,vel.u),geom));
-
         wc_wrapper rhs = evalRHS(mesh,geom,solver.wc,solver.h,solver.S);
-        for (int i = 0; i < solver.h.size(); ++i) {
-            adapt_dc[i].push_back(rhs.c[i]);
-        }
-        adapt_dw.push_back(L2Norm(rhs.w,geom));
+        EvData data { mesh, geom, solver.velocity(), rhs, solver.wc, solver.h, DOPRI5_sample() };
+        eva.onStep(data,1);
     }
 
-    void onStep(AdaptiveFluidSolver& solver){
-        t_data.push_back(solver.elapsed_time);
-        dt.push_back(solver.dt);
-
+    void onStep(AdaptiveFluidSolver& solver, DOPRI5_sample sample){
         ManifoldSurfaceMesh& mesh = solver.tri.mesh();
         IntrinsicGeometryInterface& geom = solver.tri.geom();
         wc_wrapper rhs = evalRHS(mesh,geom,solver.wc,solver.h,solver.S);
+        EvData data { mesh, geom, solver.velocity(), rhs, solver.wc, solver.h, sample };
+        evt.onStep(data,sample.t_past);
+    }
 
-        for (int i = 0; i < solver.h.size(); ++i) {
-            c_data[i].push_back(solver.wc.c[i]);
-            hom_sum[i].push_back(L2Norm(solver.h[i],geom));
-            dc[i].push_back(rhs.c[i]);
+    void plote(std::string name, Evaluator& e){
+        if(ImGui::TreeNode(name.c_str())){
+            auto groups = evt.group_columns();
+            for (auto const& [prefix, vecs] : groups) {
+                timePlot(prefix,[&]() {
+                  for(const auto i: vecs){
+                      ImPlot::PlotLine(evt.y[i].name.c_str(),  e.x.data(), e.y[i].data.data(),int(e.x.size()));
+                  }
+                });
+            }
+            ImGui::TreePop();
         }
 
-        auto vel = solver.velocity();
-
-        fluid_velocity.push_back(L2Norm(vel.u,geom));
-        vorticity_data.push_back(L2Norm(solver.wc.w,geom));
-        vorticity_data.push_back(L2Norm(vel.stream_function,geom));
-        lamb.push_back(L2Norm(lamb_form(mesh,solver.wc.w,vel.u),geom));
-        dw.push_back(L2Norm(rhs.w,geom));
     }
 
     void callBack(){
-        ImGui::PushID(this);
-        if(ImGui::TreeNode("Time Plots")){
-            timePlot("Delta Time",[&]() {
-              ImPlot::PlotLine("dt",  t_data.data(), dt.data(),int(t_data.size()));
-            });
-            timePlot("Homology Coefficients",[&]() {
-              for (int j = 0; j < c_data.size() ; ++j) { ImPlot::PlotLine(("c" + std::to_string(j)).c_str(), t_data.data(), c_data[j].data(),int(t_data.size())); }
-            });
-            timePlot("Harmonic basis norm",[&]() {
-              for (int j = 0; j < hom_sum.size(); ++j) { ImPlot::PlotLine(("c" + std::to_string(j)).c_str(), t_data.data(), hom_sum[j].data(), int(t_data.size())); }
-            });
-            timePlot("velocity norm",[&]() {
-              ImPlot::PlotLine("fluid", t_data.data(), fluid_velocity.data(), int(t_data.size()));
-            });
-            timePlot("vorticity/streamfunction norm",[&]() {
-              ImPlot::PlotLine("vorticity", t_data.data(), vorticity_data.data(), int(t_data.size()));
-              ImPlot::PlotLine("streamfunction", t_data.data(), stream_function_data.data(), int(t_data.size()));
-            });
-            timePlot("dc",[&]() {
-              for (int j = 0; j < c_data.size() ; ++j) { ImPlot::PlotLine(("dc" + std::to_string(j)).c_str(), t_data.data(), dc[j].data(),int(t_data.size())); }
-            });
-            timePlot("dw",[&]() {
-              ImPlot::PlotLine("dw", t_data.data(), dw.data(),int(t_data.size()));
-            });
-            ImGui::TreePop();
-        }
-        if(ImGui::TreeNode("Adapt_plots")){
-            timePlot("velocity norm",[&]() {
-              ImPlot::PlotLine("velocity", adapt_data.data(), adapt_fluid_velocity.data(), int(adapt_data.size()));
-            });
-            timePlot("vorticity/streamfunction norm",[&]() {
-              ImPlot::PlotLine("vorticity", adapt_data.data(), adapt_vorticity_data.data(), int(adapt_data.size()));
-              ImPlot::PlotLine("streamfunction", adapt_data.data(), adapt_stream_function_data.data(), int(adapt_data.size()));
-            });
-            timePlot("Lamb norm",[&]() {
-              ImPlot::PlotLine("Lamb form", adapt_data.data(), adapt_lamb.data(), int(adapt_data.size()));
-            });
-            timePlot("dc",[&]() {
-              for (int j = 0; j < c_data.size() ; ++j) { ImPlot::PlotLine(("dc" + std::to_string(j)).c_str(), adapt_data.data(), adapt_dc[j].data(),int(adapt_data.size())); }
-            });
-            timePlot("dw",[&]() {
-              ImPlot::PlotLine("dw", adapt_data.data(), adapt_dw.data(),int(adapt_data.size()));
-            });
-            ImGui::TreePop();
-        }
-        ImGui::PopID();
+        plote("Time plot", evt);
+        plote("Adapt plot", eva);
     }
 };
 
@@ -552,13 +510,13 @@ struct AdaptiveFluidVisualization {
             ImGui::InputInt("Adapt after:", &state.adapt_after);
             if (state.running || ImGui::Button("Advance")) {
                 wc_wrapper wc = solver->wc;
-                solver->step();
+                DOPRI5_sample dopri5_sample = solver->step();
                 state.step++;
                 if (state.adaptive_run && state.step % state.adapt_after == 0){
                     solver->adapt();
                     plotter->onAdapt(*solver);
                 }
-                plotter->onStep(*solver);
+                plotter->onStep(*solver,dopri5_sample);
                 if (fix_c)
                     solver->wc.c = wc.c;
                 visualize();
@@ -694,4 +652,3 @@ TEST(afemTest, testPathConsistency){
 
     polyscope::show();
 }
-

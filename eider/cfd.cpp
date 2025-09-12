@@ -176,7 +176,9 @@ DOPRI5_sample DOPRI5_step(
     bool accepted = false;
     double facMax = conf.faxmax;
     std::array<wc_wrapper, 2> y;
+    int attempts = -1;
     while (!accepted) {
+        attempts++;
         constexpr double q = 5; // min of order y and y_hat
         y = DOPRI5(y0, h, F);
         h_past = h; // store time step
@@ -185,7 +187,7 @@ DOPRI5_sample DOPRI5_step(
         h = compute_h_new(h, err, q, conf.facmin, facMax);
         facMax = 1; // addvised to override after step-rejection
     }
-    return {y[0], h_past, h};
+    return {y[0], h_past, h, attempts};
 }
 
 DOPRI5_sample adaptive_step(

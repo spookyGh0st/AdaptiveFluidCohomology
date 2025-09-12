@@ -45,10 +45,11 @@ void AdaptiveFluidSolver::adapt() {
     S.compute(tri.mesh(), tri.geom());
 }
 
-void AdaptiveFluidSolver::step() {
+DOPRI5_sample AdaptiveFluidSolver::step() {
     DOPRI5_sample dps = adaptive_step(tri.mesh(),tri.geom(),h,wc,dt,S,conf);
     wc = dps.wc; dt = dps.t_future;
     elapsed_time += dps.t_past;
+    return dps;
 }
 
 }

@@ -63,6 +63,7 @@ struct DOPRI5_sample {
     wc_wrapper wc{};
     double t_past{};   // past step
     double t_future{}; // new stepsize
+    int attempts = 0;
 };
 
 DOPRI5_sample adaptive_step(

@@ -202,7 +202,8 @@ AdaptiveHomologyBasis::AdaptiveHomologyBasis(IntrinsicTriangulation &icit) : mes
     pf_guess_L2 = pf_guess;
 
     for (int i = 0; i < homologyB.size(); ++i) {
-        auto&b = homologyB[i]; auto& g = pf_guess[i];
+        auto &b = homologyB[i];
+        auto &g = pf_guess[i];
         icit.edgeSplitCallbackList.emplace_back([&b](Edge e, Halfedge he1, Halfedge he2) { onSplit(e, he1, he2, b.nextLeft); });
         // icit.edgeSplitCallbackList.emplace_back([&g](Edge e, Halfedge he1, Halfedge he2) { project_local(he1,g); });
     }
@@ -225,5 +226,17 @@ Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() {
         assert(h[i].raw().allFinite());
     }
     return orthonormalize(mesh, geom, h);
+}
+Harmonic_Data AdaptiveHomologyBasis::fullHarmonicBasis() {
+    Harmonic_Data data(homologyB);
+    pp_solver.compute(geom);
+    for (std::size_t i = 0; i < homologyB.size(); i++) {
+        auto &basis = homologyB[i];
+        data.df[i] = delta_form(mesh, basis);
+        data.proj_df[i] = pp_solver.solve(mesh, data.df[i]);
+        data.h_unorth[i] = whitney_interpolation(mesh, geom, data.proj_df[i]);
+    }
+    data.h_orth = orthonormalize(mesh, geom, data.h_unorth);
+    return data;
 }
 }

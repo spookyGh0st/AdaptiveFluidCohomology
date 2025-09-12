@@ -9,6 +9,15 @@ void onSplit(Edge e, Halfedge he1, Halfedge he2, HalfedgeData<std::optional<bool
 
 void onCollapse(Halfedge he, HalfedgeData<std::optional<bool>> &nextLeft);
 
+struct Harmonic_Data {
+    Homology_basis hom;
+    std::vector<EdgeData<double>> df;
+    std::vector<EdgeData<double>> proj_df;
+    Harmonic_basis h_unorth;
+    Harmonic_basis h_orth;
+    Harmonic_Data (Homology_basis hom) : hom(hom), df(hom.size()),proj_df(hom.size()),h_unorth(hom.size()),h_orth(hom.size()){ }
+};
+
 class AdaptiveHomologyBasis{
     ManifoldSurfaceMesh& mesh;
     IntrinsicGeometryInterface& geom;
@@ -20,6 +29,7 @@ class AdaptiveHomologyBasis{
     Homology_basis homologyB;
     explicit AdaptiveHomologyBasis(IntrinsicTriangulation& icit);
     [[nodiscard]] Harmonic_basis harmonicBasis();
+    [[nodiscard]] Harmonic_Data fullHarmonicBasis();
 };
 
 }

@@ -28,7 +28,7 @@ class AdaptiveFluidSolver {
 
     void adapt();
 
-    void step();
+    DOPRI5_sample step();
 };
 
 }
