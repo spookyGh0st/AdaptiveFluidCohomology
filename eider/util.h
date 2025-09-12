@@ -78,6 +78,26 @@ inline double laplacian(IntrinsicGeometryInterface &geom, Vertex v, const Vertex
     return sum;
 }
 
+
+inline double derive(Vertex p, FaceData<Vector2> &u, IntrinsicGeometryInterface &geom, const VertexData<double> &f) {
+    double a = 0, s = 0;
+    for (Face face : p.adjacentFaces()) {
+        s += geom.faceAreas[face] * dot(u[face], grad(geom, face, f));
+        a += geom.faceAreas[face];
+    }
+    return (1 / a) * s;
+}
+
+inline Vector2 Lamb(Face face, const VertexData<double> &w, const FaceData<Vector2> &u) {
+    double s = 0;
+    for (Vertex v : face.adjacentVertices()) {
+        s += w[v];
+    }
+    s = s / 3;
+
+    return -s * u[face].rotate90();
+};
+
 inline double diameter(IntrinsicGeometryInterface &geom, Face f) {
     assert(f.isTriangle());
     double d = 0;

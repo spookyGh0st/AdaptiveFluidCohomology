@@ -63,6 +63,6 @@ TEST(poissonTest, testLaplaceInverse)
     for (Vertex v: m->vertices()) gVertex[v] = laplacian(*g,v,f);
 
     for (Vertex v: m->vertices()) {
-        ASSERT_NEAR(gMatrix[v], gVertex[v], 0.01);
+        ASSERT_NEAR(gMatrix[v], gVertex[v], 0.0001);
     }
 }

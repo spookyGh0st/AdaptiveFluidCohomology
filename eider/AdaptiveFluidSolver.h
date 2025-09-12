@@ -22,13 +22,13 @@ class AdaptiveFluidSolver {
     double dt, elapsed_time = 0;
     StreamFunctionSolver S;
 
-    velocity_wrapper velocity();
+    velocity_wrapper velocity() const;
 
     AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper wc, const DOPRI5_conf &conf, const DoeflerConf &doerflerConf);
 
     void adapt();
 
-    void step();;
+    void step();
 };
 
 }

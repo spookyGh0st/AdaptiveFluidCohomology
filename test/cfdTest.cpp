@@ -187,10 +187,10 @@ TEST(cfdTest, IntrinsicHole)
             }
             vispm();
         };
-        ImGui::InputDouble("Absolut Error",&conf.Atol_i,0,0,"%.10f");
-        ImGui::InputDouble("relative Error",&conf.Rtol_i,0,0,"%.10f");
-        ImGui::InputDouble("fac Min",&conf.facmin);
-        ImGui::InputDouble("fac max",&conf.faxmax);
+        ImGui::InputDouble("Absolute Tolerance", &conf.Atol_i, 0.0, 0.0, "%.2e");
+        ImGui::InputDouble("Relative Tolerance", &conf.Rtol_i, 0.0, 0.0, "%.2e");
+        ImGui::InputDouble("Step Factor Min",    &conf.facmin, 0.0, 0.0, "%.2f");
+        ImGui::InputDouble("Step Factor Max",    &conf.faxmax, 0.0, 0.0, "%.2f");
         ImGui::InputFloat("delta time",&dt,0.001,0.01);
         ImGui::Checkbox("Run", &running);
         ImGui::Checkbox("Fix c", &fix_c);

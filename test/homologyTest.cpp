@@ -240,3 +240,109 @@ TEST(homologyTest, testProjection)
     double d = px.toVector().transpose() * xPx;
     ASSERT_LE(std::abs(d), 1e-10) << "projection is not orthogonal";
 }
+
+template <typename DerivedA, typename DerivedB>
+::testing::AssertionResult EigenNear(
+    const char* expr1,
+    const char* expr2,
+    const char* tol_expr,
+    const Eigen::MatrixBase<DerivedA>& a,
+    const Eigen::MatrixBase<DerivedB>& b,
+    double tol)
+{
+    if (a.rows() != b.rows() || a.cols() != b.cols()) {
+        return ::testing::AssertionFailure() << "Size mismatch: "
+                                             << expr1 << " is " << a.rows() << "x" << a.cols()
+                                             << ", " << expr2 << " is " << b.rows() << "x" << b.cols();
+    }
+
+    double max_diff = (a - b).cwiseAbs().maxCoeff();
+    if (max_diff <= tol) {
+        return ::testing::AssertionSuccess();
+    } else {
+        std::stringstream ss;
+        ss << "Maximum absolute difference " << max_diff
+           << " exceeds tolerance " << tol
+           << "\n" << expr1 << " =\n" << a
+           << "\n" << expr2 << " =\n" << b;
+        return ::testing::AssertionFailure() << ss.str();
+    }
+}
+
+// Macro for nicer syntax
+#define EXPECT_EIGEN_NEAR(val1, val2, tol) \
+EXPECT_TRUE(EigenNear(#val1, #val2, #tol, val1, val2, tol))
+
+#define ASSERT_EIGEN_NEAR(val1, val2, tol) \
+ASSERT_TRUE(EigenNear(#val1, #val2, #tol, val1, val2, tol))
+
+
+void reportMatrix(std::string name, Eigen::MatrixXd A) {
+    std::cout << name <<": " << A.rows() << "x" << A.cols() << std::endl;
+    Eigen::FullPivLU<Eigen::MatrixXd> lu(A);
+    std::cout << "  Rank:       " << lu.rank() << std::endl;
+    std::cout << "  Invertible: " << lu.isInvertible() << std::endl;
+}
+
+/// This test shows, That (I-AA^+) x is equivalent to solving the least square system, even if the matrixes are not invertible
+TEST(homologyTest, d0Test) {
+    using namespace geometrycentral::surface;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" /"torus_min.stl";
+    auto [mesh,geom] = readManifoldSurfaceMesh(fds.string());
+    geom->required0();
+    geom->requireDECOperators();
+    auto homotopy_b = greedy_homotopy_basis(*mesh,*geom,arbitrary_base_face(*mesh));
+    auto cycle = Singular_Circle(*mesh, homotopy_b[0]);
+    auto df = delta_form(*mesh,cycle);
+
+    Eigen::MatrixXd A = geom->d0;
+    Eigen::MatrixXd AT = A.transpose();
+    auto m = A.rows(), n = A.cols();
+    ASSERT_EQ(m,mesh->nEdges());
+    ASSERT_EQ(n,mesh->nVertices());
+
+    reportMatrix("I", Eigen::MatrixXd::Identity(m,m));
+    reportMatrix("A", A);
+    reportMatrix("A A^T", A * AT);
+    reportMatrix("A^T A", AT * A);
+
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    const Eigen::VectorXd& S = svd.singularValues();
+    Eigen::MatrixXd S_inv = Eigen::MatrixXd::Zero(S.size(),S.size());
+
+    double tol = 1e-9;
+
+    // Invert only non-zero singular values
+    for (int i = 0; i < S.size(); ++i) {
+        if (S(i) > tol) {
+            S_inv(i, i) = 1.0 / S(i);
+        }
+    }
+    Eigen::MatrixXd Ap = svd.matrixV() * S_inv * svd.matrixU().transpose();
+    reportMatrix("A^+", Ap);
+    int r = (S.array() > tol).count();
+    Eigen::MatrixXd U_r = svd.matrixU().leftCols(r);  // keep only non-zero singular vectors
+    Eigen::MatrixXd AAp = U_r * U_r.transpose();
+    reportMatrix("A^+",AAp);
+    ASSERT_EIGEN_NEAR(A*Ap,AAp,0.00001);
+
+    Eigen::VectorXd b = df.toVector();
+
+    // solve argmin ||Ax - b||
+    Eigen::FullPivLU<Eigen::MatrixXd> solver(AT*A);
+    Eigen::VectorXd x_ls = solver.solve(AT*b);
+
+    Eigen::VectorXd b_hat = AAp * b;
+    EXPECT_EIGEN_NEAR(A * x_ls, b_hat,0.00001);
+    EXPECT_EIGEN_NEAR(AT *(b-A*x_ls), Eigen::VectorXd::Zero(n),0.00001);
+
+    Eigen::VectorXd h = b - A * x_ls;
+    Eigen::VectorXd h_hat = b - b_hat;
+
+    EXPECT_EIGEN_NEAR(AT *h_hat, Eigen::VectorXd::Zero(n),0.00001);
+    EXPECT_EIGEN_NEAR(AT *h, Eigen::VectorXd::Zero(n),0.00001);
+
+    EXPECT_EIGEN_NEAR(geom->d1 *h_hat, Eigen::VectorXd::Zero(mesh->nFaces()),0.00001);
+    EXPECT_EIGEN_NEAR(geom->d1 * h, Eigen::VectorXd::Zero(mesh->nFaces()),0.00001);
+}

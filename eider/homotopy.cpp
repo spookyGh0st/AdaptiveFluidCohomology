@@ -440,6 +440,7 @@ std::vector<Homotopy_cycle> greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, Int
     for (Edge e : dist_edges) {
         co_loops.push_back(homotopy_co_loop(prev_dist.first, x, e, x_he));
     }
+    geom.unrequireDualEdgeLengths();
     return co_loops;
 }
 

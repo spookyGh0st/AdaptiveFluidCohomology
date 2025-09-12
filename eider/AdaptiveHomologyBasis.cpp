@@ -2,12 +2,14 @@
 #include "homotopy.h"
 #include <span>
 
-void connect_split_path(Halfedge in, Halfedge out, HalfedgeData<std::optional<bool>>&nextLeft) {
+namespace geometrycentral::surface {
+
+void connect_split_path(Halfedge in, Halfedge out, HalfedgeData<std::optional<bool>> &nextLeft) {
     // Three cases, this should also work for the boundary case
-    if(in.nextLeft().face() == out.face()){
+    if (in.nextLeft().face() == out.face()) {
         nextLeft[in] = true;
         nextLeft[in.nextLeft()] = true;
-    } else if (in.nextRight().face() == out.face()){
+    } else if (in.nextRight().face() == out.face()) {
         nextLeft[in] = false;
         nextLeft[in.nextRight()] = false;
     } else {
@@ -19,7 +21,7 @@ void connect_split_path(Halfedge in, Halfedge out, HalfedgeData<std::optional<bo
 }
 
 void onsplit_boundary(Halfedge he, HalfedgeData<std::optional<bool>> &nextLeft) {
-    GC_SAFETY_ASSERT(he.edge().isBoundary(),"Always have he be the inner halfedge on the boundary to be split");
+    GC_SAFETY_ASSERT(he.edge().isBoundary(), "Always have he be the inner halfedge on the boundary to be split");
     std::array<Halfedge, 4> b_halfedges{
         he,
         he.next(),
@@ -27,39 +29,41 @@ void onsplit_boundary(Halfedge he, HalfedgeData<std::optional<bool>> &nextLeft) 
         he.next().next().twin().next().next(),
     };
     Halfedge in, out;
-    for (Halfedge b_he: b_halfedges){
+    for (Halfedge b_he : b_halfedges) {
         GC_SAFETY_ASSERT(!b_he.isDead(), "all adjacent hes should be alive");
         GC_SAFETY_ASSERT(b_he.isInterior(), "all adjacent hes should be interior");
-        if (nextLeft[b_he].has_value()) in = b_he;
-        else if (nextLeft[b_he.twin()].has_value()) out = b_he;
+        if (nextLeft[b_he].has_value())
+            in = b_he;
+        else if (nextLeft[b_he.twin()].has_value())
+            out = b_he;
     }
-    if (in == Halfedge() && out == Halfedge()) return;
+    if (in == Halfedge() && out == Halfedge())
+        return;
     if (in != Halfedge() && out != Halfedge()) {
-        return connect_split_path(in,out,nextLeft);
+        return connect_split_path(in, out, nextLeft);
     }
     if (out == Halfedge()) {
         if (in.next().edge().isBoundary()) {
             nextLeft[in] = false;
             nextLeft[in.next().twin()] = true;
-        }else {
-            GC_SAFETY_ASSERT(in.prevOrbitFace().edge().isBoundary(),"other way")
+        } else {
+            GC_SAFETY_ASSERT(in.prevOrbitFace().edge().isBoundary(), "other way")
             nextLeft[in] = true;
             nextLeft[in.prevOrbitFace().twin()] = true;
         }
     } else {
         if (out.next().edge().isBoundary()) {
             nextLeft[out.next()] = true;
-        }else {
-            GC_SAFETY_ASSERT(out.prevOrbitFace().edge().isBoundary(),"other way")
+        } else {
+            GC_SAFETY_ASSERT(out.prevOrbitFace().edge().isBoundary(), "other way")
             nextLeft[out.prevOrbitFace()] = false;
         }
     }
 }
 
-
 void onSplit(Edge e, Halfedge he1, Halfedge he2, HalfedgeData<std::optional<bool>> &nextLeft) {
-    if(!e.isBoundary()){
-        for (Halfedge he: he1.vertex().outgoingHalfedges()) {
+    if (!e.isBoundary()) {
+        for (Halfedge he : he1.vertex().outgoingHalfedges()) {
             nextLeft[he] = {};
             nextLeft[he.twin()] = {};
         }
@@ -68,39 +72,44 @@ void onSplit(Edge e, Halfedge he1, Halfedge he2, HalfedgeData<std::optional<bool
         Halfedge b3 = b2.next().twin().next();
         Halfedge b4 = b3.next().twin().next();
         assert(b4.next().twin().next() == b1);
-        std::array<Halfedge, 4> cyc_edges{ b1,b2,b3,b4 };
+        std::array<Halfedge, 4> cyc_edges{b1, b2, b3, b4};
         Halfedge in, out;
-        for (Halfedge b_he: cyc_edges){
+        for (Halfedge b_he : cyc_edges) {
             GC_SAFETY_ASSERT(!b_he.isDead(), "all adjacent hes should be alive");
             GC_SAFETY_ASSERT(b_he.isInterior(), "all adjacent hes should be interior");
-            if (nextLeft[b_he].has_value()) in = b_he;
-            else if (nextLeft[b_he.twin()].has_value()) out = b_he;
+            if (nextLeft[b_he].has_value())
+                in = b_he;
+            else if (nextLeft[b_he.twin()].has_value())
+                out = b_he;
         }
-        if (in == Halfedge() && out == Halfedge()) return;
+        if (in == Halfedge() && out == Halfedge())
+            return;
         GC_SAFETY_ASSERT(in != Halfedge() && out != Halfedge(), "Both in and out need to be set");
-        connect_split_path(in, out,nextLeft);
-    } else{
-        Halfedge he = he1.isInterior()? he1 : he2;
-        for (Halfedge he: he.vertex().outgoingHalfedges()) {
+        connect_split_path(in, out, nextLeft);
+    } else {
+        Halfedge he = he1.isInterior() ? he1 : he2;
+        for (Halfedge he : he.vertex().outgoingHalfedges()) {
             nextLeft[he] = {};
             nextLeft[he.twin()] = {};
         }
-        onsplit_boundary(he,nextLeft);
+        onsplit_boundary(he, nextLeft);
     }
 }
 
-
-void onCollapse_boundary(Halfedge he,HalfedgeData<std::optional<bool>>&nextLeft ) {
-    GC_SAFETY_ASSERT(he.edge().isBoundary(),"Always have he be the inner halfedge on the boundary to be split");
-    std::array<Halfedge, 3> b_halfedges{ he, he.next(), he.next().next() };
+void onCollapse_boundary(Halfedge he, HalfedgeData<std::optional<bool>> &nextLeft) {
+    GC_SAFETY_ASSERT(he.edge().isBoundary(), "Always have he be the inner halfedge on the boundary to be split");
+    std::array<Halfedge, 3> b_halfedges{he, he.next(), he.next().next()};
     Halfedge in, out;
-    for (Halfedge b_he: b_halfedges){
+    for (Halfedge b_he : b_halfedges) {
         GC_SAFETY_ASSERT(!b_he.isDead(), "all adjacent hes should be alive");
         GC_SAFETY_ASSERT(b_he.isInterior(), "all adjacent hes should be interior");
-        if (nextLeft[b_he].has_value()) in = b_he;
-        else if (nextLeft[b_he.twin()].has_value()) out = b_he;
+        if (nextLeft[b_he].has_value())
+            in = b_he;
+        else if (nextLeft[b_he.twin()].has_value())
+            out = b_he;
     }
-    if (in == Halfedge() && out == Halfedge()) return;
+    if (in == Halfedge() && out == Halfedge())
+        return;
     if (in != Halfedge() && out != Halfedge()) { // path runs along split edge;
         if (in.nextLeft() == out.twin()) {
             nextLeft[in] = true;
@@ -111,29 +120,44 @@ void onCollapse_boundary(Halfedge he,HalfedgeData<std::optional<bool>>&nextLeft 
         return;
     }
     if (out == Halfedge()) {
-        if (!in.nextLeft().isInterior()) { nextLeft[in] = true; nextLeft[in.nextLeft()] = true; } // boundary is on left
-        else { assert(!in.nextRight().isInterior()); nextLeft[in] = false; nextLeft[in.nextRight()] = true;} // on right
+        if (!in.nextLeft().isInterior()) {
+            nextLeft[in] = true;
+            nextLeft[in.nextLeft()] = true;
+        } // boundary is on left
+        else {
+            assert(!in.nextRight().isInterior());
+            nextLeft[in] = false;
+            nextLeft[in.nextRight()] = true;
+        } // on right
     } else {
-        if (out.prevOrbitFace().edge().isBoundary()) { nextLeft[out.prevOrbitFace()] = false;; }
-        else { assert(out.next().edge().isBoundary()); nextLeft[out.next()] = true; }
+        if (out.prevOrbitFace().edge().isBoundary()) {
+            nextLeft[out.prevOrbitFace()] = false;
+            ;
+        } else {
+            assert(out.next().edge().isBoundary());
+            nextLeft[out.next()] = true;
+        }
     }
 }
 
-void connect_collapsed_path(std::span<Halfedge> b_halfedges, HalfedgeData<std::optional<bool>>&nextLeft) {
+void connect_collapsed_path(std::span<Halfedge> b_halfedges, HalfedgeData<std::optional<bool>> &nextLeft) {
     Halfedge in, out;
-    for (Halfedge b_he: b_halfedges){
+    for (Halfedge b_he : b_halfedges) {
         GC_SAFETY_ASSERT(!b_he.isDead(), "all adjacent hes should be alive");
         GC_SAFETY_ASSERT(b_he.isInterior(), "all adjacent hes should be interior");
-        if (nextLeft[b_he].has_value()) in = b_he;
-        else if (nextLeft[b_he.twin()].has_value()) out = b_he;
+        if (nextLeft[b_he].has_value())
+            in = b_he;
+        else if (nextLeft[b_he.twin()].has_value())
+            out = b_he;
     }
-    if (in == Halfedge() && out == Halfedge()) return;
+    if (in == Halfedge() && out == Halfedge())
+        return;
     GC_SAFETY_ASSERT(in != Halfedge(), "in  must be set")
     GC_SAFETY_ASSERT(out != Halfedge(), "out  must be set")
 
-    if(in.nextLeft() == out.twin()){
+    if (in.nextLeft() == out.twin()) {
         nextLeft[in] = true;
-    } else if (in.nextRight() == out.twin()){
+    } else if (in.nextRight() == out.twin()) {
         nextLeft[in] = false;
     } else {
         auto twin = out.twin();
@@ -155,31 +179,51 @@ void connect_collapsed_path(std::span<Halfedge> b_halfedges, HalfedgeData<std::o
 
 void onCollapse(Halfedge he, HalfedgeData<std::optional<bool>> &next) {
     GC_SAFETY_ASSERT(!he.isDead(), "he must be allive");
-    if (he.edge().isBoundary()){
-        if (!he.isInterior()) he = he.twin();
-        onCollapse_boundary(he,next);
+    if (he.edge().isBoundary()) {
+        if (!he.isInterior())
+            he = he.twin();
+        onCollapse_boundary(he, next);
     } else {
-        std::array<Halfedge,4> b_halfedges = {
-            he.next(), he.next().next(),
-            he.twin().next(), he.twin().next().next()
-        };
-        connect_collapsed_path(b_halfedges,next);
+        std::array<Halfedge, 4> b_halfedges = {
+            he.next(),
+            he.next().next(),
+            he.twin().next(),
+            he.twin().next().next()};
+        connect_collapsed_path(b_halfedges, next);
     }
 }
 AdaptiveHomologyBasis::AdaptiveHomologyBasis(IntrinsicTriangulation &icit) : mesh(*icit.intrinsicMesh), geom(icit) {
     Face b_face = arbitrary_base_face(mesh);
-    auto homotopy = greedy_homotopy_basis(mesh, geom,b_face);
+    auto homotopy = greedy_homotopy_basis(mesh, geom, b_face);
     homologyB = singular_homology_basis(mesh, homotopy);
 
-    for (auto &b : homologyB) {
-        icit.edgeSplitCallbackList.emplace_back([&b](Edge e, Halfedge he1, Halfedge he2) {
-          onSplit(e, he1, he2, b.nextLeft); });
+    // initialize guesses with zero-vectors.
+    pf_guess.resize(homologyB.size(), EdgeData<double>(mesh, 0));
+    pf_guess_L2 = pf_guess;
+
+    for (int i = 0; i < homologyB.size(); ++i) {
+        auto&b = homologyB[i]; auto& g = pf_guess[i];
+        icit.edgeSplitCallbackList.emplace_back([&b](Edge e, Halfedge he1, Halfedge he2) { onSplit(e, he1, he2, b.nextLeft); });
+        // icit.edgeSplitCallbackList.emplace_back([&g](Edge e, Halfedge he1, Halfedge he2) { project_local(he1,g); });
     }
     for (auto &b : homologyB) {
         icit.edgeCollapseCallbackList.emplace_back([&b](Halfedge he) { onCollapse(he, b.nextLeft); });
     }
 }
 
-Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() const {
-    return orthonormal_hom_basis(mesh,geom,homologyB);
+Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() {
+    pf_guess_L2 = pf_guess;
+    pp_solver.compute(geom);
+    std::vector<FaceData<Vector2>> h(homologyB.size());
+    for (std::size_t i = 0; i < homologyB.size(); i++) {
+        auto &basis = homologyB[i];
+        auto df = delta_form(mesh, basis);
+        assert(df.raw().allFinite());
+        EdgeData<double> pf = pp_solver.solve(mesh, df);
+        assert(pf.raw().allFinite());
+        h[i] = whitney_interpolation(mesh, geom, pf);
+        assert(h[i].raw().allFinite());
+    }
+    return orthonormalize(mesh, geom, h);
+}
 }

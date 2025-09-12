@@ -24,6 +24,15 @@ velocity_wrapper velocity(
     const std::vector<FaceData<Vector2>> &h,
     const StreamFunctionSolver &S);
 
+wc_wrapper evalRHS(
+    ManifoldSurfaceMesh &mesh,
+    IntrinsicGeometryInterface &geom,
+    const wc_wrapper &wc,
+    const std::vector<FaceData<Vector2>> &h,
+    const StreamFunctionSolver &S,
+    std::vector<FaceData<double>>* face_dc = nullptr
+);
+
 wc_wrapper RK4Step(
     ManifoldSurfaceMesh &mesh,
     IntrinsicGeometryInterface &geom,
@@ -39,7 +48,7 @@ struct DOPRI5_conf {
     /**
      * @brief Absolute tolerance.
      */
-    double Atol_i = 1e-8;
+    double Atol_i = 1e-12;
 
     /** * @brief Relative tolerance. */
     double Rtol_i = 1e-6;

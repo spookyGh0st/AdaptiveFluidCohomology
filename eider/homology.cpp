@@ -5,6 +5,8 @@
 #include <numeric>
 #include <tuple>
 #include <vector>
+#include <Eigen/SVD>
+#include <Eigen/src/SVD/BDCSVD.h>
 
 
 namespace geometrycentral::surface {
@@ -35,12 +37,87 @@ EdgeData<double> delta_form(ManifoldSurfaceMesh &mesh,
     return delta;
 }
 
+#include <Eigen/src/SVD/JacobiSVD.h>
+void checkMatrixCriteria(const Eigen::Matrix<double,8,5> &d) {
+    int m = d.rows();
+    int n = d.cols();
+
+    // Compute rank with SVD
+    Eigen::JacobiSVD svd (d);
+    double tol = 1e-10;  // tolerance threshold
+    int rank = (svd.singularValues().array() > tol).count();
+
+    std::cout << "Matrix is " << m << "x" << n << "\n";
+    std::cout << "Rank = " << rank << "\n";
+
+    if (m >= n && rank == n) {
+        std::cout << "-> Full column rank: use (d^T d)^(-1) d^T\n";
+    } else if (m <= n && rank == m) {
+        std::cout << "-> Full row rank: use d^T (d d^T)^(-1)\n";
+    } else {
+        std::cout << "-> Rank deficient: must use SVD or iterative solver for pseudoinverse\n";
+    }
+    std::cout << std::endl;
+}
+
+// [center, ohe1, ... , ohe[4]
+inline uint8_t ivHead(uint8_t iEdge) {
+    return iEdge < 4? 1+iEdge : 1+(iEdge+1)%4;
+}
+inline uint8_t ivTail(uint8_t iEdge) {
+    return iEdge < 4? 0 : iEdge-3;
+}
+
+void project_local(Halfedge he, EdgeData<double>& delta_form) {
+    using Mat85 = Eigen::Matrix<double,8,5>;
+    using Mat8 = Eigen::Matrix<double,8,8>;
+    using Vec8 = Eigen::Matrix<double,8,1>;
+
+    // Set up arrays
+    std::array<Vertex,5> vertices;
+    std::array<Halfedge,8> edges;
+    Vertex vi = he.vertex();
+    vertices[0] = vi;
+    {
+        int i = 0;
+        for (Halfedge he: vi.outgoingHalfedges()) { vertices[i++] = he.tipVertex();};
+        i = 0; for (Halfedge he:  vi.outgoingHalfedges()) { edges[i++] = he;};
+        for (Halfedge he:  vi.outgoingHalfedges()) { edges[i++] = he.next();};
+    }
+
+    // compute local d0
+    Mat85 localD = Mat85::Zero();
+    for (uint8_t iEdge = 0; iEdge < 8; ++iEdge) {
+        uint8_t iVHead = ivHead(iEdge);
+        uint8_t iVTail = ivTail(iEdge);
+        localD(iEdge, iVHead) = edges[iEdge].orientation() ? 1.0: -1.0;
+        localD(iEdge, iVTail) = edges[iEdge].orientation() ? -1.0: 1.0;
+    }
+
+
+    Vec8 x;
+    for (int i = 0; i < edges.size(); ++i) {
+        x[i] = delta_form[edges[i].edge()];
+    }
+    Eigen::JacobiSVD svd (localD , Eigen::ComputeFullU);
+
+    Mat8 U = svd.matrixU();
+    int r = svd.rank();
+    Mat8 Ur = Mat8::Zero();
+    Ur.leftCols(r) = U.leftCols(r);
+    Vec8 proj = Ur * (Ur.transpose() * x);
+    Vec8 result = x-proj;
+
+    for (uint8_t i = 0; i <edges.size(); i++) {
+        delta_form[edges[i].edge()] = result[i];
+    }
+}
+
 void PressureProjectionSolver::compute(IntrinsicGeometryInterface &geom) {
     geom.required0();
     A = geom.d0;
     AT = A.transpose();
     solver.compute(AT * A);
-    // TODO: QR - solver.compute(A);
     geom.unrequired0();
 }
 
@@ -48,7 +125,6 @@ EdgeData<double>
 PressureProjectionSolver::solve(ManifoldSurfaceMesh &mesh,
                                 const EdgeData<double> &co_loop) const {
     Eigen::VectorXd x = co_loop.toVector();
-    // TODO: QR - Eigen::VectorXd c = solver.solve(x);
     Eigen::VectorXd c = solver.solve(AT * x);
     return EdgeData<double>(mesh, x - A * c);
 }
@@ -60,10 +136,49 @@ void AdaptivePressureProjectionSolver::compute(IntrinsicGeometryInterface &geom)
     solver.compute(AT * A);
     geom.unrequired0();
 }
-EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, EdgeData<double> &guess) {
+
+EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, EdgeData<double> *guess) {
+    assert (guess != nullptr);
     Eigen::VectorXd x = co_loop.toVector();
-    Eigen::VectorXd c = solver.solveWithGuess(AT * x,guess.toVector());
-    guess = EdgeData<double>(mesh,c);
+    assert(x.size() == mesh.nEdges());
+    Eigen::VectorXd rhs = AT *x;
+    Eigen::VectorXd guessV = guess->toVector();
+    Eigen::VectorXd c = solver.solveWithGuess(AT * x, AT * (x-guess->toVector()));
+    auto info = solver.info();
+    std::cout << solver.iterations() << std::endl;
+    if (info != Eigen::Success) {
+        std::string msg = "Eigen iterative solver failed.\n";
+        msg += "  Solver type: LeastSquaresConjugateGradient (or your solver)\n";
+        msg += "  Iterations: " + std::to_string(solver.iterations()) + "\n";
+        msg += "  Max iterations: " + std::to_string(solver.maxIterations()) + "\n";
+        msg += "  Final error (rel. residual): " + std::to_string(solver.error()) + "\n";
+        msg += "  Issue: ";
+        if (info == Eigen::NoConvergence) {
+            msg += "No convergence (did not reach tolerance).\n";
+            msg += "). Retrying with regularization...\n";
+            // --- Fallback 1: add Tikhonov regularization ---
+            const double lambda = 1e-6; // tune as needed
+            SparseMatrix<double> Areg = AT * A + lambda * SparseMatrix<double>(A.cols(), A.cols());
+            Eigen::BiCGSTAB<SparseMatrix<double>> fallbackSolver;
+            fallbackSolver.compute(Areg);
+            c = fallbackSolver.solve(AT * x);
+
+            if (fallbackSolver.info() != Eigen::Success) {
+                throw std::runtime_error(msg);
+            }
+        } else if (info == Eigen::NumericalIssue) {
+            msg += "Numerical issue encountered (instability or breakdown).\n";
+            throw std::runtime_error(msg);
+        } else if (info == Eigen::InvalidInput) {
+            msg += "Invalid input or improper solver use.\n";
+            throw std::runtime_error(msg);
+        } else {
+            msg += "Unknown error code.\n";
+            throw std::runtime_error(msg);
+        }
+    }
+
+    *guess = EdgeData<double>(mesh,x-A*c);
     return EdgeData<double>(mesh, x - A * c);
 }
 
@@ -88,7 +203,7 @@ FaceData<Vector2> whitney_interpolation(ManifoldSurfaceMesh &mesh,
             vT += wij / 6 * (nj - ni);
         }
         assert(vT.isFinite());
-        vField[f] = vT;
+        vField[f] = vT / A;
     }
 
     return vField;
@@ -117,7 +232,6 @@ void modifiedGramSchmidt(const MatrixX2d &A, MatrixX2d &Q, Eigen::MatrixXd &R, c
                 v[k] -= w[k] * R(i, j);
             }
         }
-
         R(j, j) = std::sqrt(innerProduct(v, v));
         if (R(j, j) == 0.0) {
             throw std::runtime_error("Linearly dependent column detected");
@@ -128,33 +242,35 @@ void modifiedGramSchmidt(const MatrixX2d &A, MatrixX2d &Q, Eigen::MatrixXd &R, c
     }
 }
 
+// TODO: Use Hausedolder Decomp, it is faster and has better numerical properties.
 std::vector<FaceData<Vector2>>
 orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<FaceData<Vector2>> &X) {
+    geom.requireFaceAreas();
     MatrixX2d matrix(mesh.nFaces(), X.size());
-    // TODO: Think about indexing
+    auto f_idx = mesh.getFaceIndices();
     for (std::size_t m = 0; m < X.size(); m++) {
-        for (std::size_t n = 0; n < mesh.nFaces(); n++) {
-            matrix(n, m) =
-                X[m][mesh.face(n)] * std::sqrt(geom.faceAreas[mesh.face(n)]);
+        for (Face f: mesh.faces()){
+            matrix(f_idx[f], m) = X[m][f];
         }
     }
     MatrixX2d Q{};
     Eigen::MatrixXd R{};
-    auto inner_product = [](const VectorX2d &a, const VectorX2d &b) -> double {
+    Eigen::VectorXd face_vec = geom.faceAreas.toVector(f_idx);
+    auto inner_product = [&face_vec](const VectorX2d &a, const VectorX2d &b) -> double {
         double s = 0;
         for (long i = 0; i < a.size(); i++)
-            s += dot(a[i], b[i]);
+            s += dot(a[i], b[i]) * face_vec[i];
         return s;
     };
     modifiedGramSchmidt(matrix, Q, R, inner_product);
     std::vector<FaceData<Vector2>> h{};
     for (std::size_t m = 0; m < X.size(); m++) {
         FaceData<Vector2> &hm = h.emplace_back(mesh);
-        for (std::size_t n = 0; n < mesh.nFaces(); n++) {
-            Face f = mesh.face(n);
-            hm[f] = Q(n, m) * (1. / std::sqrt(geom.faceAreas[f]));
+        for (Face f: mesh.faces()){
+            hm[f] = Q(f_idx[f], m);
         }
     }
+    geom.unrequireFaceAreas();
     return h;
 }
 

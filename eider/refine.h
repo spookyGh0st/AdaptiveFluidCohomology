@@ -56,20 +56,32 @@ FaceData<double> poisson_residual_error_sqr(
 /**
  * @brief Configuration parameters for the Dörfler marking criterion.
  *
- * The Dörfler criterion selects a subset of elements (faces) such that the
+ * The Dörfler criterion selects a subset of faces such that the
  * cumulative residual contribution exceeds a prescribed fraction θ of the
- * total residual. This is commonly used in adaptive mesh refinement/coarsening.
+ * total residual, i.e. the minimal set of elements M_r ⊆ T_h such that
+ * ∑_{T ∈ M_r} η_T²  ≥  θ ⋅ ∑_{T ∈ T_h} η_T², where
+ * η_T : local error indicator for element T
+ * θ   : bulk parameter, with 0 < θ < 1
+ * T_h : current mesh
  *
+ * Similarly, coarsed elements are the subsets of faces, such that the
+ * cumulative residual contributions is smaller then a fraction of the
+ * total residual.
+ *
+ * Both Inversing and coarsing additionally respect a absolut threshhold.
+ *
+ * - θ_coarse ∈ (0,1]  : fraction of residual to mark for coarsing
  * - θ_refine ∈ (0,1]  : fraction of residual to mark for refinement
- * - θ_coarse ∈ (0,1]  : fraction of residual to mark for coarsening
- * - threshold_refine  : absolute lower bound for refinement marking
+ * - threshold_refine  : absolute lower bound for refinement marking,
+ *                  i.e. only elements with higher residual are refined
  * - threshold_coarse  : absolute upper bound for coarsening marking
+ *                  i.e. only elements with lower residual are coarsed
  */
 struct DoeflerConf {
-    double theta_coarse = 0.9;                                              ///< θ_coarse: fraction of residual for coarsening
+    double theta_coarse = 0.1;                                              ///< θ_coarse: fraction of residual for coarsening
     double theta_refine = 0.1;                                              ///< θ_refine: fraction of residual for refinement
     double threshold_refine = 0.000001;                                     ///< refinement cutoff
-    double threshold_coarse = std::numeric_limits<double>::max();           ///< coarsening cutoff
+    double threshold_coarse = 0.000001;           ///< coarsening cutoff
 };
 
 /**
