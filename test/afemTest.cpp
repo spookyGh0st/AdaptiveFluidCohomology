@@ -3,6 +3,7 @@
 #include <eider/AdaptiveFluidSolver.h>
 
 #include "Evaluator.h"
+#include "TaylorInitializer.h"
 #include "eider/homotopy.h"
 #include "eider/util.h"
 #include "geometrycentral/surface/integer_coordinates_intrinsic_triangulation.h"
@@ -33,21 +34,6 @@ TEST(afemTest, testDefaultBehauvior)
   ASSERT_EQ(f[v], 2);
 }
 
-wc_wrapper init_taylor(SurfaceMesh& mesh, VertexData<Vector3> geo, double vorticity_distance, Vector2 offset, Vector2 cuttof, Vector2 cuttof_offset) {
-    VertexData<double> w(mesh,0);
-    double k = 2*PI / vorticity_distance;
-    double A = 1;
-    for (Vertex v : mesh.vertices())
-    {
-        Vector3 p = geo[v];
-        double x = p.x  + offset.x, y = p.y + offset.y;
-        if (abs(p.x+cuttof_offset.x) > cuttof.x || abs(p.y+cuttof_offset.y) > cuttof.y) { continue;}
-        w[v] = 2 * A *k * cos(k*x) * cos(k*y);
-    }
-    wc_wrapper wc;
-    wc.w = w;
-    return wc;
-}
 VertexData<Vector3> intrinsic_geom(IntrinsicTriangulation& Tri, VertexPositionGeometry& inputG){
     auto& mesh = *Tri.intrinsicMesh;
     VertexData<Vector3> int_positions(mesh) ;
@@ -55,21 +41,6 @@ VertexData<Vector3> intrinsic_geom(IntrinsicTriangulation& Tri, VertexPositionGe
     return int_positions;
 }
 
-struct TaylorInitializer {
-    float v_dist  = 0.5, x_add = v_dist/4, y_add = 0, x_cuttof = v_dist/2, y_cuttof = v_dist/4, x_cutt_offset = 0, y_cutt_offset = 0.5;
-    wc_wrapper wc(IntrinsicTriangulation& intTri, VertexPositionGeometry& pg) {
-        return init_taylor(*intTri.intrinsicMesh, intrinsic_geom(intTri,pg), v_dist, Vector2(x_add, y_add), Vector2(x_cuttof, y_cuttof), Vector2(x_cutt_offset, y_cutt_offset));
-    }
-    void callback() {
-        if (ImGui::TreeNode("Initial Taylor Vorticises")) {
-            ImGui::InputFloat("vorticity distance",&v_dist,0.125,0.5);
-            ImGui::InputFloat("x_add",&x_add,0.125,0.5); ImGui::InputFloat("y_add",&y_add,0.125,0.5);
-            ImGui::InputFloat("x_cuttof",&x_cuttof,0.125,0.5); ImGui::InputFloat("y_cuttoff",&y_cuttof,0.125,0.5);
-            ImGui::InputFloat("x_cut offset",&x_cutt_offset,0.125,0.5); ImGui::InputFloat("y_cut offset",&y_cutt_offset,0.125,0.5);
-            ImGui::TreePop();
-        }
-    }
-};
 
 #include <cstddef> // for size_t
 #include <utility>
@@ -110,7 +81,7 @@ struct MeshSelecter {
     std::vector<std::filesystem::path> paths;
     int selected_mesh = -1;
     std::vector<bool> toggles;
-    MeshSelecter() {
+    MeshSelecter(std::string name, std::unique_ptr<ManifoldSurfaceMesh>& mesh, std::unique_ptr<VertexPositionGeometry>& geom) {
         namespace fs = std::filesystem;
         std::filesystem::path dir(__FILE__);
         dir = dir.parent_path()/ "models";
@@ -122,6 +93,14 @@ struct MeshSelecter {
         }
         sortByNames(names,paths);
         toggles = std::vector<bool>(names.size(), false);
+
+        for (int i = 0; i < names.size(); i++) {
+            if(name == names[i]) selected_mesh = i;
+        }
+        if(name != "" && selected_mesh == -1) throw  std::runtime_error("Mesh does not exist");
+        if (selected_mesh!=-1){
+            std::tie(mesh,geom) = readManifoldSurfaceMesh(paths[selected_mesh].string());
+        }
     }
     bool select(std::unique_ptr<ManifoldSurfaceMesh>& mesh, std::unique_ptr<VertexPositionGeometry>& geom) {
         // Simple selection popup (if you want to show the current selection inside the Button itself,
@@ -395,16 +374,16 @@ struct AdaptiveFluidPlotterComparator{
 
 struct AdaptiveFluidVisualization {
     std::string name;
-    MeshSelecter selecter;
-    TaylorInitializer taylor;
-    std::unique_ptr<ManifoldSurfaceMesh> pMesh;
-    std::unique_ptr<VertexPositionGeometry> pGeom;
+    std::unique_ptr<ManifoldSurfaceMesh> pMesh = nullptr;
+    std::unique_ptr<VertexPositionGeometry> pGeom = nullptr;
     std::unique_ptr<IntrinsicTriangulation> intrT;
     std::unique_ptr<AdaptiveTriangulation> aTri;
     std::unique_ptr<AdaptiveFluidSolver> solver;
     std::unique_ptr<AdaptiveFluidPlotter> plotter;
+    TaylorInitializer taylor;
     DOPRI5_conf dopri5;
     DoeflerConf doefler;
+    MeshSelecter selecter;
     double delauny_angle = 25, delauny_circ = std::numeric_limits<double>::infinity();
     bool normalize_basis = true, fix_c = false;
 
@@ -424,6 +403,10 @@ struct AdaptiveFluidVisualization {
         wc_wrapper wc = taylor.wc(*intrT,*pGeom);
         solver = std::make_unique<AdaptiveFluidSolver>(*aTri,wc,dopri5,doefler);
         plotter = std::make_unique<AdaptiveFluidPlotter>(*solver);
+    }
+
+    AdaptiveFluidVisualization(std::string mesh = "") :selecter(mesh,pMesh,pGeom) {
+        if(pMesh != nullptr) load();
     }
 
     bool init = true;
@@ -451,7 +434,9 @@ struct AdaptiveFluidVisualization {
         auto v = solver->velocity();
         auto dwdc = evalRHS(mesh,solver->tri.geom(),solver->wc,solver->h,solver->S,&dw_face);
         polym->addFaceTangentVectorQuantity("velocity",v.u,e1,e2);
-        polym->addVertexScalarQuantity("vorticity",solver->wc.w);
+        auto* vorticityV = polym->addVertexScalarQuantity("vorticity",solver->wc.w);
+        if(init) vorticityV->setEnabled(true);
+        vorticityV->setColorMap("coolwarm");
         polym->addVertexScalarQuantity("vorticity - change",dwdc.w);
         polym->addVertexScalarQuantity("stream_function",v.stream_function);
 
@@ -466,9 +451,6 @@ struct AdaptiveFluidVisualization {
             polym->addFaceTangentVectorQuantity("harmonic form " + std::to_string(i),b,e1,e2);
             auto dwf = normalize_basis ? dw_face[i] / g.faceAreas : dw_face[i];
             polym->addFaceScalarQuantity("dw_face - " + std::to_string(i),dwf);
-            polym->addEdgeScalarQuantity("Guess - " + std::to_string(i),solver->hom.pf_guess[i]);
-            polym->addEdgeScalarQuantity("Guess - L2" + std::to_string(i),solver->hom.pf_guess_L2[i]);
-            polym->addEdgeScalarQuantity("Guess - Diff" + std::to_string(i),solver->hom.pf_guess[i] - solver->hom.pf_guess_L2[i]);
         }
 
         polym->addFaceTangentVectorQuantity("Lamb Form ", lamb_form(mesh,solver->wc.w,v.u),e1,e2);
@@ -536,6 +518,7 @@ struct AdaptiveFluidVisualization {
     }
 
     void callBack() {
+        if (init) {visualize(); init = false;}
         ImGui::PushID(this);
         if (ImGui::TreeNode("Mesh")){
             callBackImpl();
@@ -547,7 +530,7 @@ struct AdaptiveFluidVisualization {
 
 TEST(afemTest, AdaptiveFluidCohomology)
 {
-    AdaptiveFluidVisualization visA;
+    AdaptiveFluidVisualization visA("cheese_min.stl");
     visA.name = "Normal";
     AdaptiveFluidVisualization visB;
     visB.name = "Refined";

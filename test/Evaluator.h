@@ -72,3 +72,8 @@ struct Evaluator {
         return groups;
     }
 };
+
+void to_csv(const DoeflerConf& conf, const std::filesystem::path& filename);
+void to_csv(const DOPRI5_conf& conf, const std::filesystem::path& filename);
+
+
