@@ -25,6 +25,7 @@ struct EvData {
     wc_wrapper wc;
     Harmonic_basis h;
     DOPRI5_sample dp5s;
+    std::vector<FaceData<double>> dc;
 };
 
 struct EvVector {
@@ -75,5 +76,6 @@ struct Evaluator {
 
 void to_csv(const DoeflerConf& conf, const std::filesystem::path& filename);
 void to_csv(const DOPRI5_conf& conf, const std::filesystem::path& filename);
+
 
 

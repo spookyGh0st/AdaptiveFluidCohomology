@@ -5,6 +5,25 @@
 #include <geometrycentral/utilities/vector2.h>
 
 namespace geometrycentral::surface {
+
+inline double L2Norm(FaceData<Vector2> d, IntrinsicGeometryInterface& geom){
+    double s = 0;
+    for (Face f: geom.mesh.faces()) { s += d[f].norm2() * geom.faceAreas[f]; }
+    return std::sqrt(s);
+}
+inline double L2Norm(VertexData<double> d, IntrinsicGeometryInterface& geom){
+    double s = 0;
+    for (Face f: geom.mesh.faces()){
+        double fs = 0;
+        for(Vertex v: f.adjacentVertices()){
+            fs += d[v];
+        }
+        s += fs/3*geom.faceAreas[f];
+    }
+    return s;
+}
+
+
 /**
  * Compute the gradient of a scalar function f over a triangle face by
  * \( \nabla f = \frac{1}{2A} \sum_{i=0}^2 f_i \cdot R_{90}(e_i^*),\)

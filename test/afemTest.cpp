@@ -245,22 +245,6 @@ void timePlot(const std::string& name, const std::function<void()>& plotFunc) {
     ImGui::PopID();
 }
 
-double L2Norm(FaceData<Vector2> d, IntrinsicGeometryInterface& geom){
-    double s = 0;
-    for (Face f: geom.mesh.faces()) { s += d[f].norm2() * geom.faceAreas[f]; }
-    return std::sqrt(s);
-}
-double L2Norm(VertexData<double> d, IntrinsicGeometryInterface& geom){
-    double s = 0;
-    for (Face f: geom.mesh.faces()){
-        double fs = 0;
-        for(Vertex v: f.adjacentVertices()){
-            fs += d[v];
-        }
-        s += fs/3*geom.faceAreas[f];
-    }
-    return s;
-}
 
 
 FaceData<Vector2> lamb_form(ManifoldSurfaceMesh& mesh, const VertexData<double>& w, const FaceData<Vector2>& u){
@@ -376,32 +360,26 @@ struct AdaptiveFluidVisualization {
     std::string name;
     std::unique_ptr<ManifoldSurfaceMesh> pMesh = nullptr;
     std::unique_ptr<VertexPositionGeometry> pGeom = nullptr;
-    std::unique_ptr<IntrinsicTriangulation> intrT;
-    std::unique_ptr<AdaptiveTriangulation> aTri;
     std::unique_ptr<AdaptiveFluidSolver> solver;
     std::unique_ptr<AdaptiveFluidPlotter> plotter;
     TaylorInitializer taylor;
-    DOPRI5_conf dopri5;
-    DoeflerConf doefler;
+    AdaptiveFluidSolverData solverData;
     MeshSelecter selecter;
     double delauny_angle = 25, delauny_circ = std::numeric_limits<double>::infinity();
     bool normalize_basis = true, fix_c = false;
 
     void load() {
-        if(solver){ dopri5= solver->conf; doefler = solver->doerflerConf; }
-        intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
+        auto intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
         intrT->delaunayRefine(delauny_angle,delauny_circ);
         intrT->intrinsicMesh->compress();
         intrT->refreshQuantities();
         auto nMesh = intrT->intrinsicMesh->copy();
         pGeom = std::make_unique<VertexPositionGeometry>(*nMesh,intrinsic_geom(*intrT,*pGeom).reinterpretTo(*nMesh));
         pMesh = std::move(nMesh);
-        intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
 
-        intrT->mesh.compress(); intrT->refreshQuantities();
-        aTri = std::make_unique<AdaptiveTriangulation>(*intrT);
-        wc_wrapper wc = taylor.wc(*intrT,*pGeom);
-        solver = std::make_unique<AdaptiveFluidSolver>(*aTri,wc,dopri5,doefler);
+        AdaptiveFluidSolverData data = solver? solver->data() : AdaptiveFluidSolverData();
+        solver = std::make_unique<AdaptiveFluidSolver>(*pMesh,*pGeom,data);
+        solver->wc.w = TaylorInitializer().wc(solver->tri.intrinsicTriangulation(),*pGeom).w;
         plotter = std::make_unique<AdaptiveFluidPlotter>(*solver);
     }
 
@@ -419,11 +397,12 @@ struct AdaptiveFluidVisualization {
     } state;
 
     void visualize() {
-        if (!aTri) return;
+        if (!solver) return;
 
-        ManifoldSurfaceMesh& mesh = aTri->mesh();
+        ManifoldSurfaceMesh& mesh = solver->tri.mesh();
+        IntrinsicTriangulation& intrT = solver->tri.intrinsicTriangulation();
         mesh.compress();
-        VertexData<Vector3> int_positions = intrinsic_geom(*intrT,*pGeom);
+        VertexData<Vector3> int_positions = intrinsic_geom(intrT,*pGeom);
         VertexPositionGeometry g(mesh,int_positions);
         polyscope::SurfaceMesh* polym = polyscope::registerSurfaceMesh(name, int_positions,mesh.getFaceVertexList(), polyscopePermutations(mesh));
         g.requireFaceTangentBasis();
@@ -475,7 +454,7 @@ struct AdaptiveFluidVisualization {
             ImGui::TreePop();
         }
         if (selecter.select(pMesh, pGeom) || ImGui::Button("reset")) { load(); visualize(); }
-        if (!aTri) { return; }
+        if (!solver) { return; }
         if (ImGui::TreeNode("Control")) {
 
             ImGui::SameLine();
@@ -554,8 +533,8 @@ TEST(afemTest, testPathConsistency){
     fds = fds.parent_path()/ "models" / "disk.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
-    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    AdaptiveTriangulation atri(icit);
+    AdaptiveTriangulation atri(*parent_m,*parent_g);
+    auto& icit = atri.intrinsicTriangulation();
     ManifoldSurfaceMesh& m = atri.mesh();
     IntrinsicGeometryInterface& g = atri.geom();
 

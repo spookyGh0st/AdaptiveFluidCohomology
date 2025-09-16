@@ -1,7 +1,7 @@
 #pragma once
 #include "transfer.h"
 
-#include <geometrycentral/surface/intrinsic_triangulation.h>
+#include <geometrycentral/surface/integer_coordinates_intrinsic_triangulation.h>
 #include <vector>
 
 namespace geometrycentral::surface {
@@ -22,7 +22,7 @@ struct IncrementingIndex {
 
 class AdaptiveTriangulation {
   public:
-    AdaptiveTriangulation(IntrinsicTriangulation &tri);
+    AdaptiveTriangulation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface& geom);
     Halfedge vertex_bisection(Halfedge he, AdaptiveTransfer *transfer = nullptr);
     void refine(std::vector<Face> faces, AdaptiveTransfer *transfer = nullptr);
 
@@ -31,19 +31,21 @@ class AdaptiveTriangulation {
     Halfedge vertex_biunion(Halfedge he, AdaptiveTransfer *transfer = nullptr);
     void coarse(const std::vector<Face> &f, AdaptiveTransfer *transfer = nullptr);
 
-    ManifoldSurfaceMesh &mesh() const { return *tri.intrinsicMesh; }
-    IntrinsicGeometryInterface &geom() const { return tri; }
-    IntrinsicTriangulation &intrinsicTriangulation() const { return tri; }
+    [[nodiscard]] const ManifoldSurfaceMesh &mesh() const { return *tri.intrinsicMesh; }
+    [[nodiscard]] const IntrinsicGeometryInterface &geom() const { return tri; }
+    [[nodiscard]] const IntrinsicTriangulation &intrinsicTriangulation() const { return tri; }
+    ManifoldSurfaceMesh &mesh() { return *tri.intrinsicMesh; }
+    IntrinsicGeometryInterface &geom() { return tri; }
+    IntegerCoordinatesIntrinsicTriangulation &intrinsicTriangulation() { return tri; }
 
+    Halfedge getRefinementEdge(Face f);
+  private:
+    IntegerCoordinatesIntrinsicTriangulation tri;
+    void setRefinementEdge(Halfedge he);
+  public:
     IncrementingIndex idx;
     CornerData<bool> marked_corner;
-    Halfedge getRefinementEdge(Face f);
-
     Eigen::SparseMatrix<double> M_restriction;
-
-  private:
-    void setRefinementEdge(Halfedge he);
-    IntrinsicTriangulation &tri;
 };
 
 /// Gives the residual error for Δu = f in Ω, u = 0 in ∂Ω
@@ -83,6 +85,9 @@ struct DoeflerConf {
     double threshold_refine = 0.000001;                                     ///< refinement cutoff
     double threshold_coarse = 0.000001;           ///< coarsening cutoff
 };
+
+enum class DoerflerPresetConf{ LOW, HIGH, UNIFORM_REFINE, UNIFORM_COARSE };
+DoeflerConf DoerflerPreset(DoerflerPresetConf preset);
 
 /**
  * @brief Selects faces for refinement and coarsening using the Dörfler criterion.

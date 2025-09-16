@@ -73,10 +73,10 @@ TEST(refineTest, testSplit)
     fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
-    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
     // icit.flipToDelaunay();
 
-    AdaptiveTriangulation atri(icit);
+    AdaptiveTriangulation atri(*parent_m,*parent_g);
+    IntrinsicTriangulation& icit = atri.intrinsicTriangulation();
 
     ManifoldSurfaceMesh& m = atri.mesh();
     FaceData<int> selection(m,0);
@@ -211,8 +211,7 @@ TEST(refineTest, perf_test)
     fds = fds.parent_path()/"models"/"L.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
 
-    IntegerCoordinatesIntrinsicTriangulation icit(*m,*g);
-    AdaptiveTriangulation atri(icit);
+    AdaptiveTriangulation atri(*m, *g);
     for (int i = 0; i< 10; i++)
     {
         uniform_refine(atri);
@@ -270,9 +269,8 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
     fds = fds.parent_path()/ "models" / "L_coarse.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
-    IntegerCoordinatesIntrinsicTriangulation uniform_g(*parent_m,*parent_g), adaptive_g(*parent_m, *parent_g);
-    AdaptiveTriangulation uniform_a(uniform_g), adaptive_a(adaptive_g);
-    ManifoldSurfaceMesh &uniform_m = *uniform_g.intrinsicMesh, &adaptive_m = *adaptive_g.intrinsicMesh;
+    AdaptiveTriangulation uniform_a(*parent_m,*parent_g), adaptive_a(*parent_m,*parent_g);
+    ManifoldSurfaceMesh &uniform_m = uniform_a.mesh(), &adaptive_m = adaptive_a.mesh();
     while (uniform_m.nFaces() < 3072) {uniform_refine(uniform_a); uniform_refine(adaptive_a); }
     FaceData<double> res_u(uniform_m,0), res_a(adaptive_m,0);
     struct Data
@@ -307,12 +305,12 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         data.residual.push_back(s);
         data.rel_error.push_back(rel_error(icit,u));
     };
-    auto vis_all = [&]() { vis_mg("uniform", uniform_g,data_uniform,res_u); vis_mg("adaptive", adaptive_g,data_adaptive,res_a); };
+    auto vis_all = [&]() { vis_mg("uniform", uniform_a.intrinsicTriangulation(),data_uniform,res_u); vis_mg("adaptive", adaptive_a.intrinsicTriangulation(),data_adaptive,res_a); };
     auto adaptive_refine = [&]() {
         VertexData<double> f(adaptive_m,1); VertexData<double> u(adaptive_m,0);
-        StreamFunctionSolver S {}; S.compute(adaptive_m, adaptive_g); S.solve(adaptive_m,adaptive_g,u,f);
+        StreamFunctionSolver S {}; S.compute(adaptive_m, adaptive_a.geom()); S.solve(adaptive_m,adaptive_a.geom(),u,f);
 
-        res_a = poisson_residual_error_sqr(adaptive_m, adaptive_g, u, f);
+        res_a = poisson_residual_error_sqr(adaptive_m, adaptive_a.geom(), u, f);
         DoeflerConf conf;
         auto faces = select_doerfler(adaptive_m, res_a,conf);
         adaptive_a.refine(faces[0]);
@@ -385,8 +383,7 @@ TEST(refineTest,testCollapsingSameElement) {
     std::filesystem::path fds(__FILE__);
     fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
-    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    AdaptiveTriangulation atri(icit);
+    AdaptiveTriangulation atri(*parent_m,*parent_g);
     ManifoldSurfaceMesh& m = atri.mesh();
 
     Edge c_edge; std::array<Edge,4> b_edges;
@@ -407,6 +404,7 @@ TEST(refineTest,testCollapsingSameElement) {
     EdgeData<double> d(m,0);
     d[a_edge] = 1;
 
+    IntrinsicTriangulation& icit = atri.intrinsicTriangulation();
     icit.refreshQuantities(); m.compress();
 
     VertexData<Vector3> int_positions(m) ;
@@ -432,9 +430,9 @@ TEST(refineTest,testCoarsingCondition) {
     std::filesystem::path fds(__FILE__);
     fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
-    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    AdaptiveTriangulation atri(icit);
-    ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
+    AdaptiveTriangulation atri(*parent_m,*parent_g);
+    IntrinsicTriangulation& icit = atri.intrinsicTriangulation();
+    ManifoldSurfaceMesh& m = atri.mesh();
 
     Edge c_edge; std::array<Edge,4> b_edges;
     int i = 0; for (Edge e: m.edges()) if (e.isBoundary()) b_edges[i++] = e; else c_edge = e;
@@ -481,8 +479,8 @@ TEST(refineTest,testCoarseRefine) {
     fds = fds.parent_path()/ "models" / "nvb-coarsening.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
-    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    AdaptiveTriangulation atri(icit);
+    AdaptiveTriangulation atri(*parent_m,*parent_g);
+    IntrinsicTriangulation&  icit = atri.intrinsicTriangulation();
     ManifoldSurfaceMesh& m = atri.mesh();
     IntrinsicGeometryInterface& g = atri.geom();
 

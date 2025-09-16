@@ -59,6 +59,10 @@ struct DOPRI5_conf {
     double facmin = 0.1;
 };
 
+
+enum class DOPRI5PresetConf{ LOW, MEDIUM, HIGH, VERY_HIGH };
+DOPRI5_conf DOPRI5Preset(DOPRI5PresetConf preset);
+
 struct DOPRI5_sample {
     wc_wrapper wc{};
     double t_past{};   // past step
@@ -74,4 +78,5 @@ DOPRI5_sample adaptive_step(
     double dt,
     const StreamFunctionSolver &S,
     const DOPRI5_conf &conf);
+
 } // namespace geometrycentral::surface

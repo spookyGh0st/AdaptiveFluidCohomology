@@ -1,16 +1,17 @@
-#include "Stopwatch.h"
-#include <eider/AdaptiveFluidSolver.h>
 #include "Evaluator.h"
+#include "Stopwatch.h"
+#include "TaylorInitializer.h"
 #include "eider/homotopy.h"
 #include "eider/util.h"
 #include "geometrycentral/surface/integer_coordinates_intrinsic_triangulation.h"
 #include "geometrycentral/surface/meshio.h"
 #include <algorithm>
+#include <eider/AdaptiveFluidSolver.h>
 #include <filesystem>
+#include <gtest/gtest.h>
 #include <implot.h>
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
-#include <gtest/gtest.h>
 
 namespace fs = std::filesystem;
 
@@ -67,15 +68,195 @@ void copyFolder(const fs::path& source, const fs::path& destination) {
     }
 }
 
-void run(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom){
-    Evaluator ev;
-    IntegerCoordinatesIntrinsicTriangulation ic(mesh,geom);
-    AdaptiveTriangulation atri(ic);
-    DOPRI5_conf dopri5Conf;
-    DoeflerConf doeflerConf;
-    wc_wrapper wc;
-    AdaptiveFluidSolver solver(atri,wc,dopri5Conf,doeflerConf);
+namespace geometrycentral::surface{
+
+VertexData<Vector3> intrinsic_geom(IntrinsicTriangulation& Tri, VertexPositionGeometry& inputG){
+    auto& mesh = *Tri.intrinsicMesh;
+    VertexData<Vector3> int_positions(mesh) ;
+    for (Vertex v : mesh.vertices()) { int_positions[v] = Tri.vertexLocations[v].interpolate(inputG.vertexPositions); }
+    return int_positions;
 }
+
+
+class TestCase {
+  public:
+    std::string name;
+    TestCase(std::string name) :name(name) {}
+    virtual void runUntil(double t) = 0;
+    virtual void write(fs::path) = 0;
+    virtual polyscope::SurfaceMesh* visualize() = 0;
+};
+
+using MeshP = std::unique_ptr<ManifoldSurfaceMesh>;
+using GeomP = std::unique_ptr<VertexPositionGeometry>;
+
+std::pair<MeshP, GeomP > uniform_refine(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom, int refine){
+    AdaptiveTriangulation atri(mesh,geom);
+    for (int i = 0; i < refine; ++i) {
+        std::vector<Face> faces; for (Face f: atri.mesh().faces()) faces.push_back(f);
+        atri.refine(faces);
+    }
+    atri.mesh().compress();
+    atri.intrinsicTriangulation().refreshQuantities();
+    auto nMesh = atri.mesh().copy();
+    auto nGeom = std::make_unique<VertexPositionGeometry>(*nMesh,intrinsic_geom(atri.intrinsicTriangulation(),geom).reinterpretTo(*nMesh));
+    return { std::move(nMesh), std::move(nGeom)};
+}
+
+class TaylorVorticesCase : public TestCase{
+  public:
+    std::unique_ptr<ManifoldSurfaceMesh> mesh;
+    std::unique_ptr<VertexPositionGeometry> geom;
+    std::unique_ptr<AdaptiveFluidSolver> solver;
+    Evaluator eval_a, eval_t;
+
+    DOPRI5_sample dp5s;
+
+    DoeflerConf doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
+    DOPRI5_conf dopri5Conf = DOPRI5Preset(DOPRI5PresetConf::LOW);;
+    void registerAll(Evaluator& ev,int h_size){
+        ev.reg("dt", [](EvData d) { return d.dp5s.t_past; });
+        ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
+        ev.reg("velocity", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
+        ev.reg("streamfunction", [](EvData d) { return L2Norm(d.vel.stream_function,d.geom); });
+        ev.reg("w", [](EvData d) { return L2Norm(d.wc.w,d.geom); });
+        ev.reg("dw", [](EvData d) { return L2Norm(d.rhs.w,d.geom); });
+        for (int i = 0; i < h_size; ++i) {
+            ev.reg("c"+std::to_string(i), [&i](EvData d) { return d.wc.c[i]; });
+            ev.reg("dc"+std::to_string(i), [&i](EvData d) { return d.rhs.c[i]; });
+        }
+    }
+
+    EvData evData(){
+        ManifoldSurfaceMesh& mesh = solver->tri.mesh();
+        IntrinsicGeometryInterface& geom = solver->tri.geom();
+        std::vector<FaceData<double>> face_dc (solver->h.size(),FaceData<double>(mesh));
+        auto rhs = evalRHS(mesh,geom,solver->wc,solver->h, solver->S,&face_dc);
+        EvData data(mesh,geom,solver->velocity(), rhs,solver->wc,solver->h,dp5s,face_dc);
+        return data;
+    }
+
+    TaylorVorticesCase(std::string name, MeshP&& pmesh, GeomP&& pgeom, AdaptiveFluidSolverData data)
+        : TestCase(name), mesh(std::move(pmesh)), geom(std::move(pgeom)), solver(std::make_unique<AdaptiveFluidSolver>(*mesh,*geom,data))
+    {
+        solver->wc.w = TaylorInitializer().wc(solver->tri.intrinsicTriangulation(),*geom).w;
+        registerAll(eval_t, solver->h.size());
+        registerAll(eval_a, solver->h.size());
+        dp5s = DOPRI5_sample(solver->wc,solver->dt,solver->dt,0);
+    }
+
+    void runUntil(double t) override{
+        while (solver->elapsed_time < t){
+            dp5s = solver->step();
+            eval_t.onStep(evData(),dp5s.t_past);
+        }
+    }
+
+    polyscope::SurfaceMesh* visualize() override{
+        AdaptiveTriangulation& atri = solver->tri;
+        auto vp = intrinsic_geom(atri.intrinsicTriangulation(),*geom);
+        polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh(name, vp,atri.mesh().getFaceVertexList(), polyscopePermutations(atri.mesh()));
+        pm->addVertexScalarQuantity("vorticity",solver->wc.w)->setMapRange({-30,30})->setEnabled(true);
+
+        return pm;
+    }
+
+    void write(fs::path p) override {
+        to_csv(dopri5Conf,p/ (name+"-dopri5.csv"));
+        to_csv(doerflerConf,p/ (name+"-doerfler.csv"));
+        eval_t.saveCSV_T(p/ (name + "-time.csv"));
+    }
+};
+
+void refineAndReset(TaylorVorticesCase& aCase, GeomP& geom) {
+    aCase.eval_a = Evaluator();
+    aCase.registerAll(aCase.eval_a, aCase.solver->h.size());
+    for (int i = 0; i < 16; ++i) {
+        aCase.solver->adapt();
+        aCase.eval_a.onStep(aCase.evData(), 1);
+    }
+    aCase.solver->wc.w = TaylorInitializer().wc(aCase.solver->tri.intrinsicTriangulation(), *geom).w;
+}
+std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
+    std::string name,
+    MeshP&& mesh, GeomP&& geom,
+    bool adapt_time, bool adapt_space,
+    bool uniformRefine = false)
+{
+    AdaptiveFluidSolverData data {
+        DOPRI5Preset(DOPRI5PresetConf::HIGH),
+        DoerflerPreset(DoerflerPresetConf::LOW),
+        0.01,
+        adapt_time,
+        adapt_space
+    };
+
+    if (uniformRefine) {
+        std::tie(mesh, geom) = uniform_refine(*mesh, *geom, 2);
+    }
+
+    auto aCase = std::make_shared<TaylorVorticesCase>(
+        name, std::move(mesh), std::move(geom), data
+    );
+
+    if (adapt_space) {
+        refineAndReset(*aCase, aCase->geom);
+    }
+
+    return aCase;
+}
+
+std::shared_ptr<TaylorVorticesCase> taylorVortices_ASAT(MeshP&& mesh, GeomP&& geom) {
+    return makeTaylorCase("Taylor Vortices AS AT", std::move(mesh), std::move(geom), true, true);
+}
+
+std::shared_ptr<TaylorVorticesCase> taylorVortices_SSST(MeshP&& mesh, GeomP&& geom) {
+    return makeTaylorCase("Taylor Vortices SS ST", std::move(mesh), std::move(geom), false, false);
+}
+
+std::shared_ptr<TaylorVorticesCase> taylorVortices_ASST(MeshP&& mesh, GeomP&& geom) {
+    return makeTaylorCase("Taylor Vortices AS ST", std::move(mesh), std::move(geom), false, true);
+}
+
+std::shared_ptr<TaylorVorticesCase> taylorVortices_SSAT(MeshP&& mesh, GeomP&& geom) {
+    return makeTaylorCase("Taylor Vortices SS AT", std::move(mesh), std::move(geom), true, false);
+}
+
+std::shared_ptr<TaylorVorticesCase> taylorVortices_SSST_REFINED(MeshP&& mesh, GeomP&& geom) {
+    return makeTaylorCase("Taylor Vortices SS ST REFINED", std::move(mesh), std::move(geom), false, false, true);
+}
+
+std::shared_ptr<TaylorVorticesCase> taylorVortices_OR(MeshP&& mesh, GeomP&& geom) {
+    return makeTaylorCase("Taylor Vortices Original", std::move(mesh), std::move(geom), false, false);
+}
+
+class Comparator {
+  public:
+    std::vector<std::shared_ptr<TestCase>> testcases;
+
+    void runUntil(double t) {
+        for(auto& tc: testcases){
+            tc->runUntil(t);
+        }
+    }
+
+    void visualize() {
+        double height = 0;
+        for(auto& tc: testcases){
+            polyscope::SurfaceMesh* pm = tc->visualize();
+            pm->setEdgeColor(glm::vec3(0,0,0));
+            pm->setEdgeWidth(0.3);
+            pm->setPosition(glm::vec3( height,0,0));
+            height += 2.2;
+        }
+    };
+
+    void write(fs::path p) {
+        for(auto& tc: testcases){
+            tc->write(p);
+        }
+    }
+};
 
 TEST(EvaluatorTest, Evaluate)
 {
@@ -86,26 +267,43 @@ TEST(EvaluatorTest, Evaluate)
     fs::path flatest = fev.parent_path() / "run_latest";
 
     auto [mesh,geom] = readManifoldSurfaceMesh(fds.string());
+    auto [meshO,geomO] = readManifoldSurfaceMesh((fsrc/"models"/"cheese_oriented.stl"));
+
+    Comparator cpm;
+    cpm.testcases = {
+        taylorVortices_OR(meshO->copy(), geomO->copy()),
+        taylorVortices_SSST(mesh->copy(), geom->copy()),
+        taylorVortices_SSST_REFINED(mesh->copy(), geom->copy()),
+        taylorVortices_ASAT(mesh->copy(), geom->copy()),
+    };
+
     polyscope::init();
-
-    // Register your mesh with Polyscope
-    auto* pm1 = polyscope::registerSurfaceMesh("cheese_min", geom->vertexPositions,mesh->getFaceVertexList(), polyscopePermutations(*mesh));
-    auto* pm2 = polyscope::registerSurfaceMesh("cheese_max", geom->vertexPositions,mesh->getFaceVertexList(), polyscopePermutations(*mesh));
-    pm1->setPosition(glm::vec3(-1.1,0,0));
-    pm2->setPosition(glm::vec3( 1.1,0,0));
-    // Set some options and save a named screenshot
-
+    cpm.visualize();
     polyscope::view::ensureViewValid();
     polyscope::view::fov = 30;
     polyscope::view::projectionMode = polyscope::ProjectionMode::Orthographic;
     polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
-    polyscope::view::setWindowSize(2160/2,1080/2);
+    polyscope::view::setWindowSize(1080*cpm.testcases.size()/2,1080/2);
 
-    polyscope::screenshot(fev/"im.png",true);
-    to_csv(DoeflerConf(),fev/"doerfler.csv");
-    to_csv(DOPRI5_conf(),fev/"dopri.csv");
+    polyscope::options::ssaaFactor = 3;
+
+    cpm.visualize();
+    polyscope::screenshot(fev/"adaptive_a1.png",true);
+
+    cpm.runUntil(1.5); cpm.visualize();
+    polyscope::screenshot(fev/"adaptive_a2.png",true);
+
+    cpm.runUntil(3); cpm.visualize();
+    polyscope::screenshot(fev/"adaptive_a3.png",true);
+
+    cpm.runUntil(4.5); cpm.visualize();
+    polyscope::screenshot(fev/"adaptive_a4.png",true);
+
+    cpm.runUntil(6); cpm.visualize();
+    polyscope::screenshot(fev/"adaptive_a5.png",true);
+
+    cpm.write(fev);
     copyFolder(fev,flatest);
-    ImPlot::CreateContext();
     polyscope::show();
 }
 
@@ -130,4 +328,6 @@ TEST(EvaluatorTest, Clean)
             }
         }
     }
+}
+
 }

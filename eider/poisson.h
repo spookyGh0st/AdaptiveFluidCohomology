@@ -23,6 +23,8 @@ struct StreamFunctionSolver {
     void compute_dirichlet(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom);
     void compute_zero_mean(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom);
     void compute(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom);
+    StreamFunctionSolver() = default;
+    StreamFunctionSolver(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom) { compute(mesh, geom); }
 
     void solve_dirichlet(VertexData<double> &u, const VertexData<double> &f) const;
     void solve_zero_mean(SurfaceMesh &mesh, VertexData<double> &u, const VertexData<double> &f) const;

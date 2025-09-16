@@ -201,5 +201,37 @@ DOPRI5_sample adaptive_step(
     F_type F = [&mesh, &geom, &h, &S](const wc_wrapper &wc) -> wc_wrapper { return evalRHS(mesh, geom, wc, h, S); };
     return DOPRI5_step(mesh, x, dt, F, conf);
 }
+DOPRI5_conf DOPRI5Preset(DOPRI5PresetConf preset) {
+    DOPRI5_conf conf;
+    switch (preset) {
+    case DOPRI5PresetConf::LOW: // Low precision (fast)
+        conf.Rtol_i = 1e-3;
+        conf.Atol_i = 1e-6;
+        conf.facmin = 0.2;
+        conf.faxmax = 10.0;
+        break;
+    case DOPRI5PresetConf::MEDIUM:
+        // Medium precision (balanced)
+        conf.Rtol_i = 1e-6;
+        conf.Atol_i = 1e-9;
+        conf.facmin = 0.2;
+        conf.faxmax = 5.0;
+        break;
+
+    case DOPRI5PresetConf::HIGH:
+        conf.Rtol_i = 1e-8;
+        conf.Atol_i = 1e-11;
+        conf.facmin = 0.25;
+        conf.faxmax = 2.0;
+        break;
+    case DOPRI5PresetConf::VERY_HIGH:
+        conf.Rtol_i = 1e-10;
+        conf.Atol_i = 1e-13;
+        conf.facmin = 0.25;
+        conf.faxmax = 1.5;
+        break;
+    }
+    return conf;
+}
 
 } // namespace geometrycentral::surface

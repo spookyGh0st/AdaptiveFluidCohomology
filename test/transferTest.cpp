@@ -62,8 +62,7 @@ TEST(transfertTest,deadVerticesRetainValues) {
     fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
-    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    AdaptiveTriangulation atri(icit);
+    AdaptiveTriangulation atri(*parent_m,*parent_g);
     ManifoldSurfaceMesh& m = atri.mesh();
     VertexData<std::size_t> idx(m,0);
     std::vector<Face> faces { }; for (Face f: m.faces()) faces.push_back(f);
@@ -83,8 +82,7 @@ TEST(transfertTest,testL2VerticesCoarse) {
     fds = fds.parent_path()/ "models" / "grid.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
 
-    IntegerCoordinatesIntrinsicTriangulation icit(*parent_m,*parent_g);
-    AdaptiveTriangulation atri(icit);
+    AdaptiveTriangulation atri(*parent_m, *parent_g);
 
     ManifoldSurfaceMesh& m = atri.mesh();
     IntrinsicGeometryInterface& g = atri.geom();
@@ -95,7 +93,7 @@ TEST(transfertTest,testL2VerticesCoarse) {
     for (Face f: m.faces()){ faces.push_back(f); }
     atri.refine(faces);
 
-    VertexData<Vector3> int_positions_A = intrinsic_position(icit,*parent_g);
+    VertexData<Vector3> int_positions_A = intrinsic_position(atri.intrinsicTriangulation(),*parent_g);
     VertexData<double> fA(m,0);
     for(Vertex v: m.vertices()){
         fA[v] = int_positions_A[v].x;
@@ -107,12 +105,12 @@ TEST(transfertTest,testL2VerticesCoarse) {
         else facesC.push_back(f);
     }
 
-    AdaptiveTransfer transfer(icit,fA);
+    AdaptiveTransfer transfer(atri.intrinsicTriangulation(),fA);
     atri.refine(facesR,&transfer);
     atri.coarse(facesC,&transfer);
     VertexData<double> fB = transfer.transfer();
 
-    int_positions_A = intrinsic_position(icit,*parent_g);
+    int_positions_A = intrinsic_position(atri.intrinsicTriangulation(),*parent_g);
     for(Vertex v: m.vertices()){
         ASSERT_NEAR(fB[v],int_positions_A[v].x,0.000001);
     }

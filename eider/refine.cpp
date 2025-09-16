@@ -5,7 +5,7 @@
 
 namespace geometrycentral::surface {
 
-AdaptiveTriangulation::AdaptiveTriangulation(IntrinsicTriangulation &tri): tri(tri), idx(*tri.intrinsicMesh), marked_corner(*tri.intrinsicMesh,false) {
+AdaptiveTriangulation::AdaptiveTriangulation(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom): tri(mesh,geom), idx(*tri.intrinsicMesh), marked_corner(*tri.intrinsicMesh,false) {
     tri.requireEdgeLengths();
     for (Face f : tri.intrinsicMesh->faces()) {
         double maxEl = std::numeric_limits<double>::lowest();
@@ -301,6 +301,37 @@ std::array<std::vector<Face>,2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceD
         accum_res += residual[faces[i]];
     }
     return { mark_refine, mark_coarse };
+}
+
+DoeflerConf DoerflerPreset(DoerflerPresetConf preset) {
+    DoeflerConf conf;
+    switch (preset) {
+    case DoerflerPresetConf::LOW: // Conservative refinement
+        conf.theta_refine     = 0.3;
+        conf.threshold_refine = 1e-4;
+        conf.theta_coarse     = 0.3;
+        conf.threshold_coarse = 1e-6;
+        break;
+    case DoerflerPresetConf::HIGH: // Conservative refinement
+        conf.theta_refine     = 0.3;
+        conf.threshold_refine = 1e-6;
+        conf.theta_coarse     = 0.3;
+        conf.threshold_coarse = 1e-8;
+        break;
+    case DoerflerPresetConf::UNIFORM_REFINE:
+        conf.theta_refine     = 1.0;   // force refine
+        conf.threshold_refine = 0.0;   // no threshold
+        conf.theta_coarse     = 0.0;   // disable coarsening
+        conf.threshold_coarse = 0.0;   // disable coarsening
+        break;
+    case DoerflerPresetConf::UNIFORM_COARSE:
+        conf.theta_refine     = 0.0;   // disable refining
+        conf.threshold_refine = 1e9;   // effectively prevent refining
+        conf.theta_coarse     = 1.0;   // force coarsening
+        conf.threshold_coarse = 1e9;   // no threshold
+        break;
+    }
+    return conf;
 }
 
 IncrementingIndex::IncrementingIndex(ManifoldSurfaceMesh &mesh) : idx(mesh,invalidIdx) {}

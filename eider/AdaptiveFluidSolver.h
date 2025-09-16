@@ -9,22 +9,36 @@
 
 namespace geometrycentral::surface{
 
+
+
+struct AdaptiveFluidSolverData{
+    DOPRI5_conf dopri5Conf = DOPRI5Preset(DOPRI5PresetConf::HIGH);
+    DoeflerConf doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
+    double dt = 0.0001;
+    bool adaptive_time = true;
+    bool adaptive_space = true;
+};
+
 class AdaptiveFluidSolver {
   public:
-    AdaptiveTriangulation& tri;
-    wc_wrapper wc;
+    AdaptiveTriangulation tri;
     DOPRI5_conf conf;
     DoeflerConf doerflerConf;
 
     AdaptiveHomologyBasis hom;
     Harmonic_basis h;
 
+    wc_wrapper wc;
     double dt, elapsed_time = 0;
     StreamFunctionSolver S;
 
-    velocity_wrapper velocity() const;
+    bool adapt_time, adapte_space;
 
-    AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper wc, const DOPRI5_conf &conf, const DoeflerConf &doerflerConf);
+    velocity_wrapper velocity();
+
+    AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const AdaptiveFluidSolverData& data);
+
+    AdaptiveFluidSolverData data() const;
 
     void adapt();
 

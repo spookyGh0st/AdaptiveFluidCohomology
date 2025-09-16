@@ -2,16 +2,15 @@
 
 namespace geometrycentral::surface {
 
-velocity_wrapper AdaptiveFluidSolver::velocity() const {
+velocity_wrapper AdaptiveFluidSolver::velocity() {
     return ::geometrycentral::surface::velocity(tri.mesh(), tri.geom(), wc, h, S);
 }
 
-AdaptiveFluidSolver::AdaptiveFluidSolver(AdaptiveTriangulation &tri, wc_wrapper wc, const DOPRI5_conf &conf, const DoeflerConf &doerflerConf)
-    : tri(tri), wc(std::move(wc)), conf(conf), doerflerConf(doerflerConf),
-      hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()) ,
-      dt(0.0001) {
-    if (this->wc.c.empty()) this->wc.c = std::vector<double>(hom.homologyB.size(),0);
-    S.compute(tri.mesh(), tri.geom());
+AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const AdaptiveFluidSolverData& data)
+    : tri(mesh,geom), hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()), S(tri.mesh(),tri.geom()),
+      conf(data.dopri5Conf), doerflerConf(data.doerflerConf), adapt_time(data.adaptive_time), adapte_space(data.adaptive_space), dt(data.dt),
+      wc(VertexData<double>(tri.mesh()),std::vector<double>(hom.homologyB.size(),0)) // empty wc
+{
     // On split, lerp w s.t. guess is closer to actual solution.
     tri.intrinsicTriangulation().edgeSplitCallbackList.push_back([&](Edge e, Halfedge he1, Halfedge he2) {
         this->wc.w[he1.vertex()] = 0.5 * this->wc.w[he1.tipVertex()] + 0.5 * this->wc.w[he2.tipVertex()];
@@ -46,10 +45,21 @@ void AdaptiveFluidSolver::adapt() {
 }
 
 DOPRI5_sample AdaptiveFluidSolver::step() {
-    DOPRI5_sample dps = adaptive_step(tri.mesh(),tri.geom(),h,wc,dt,S,conf);
-    wc = dps.wc; dt = dps.t_future;
+    if(adapte_space) adapt();
+
+    DOPRI5_sample dps;
+    if (adapt_time){
+        dps = adaptive_step(tri.mesh(), tri.geom(), h, wc, dt, S, conf);
+        wc = dps.wc;
+        dt = dps.t_future;
+    }else {
+        wc = RK4Step(tri.mesh(),tri.geom(),h,wc,dt,S);
+        dps.wc = wc; dps.t_past = dt; dps.t_future = dt;
+    }
     elapsed_time += dps.t_past;
     return dps;
 }
-
+AdaptiveFluidSolverData AdaptiveFluidSolver::data() const {
+    return AdaptiveFluidSolverData(conf,doerflerConf,dt,adapt_time,adapte_space);
+}
 }
