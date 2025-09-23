@@ -204,6 +204,12 @@ DOPRI5_sample adaptive_step(
 DOPRI5_conf DOPRI5Preset(DOPRI5PresetConf preset) {
     DOPRI5_conf conf;
     switch (preset) {
+    case DOPRI5PresetConf::VERY_LOW: // Low precision (fast)
+        conf.Rtol_i = 1e-2;
+        conf.Atol_i = 1e-4;
+        conf.facmin = 0.1;
+        conf.faxmax = 15.0;
+        break;
     case DOPRI5PresetConf::LOW: // Low precision (fast)
         conf.Rtol_i = 1e-3;
         conf.Atol_i = 1e-6;

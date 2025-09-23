@@ -60,7 +60,7 @@ struct DOPRI5_conf {
 };
 
 
-enum class DOPRI5PresetConf{ LOW, MEDIUM, HIGH, VERY_HIGH };
+enum class DOPRI5PresetConf{ VERY_LOW, LOW, MEDIUM, HIGH, VERY_HIGH };
 DOPRI5_conf DOPRI5Preset(DOPRI5PresetConf preset);
 
 struct DOPRI5_sample {

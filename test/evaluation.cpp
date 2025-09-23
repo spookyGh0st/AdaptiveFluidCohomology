@@ -36,7 +36,7 @@ void copyFolder(const fs::path& source, const fs::path& destination) {
 
         // Create the destination folder if it does not exist
         if(fs::exists(destination)){
-            if(destination.filename() != "run_latest") throw std::runtime_error("Carefull, we delete it here.");
+            if(destination.filename() != "run_latest" && destination.filename()!= "run_tc2" && destination.filename()!= "run_tc1") throw std::runtime_error("Carefull, we delete it here.");
             fs::remove_all(destination);
         }
         fs::create_directories(destination);
@@ -80,7 +80,8 @@ class TestCase {
   public:
     std::chrono::duration<double> total_time;
     std::string name;
-    TestCase(std::string name) :name(name), total_time(0) {}
+    std::string label;
+    TestCase(std::string name, std::string label) :name(name), label(label), total_time(0) {}
     virtual void runUntil(double t) = 0;
     virtual void write(fs::path) = 0;
     virtual polyscope::SurfaceMesh* visualize() = 0;
@@ -114,18 +115,18 @@ class TaylorVorticesCase : public TestCase{
     DoeflerConf doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
     DOPRI5_conf dopri5Conf = DOPRI5Preset(DOPRI5PresetConf::LOW);;
     void registerAll(Evaluator& ev,int h_size){
-        ev.reg("dt", [](EvData d) { return d.dp5s.t_past; });
+        ev.reg("dt (s)", [](EvData d) { return d.dp5s.t_past; });
         ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
-        ev.reg("velocity", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
-        ev.reg("streamfunction", [](EvData d) { return L2Norm(d.vel.stream_function,d.geom); });
-        ev.reg("$\\|w\\|_2$", [](EvData d) { return L2Norm(d.wc.w,d.geom); });
-        ev.reg("dw", [](EvData d) { return L2Norm(d.rhs.w,d.geom); });
-        ev.reg("tpss", [](EvData d) { return d.time_per_sim_sec; });
+        ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
+        ev.reg(R"($\|\psi \|_2$)", [](EvData d) { return L2Norm(d.vel.stream_function,d.geom); });
+        ev.reg(R"($\|w\|_2$)", [](EvData d) { return L2Norm(d.wc.w,d.geom); });
+        ev.reg(R"($\|\frac{d}{dt} w\|_2$)", [](EvData d) { return L2Norm(d.rhs.w,d.geom); });
+        ev.reg("wall time per simulation time (s)", [](EvData d) { return d.time_per_sim_sec; });
         for (int i = 0; i < h_size; ++i) {
-            ev.reg("c"+std::to_string(i), [i](EvData d) {
+            ev.reg("$c_IDX("+std::to_string(i) +")$", [i](EvData d) {
                 return d.wc.c[i];
             });
-            ev.reg("dc"+std::to_string(i), [i](EvData d) { return d.rhs.c[i]; });
+            ev.reg(R"($\frac{d}{dt} c_IDX()"+std::to_string(i) +")$", [i](EvData d) { return d.rhs.c[i]; });
         }
     }
 
@@ -138,8 +139,9 @@ class TaylorVorticesCase : public TestCase{
         return data;
     }
 
-    TaylorVorticesCase(std::string name, MeshP&& pmesh, GeomP&& pgeom, AdaptiveFluidSolverData data)
-        : TestCase(name), mesh(std::move(pmesh)), geom(std::move(pgeom)), solver(std::make_unique<AdaptiveFluidSolver>(*mesh,*geom,data))
+    TaylorVorticesCase(std::string name, std::string label, MeshP&& pmesh, GeomP&& pgeom, AdaptiveFluidSolverData data)
+        : TestCase(name,label), mesh(std::move(pmesh)), geom(std::move(pgeom)), solver(std::make_unique<AdaptiveFluidSolver>(*mesh,*geom,data)),
+          dopri5Conf(data.dopri5Conf), doerflerConf(data.doerflerConf)
     {
         solver->wc.w = TaylorInitializer().wc(solver->tri.intrinsicTriangulation(),*geom).w;
         registerAll(eval_t, solver->h.size());
@@ -164,6 +166,7 @@ class TaylorVorticesCase : public TestCase{
         auto vp = intrinsic_geom(atri.intrinsicTriangulation(),*geom);
         polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh(name, vp,atri.mesh().getFaceVertexList(), polyscopePermutations(atri.mesh()));
         auto* vsq = pm->addVertexScalarQuantity("vorticity",solver->wc.w);
+        vsq->setColorMap("coolwarm");
         vsq->setMapRange({-30,30})->setEnabled(true);
         colormap = { vsq->getColorMap(), vsq->getMapRange() };
         return pm;
@@ -177,9 +180,9 @@ class TaylorVorticesCase : public TestCase{
     }
 
     void write(fs::path p) override {
-        to_csv(dopri5Conf,p/ ("dopri5.csv"));
-        to_csv(doerflerConf,p/ ("doerfler.csv"));
-        eval_t.saveCSV_T(p/ (name + "-time.csv"));
+        to_csv(dopri5Conf,p/ (name+"dopri5.csv"));
+        to_csv(doerflerConf,p/ (name+"doerfler.csv"));
+        eval_t.saveCSV_T(p/ (name + "-measurements.csv"));
         writeCM(p/"colormap.csv");
     }
 };
@@ -194,9 +197,11 @@ void refineAndReset(TaylorVorticesCase& aCase, GeomP& geom) {
     aCase.solver->wc.w = TaylorInitializer().wc(aCase.solver->tri.intrinsicTriangulation(), *geom).w;
 }
 std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
-    std::string name,
+    std::string name, std::string label,
     ManifoldSurfaceMesh& pmesh, VertexPositionGeometry& pgeom,
     bool adapt_time, bool adapt_space,
+    DOPRI5PresetConf dp5conf = DOPRI5PresetConf::MEDIUM,
+    DoerflerPresetConf doerflerConf = DoerflerPresetConf::LOW,
     bool uniformRefine = false)
 {
 
@@ -204,14 +209,14 @@ std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
     std::unique_ptr<ManifoldSurfaceMesh> mesh = pmesh.copy();
     GeomP  geom= std::make_unique<VertexPositionGeometry>(*mesh,pgeom.vertexPositions.reinterpretTo(*mesh));
     // init data
-    AdaptiveFluidSolverData data { DOPRI5Preset(DOPRI5PresetConf::HIGH), DoerflerPreset(DoerflerPresetConf::LOW), 0.01, adapt_time, adapt_space };
+    AdaptiveFluidSolverData data { DOPRI5Preset(dp5conf), DoerflerPreset(DoerflerPresetConf::LOW), 0.01, adapt_time, adapt_space };
 
     if (uniformRefine) {
         std::tie(mesh, geom) = uniform_refine(*mesh, *geom, 2);
     }
 
     auto aCase = std::make_shared<TaylorVorticesCase>(
-        name, std::move(mesh), std::move(geom), data
+        name, label, std::move(mesh), std::move(geom), data
     );
 
     if (adapt_space) {
@@ -222,27 +227,27 @@ std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
 }
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_ASAT(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("adaptive spacetime", mesh, geom, true, true);
+    return makeTaylorCase("ASAT", "Adaptive Space Adaptive Time (ASAT)", mesh, geom, true, true);
 }
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_SSST(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("SS ST", mesh, geom, false, false);
+    return makeTaylorCase("SSST","Static Space Static Time (SSST)", mesh, geom, false, false);
 }
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_ASST(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("AS ST", mesh, geom, false, true);
+    return makeTaylorCase("ASST", "Adaptive Space Static Time", mesh, geom, false, true);
 }
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_SSAT(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("SS AT", mesh, geom, true, false);
+    return makeTaylorCase("SSAT","Static Space Adaptive Time (SSAT)", mesh, geom, true, false);
 }
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_SSST_REFINED(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("SS ST REFINED", mesh, geom, false, false, true);
+    return makeTaylorCase("SSSTR","Static Space Static Time Refined (SSSTR)", mesh, geom, false, false, DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,true);
 }
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_OR(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("Original", mesh, geom, false, false);
+    return makeTaylorCase("OR", "Original (Yin et al., 2023)", mesh, geom, false, false);
 }
 
 class Comparator {
@@ -250,20 +255,26 @@ class Comparator {
     std::vector<std::shared_ptr<TestCase>> testcases;
 
     void runUntil(double t) {
+        std::cout << "Running until " << t << std::endl;
         for(auto& tc: testcases){
+            std::cout << " - " << tc->name << std::endl;
             tc->runUntil(t);
         }
     }
 
-    void visualize() {
-        double height = 0;
+    int step = 0;
+    void visualize(fs::path f_screenshots = fs::path()) {
+        polyscope::removeAllStructures();
         for(auto& tc: testcases){
             polyscope::SurfaceMesh* pm = tc->visualize();
             pm->setEdgeColor(glm::vec3(0,0,0));
             pm->setEdgeWidth(0.3);
-            pm->setPosition(glm::vec3( 0,-height,0));
-            height += 2.2;
+            if(!f_screenshots.empty()){
+                polyscope::screenshot(f_screenshots/(tc->name+std::to_string(step)+".png"),true);
+                pm->remove();
+            }
         }
+        step++;
     };
 
     void csv_total_times(fs::path filename){
@@ -277,29 +288,59 @@ class Comparator {
         }
         file.close();
     };
+    void csv_comparator(fs::path filename){
+        std::ofstream file(filename);
+        if (!file.is_open()) { throw std::runtime_error("Cannot open file for writing: " + filename.string()); }
+        file << "name,label" << std::endl;
+        for (int i = 0; i < testcases.size(); ++i) {
+            file << testcases[i]->name << ",\"" << testcases[i]->label << "\"" << std::endl;
+        }
+        file.close();
+    }
 
     void write(fs::path p) {
+        fs::path f_data = p / "data";
+        fs::create_directories(f_data);
         for(auto& tc: testcases){
-            tc->write(p);
+            tc->write(f_data);
         }
-        csv_total_times(p / "total_time.csv");
+        csv_total_times(f_data / "total_time.csv");
+        csv_comparator(p / "config.csv");
+    }
+};
+struct CaseFolder{
+    fs::path fsrc;
+    fs::path fmodels;
+    fs::path fev;
+    fs::path f_screenshots;
+    fs::path flatest;
+    CaseFolder(std::string name)
+        : fsrc(fs::path(__FILE__).parent_path()),
+          fmodels(fsrc / "models" ),
+          fev(run_folder(results_folder())),
+          f_screenshots(fev / "snapshots"),
+          flatest(fev.parent_path() / ("run_"+name)) {
+        fs::create_directories(f_screenshots);
     }
 };
 
+void init_ps(Comparator& cmp){
+    polyscope::init();
+    cmp.visualize();
+    polyscope::view::ensureViewValid();
+    polyscope::view::fov = 30;
+    polyscope::view::projectionMode = polyscope::ProjectionMode::Orthographic;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
+    polyscope::view::setWindowSize(1080,1080);
+    polyscope::options::ssaaFactor = 3;
+}
+
 TEST(EvaluatorTest, Evaluate)
 {
-    results_folder();
-    fs::path fsrc = fs::path(__FILE__).parent_path();
-    fs::path fds = fsrc / "models" / "cheese_min.stl";
-    fs::path fev = run_folder(results_folder());
-    fs::path f_screenshots = fev/ "snapshots";
-    fs::path f_data = fev/ "data";
-    fs::path flatest = fev.parent_path() / "run_latest";
-    fs::create_directories(f_screenshots);
-    fs::create_directories(f_data);
+    CaseFolder cf("tc1");
 
-    auto [mesh,geom] = readManifoldSurfaceMesh(fds.string());
-    auto [meshO,geomO] = readManifoldSurfaceMesh((fsrc/"models"/"cheese_oriented.stl"));
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
+    auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
 
     Comparator cpm;
     cpm.testcases = {
@@ -309,33 +350,43 @@ TEST(EvaluatorTest, Evaluate)
         taylorVortices_ASAT(*mesh,*geom),
     };
 
-    polyscope::init();
+    init_ps(cpm);
+
+
+    cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(1.5); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(4.5); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+
+    cpm.write(cf.fev);
+    copyFolder(cf.fev,cf.flatest);
     cpm.visualize();
-    polyscope::view::ensureViewValid();
-    polyscope::view::fov = 55;
-    polyscope::view::projectionMode = polyscope::ProjectionMode::Orthographic;
-    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
-    polyscope::view::setWindowSize(1080/2,1080*cpm.testcases.size()/2);
+    polyscope::show();
+}
 
-    polyscope::options::ssaaFactor = 3;
+TEST(EvaluatorTest, EvaluateDiffDopri)
+{
+    CaseFolder cf ("tc2");
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
+    auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
+    Comparator cpm;
+    cpm.testcases = {
+        taylorVortices_OR(*meshO, *geomO),
+        makeTaylorCase("low", "Low Precision", *mesh, *geom, true, true,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::LOW),
+        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, true, true,DOPRI5PresetConf::VERY_HIGH,DoerflerPresetConf::HIGH),
+    };
 
+    init_ps(cpm);
+
+
+    cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+
+    cpm.write(cf.fev);
+    copyFolder(cf.fev,cf.flatest);
     cpm.visualize();
-    polyscope::screenshot(f_screenshots/"adaptive_a1.png",true);
-
-    cpm.runUntil(1.5); cpm.visualize();
-    polyscope::screenshot(f_screenshots/"adaptive_a2.png",true);
-
-    cpm.runUntil(3); cpm.visualize();
-    polyscope::screenshot(f_screenshots/"adaptive_a3.png",true);
-
-    cpm.runUntil(4.5); cpm.visualize();
-    polyscope::screenshot(f_screenshots/"adaptive_a4.png",true);
-
-    cpm.runUntil(6); cpm.visualize();
-    polyscope::screenshot(f_screenshots/"adaptive_a5.png",true);
-
-    cpm.write(f_data);
-    copyFolder(fev,flatest);
     polyscope::show();
 }
 
