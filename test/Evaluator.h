@@ -26,14 +26,15 @@ struct EvData {
     Harmonic_basis h;
     DOPRI5_sample dp5s;
     std::vector<FaceData<double>> dc;
+    double time_per_sim_sec;
 };
 
 struct EvVector {
     std::string name;
     std::vector<float> data;
-    std::function<float(EvData)> f;
-    void evaluate(EvData ev){
-        data.push_back(f(ev));
+    std::function<double(EvData)> f;
+    void evaluate(const EvData& ev){
+        data.push_back(float(f(ev)));
     }
     EvVector(const std::string& name, const std::function<double(EvData)>& f) :name(name), f(f) {}
 };
