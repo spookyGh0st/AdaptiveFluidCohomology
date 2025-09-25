@@ -27,6 +27,7 @@ struct EvData {
     DOPRI5_sample dp5s;
     std::vector<FaceData<double>> dc;
     double time_per_sim_sec;
+    double poison_residual_error;
 };
 
 struct EvVector {

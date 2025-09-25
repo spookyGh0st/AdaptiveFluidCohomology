@@ -11,7 +11,7 @@ inline double L2Norm(FaceData<Vector2> d, IntrinsicGeometryInterface& geom){
     for (Face f: geom.mesh.faces()) { s += d[f].norm2() * geom.faceAreas[f]; }
     return std::sqrt(s);
 }
-inline double L2Norm(VertexData<double> d, IntrinsicGeometryInterface& geom){
+inline double integral(VertexData<double> d, IntrinsicGeometryInterface& geom){
     double s = 0;
     for (Face f: geom.mesh.faces()){
         double fs = 0;

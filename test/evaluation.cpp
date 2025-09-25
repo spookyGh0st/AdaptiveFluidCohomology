@@ -116,12 +116,13 @@ class TaylorVorticesCase : public TestCase{
     DOPRI5_conf dopri5Conf = DOPRI5Preset(DOPRI5PresetConf::LOW);;
     void registerAll(Evaluator& ev,int h_size){
         ev.reg("dt (s)", [](EvData d) { return d.dp5s.t_past; });
-        ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
+        // ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
         ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
-        ev.reg(R"($\|\psi \|_2$)", [](EvData d) { return L2Norm(d.vel.stream_function,d.geom); });
-        ev.reg(R"($\|w\|_2$)", [](EvData d) { return L2Norm(d.wc.w,d.geom); });
-        ev.reg(R"($\|\frac{d}{dt} w\|_2$)", [](EvData d) { return L2Norm(d.rhs.w,d.geom); });
+        ev.reg(R"($\int_M \psi \, dA$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
+        ev.reg(R"($\int_M w\, dA$)", [](EvData d) { return integral(d.wc.w,d.geom); });
+        ev.reg(R"($\int_M \frac{d}{dt} w\, dA$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
         ev.reg("wall time per simulation time (s)", [](EvData d) { return d.time_per_sim_sec; });
+        ev.reg(R"($\eta_R$)", [](EvData d) { return d.poison_residual_error; });
         for (int i = 0; i < h_size; ++i) {
             ev.reg("$c_IDX("+std::to_string(i) +")$", [i](EvData d) {
                 return d.wc.c[i];
@@ -135,7 +136,11 @@ class TaylorVorticesCase : public TestCase{
         IntrinsicGeometryInterface& geom = solver->tri.geom();
         std::vector<FaceData<double>> face_dc (solver->h.size(),FaceData<double>(mesh));
         auto rhs = evalRHS(mesh,geom,solver->wc,solver->h, solver->S,&face_dc);
-        EvData data(mesh,geom,solver->velocity(), rhs,solver->wc,solver->h,dp5s,face_dc,time_per_sim_sec);
+        auto u = solver->velocity();
+        auto errorsqr = poisson_residual_error_sqr(mesh,geom,solver->wc.w,u.stream_function);
+        double prsq = 0;
+        for (Face f: mesh.faces()) prsq += std::sqrt(errorsqr[f]);
+        EvData data(mesh,geom,u, rhs,solver->wc,solver->h,dp5s,face_dc,time_per_sim_sec,prsq);
         return data;
     }
 

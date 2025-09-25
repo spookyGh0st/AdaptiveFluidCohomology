@@ -267,9 +267,9 @@ struct AdaptiveFluidPlotter {
         ev.reg("dopri - dt", [](EvData d) { return d.dp5s.t_past; });
         ev.reg("dopri - attempts", [](EvData d) { return d.dp5s.attempts; });
         ev.reg("velocity", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
-        ev.reg("streamfunction", [](EvData d) { return L2Norm(d.vel.stream_function,d.geom); });
-        ev.reg("w", [](EvData d) { return L2Norm(d.wc.w,d.geom); });
-        ev.reg("dw", [](EvData d) { return L2Norm(d.rhs.w,d.geom); });
+        ev.reg("streamfunction", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
+        ev.reg("w", [](EvData d) { return integral(d.wc.w,d.geom); });
+        ev.reg("dw", [](EvData d) { return integral(d.rhs.w,d.geom); });
         for (int i = 0; i < h_size; ++i) {
             ev.reg("c"+std::to_string(i), [&i](EvData d) { return d.wc.c[i]; });
             ev.reg("dc"+std::to_string(i), [&i](EvData d) { return d.rhs.c[i]; });

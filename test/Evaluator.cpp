@@ -4,7 +4,7 @@ template <typename T>
 void exportCSV( std::ostream& out, const std::string& headerName, const std::vector<T>& baseColumn, const std::vector<EvVector>& evectors)
 {
     out << headerName;
-    for (auto const& ev : evectors) out << "," << ev.name;
+    for (auto const& ev : evectors) out << ",\"" << ev.name<< "\"";
     out << "\n";
 
     size_t rows = baseColumn.size();
