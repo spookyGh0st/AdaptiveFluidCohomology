@@ -424,7 +424,7 @@ TEST(EvaluatorTest, EvaluateAdapt)
     tc->registerStep(ev,tc->solver->h.size());
     for (int i = 0; i < 32; ++i) {
         tc->solver->adapt();
-        if(i%5 ==0) cpm.visualize(cf.f_screenshots);
+        if(i%(8) ==0) cpm.visualize(cf.f_screenshots);
         ev.onStep(tc->evData(1),1);
     }
     cpm.write(cf.fev);

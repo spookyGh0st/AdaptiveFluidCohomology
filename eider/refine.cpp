@@ -314,15 +314,15 @@ DoeflerConf DoerflerPreset(DoerflerPresetConf preset) {
         break;
     case DoerflerPresetConf::MEDIUM: // Conservative refinement
         conf.theta_refine     = 0.3;
-        conf.threshold_refine = 1e-6;
+        conf.threshold_refine = 1e-5;
         conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = 1e-8;
+        conf.threshold_coarse = 1e-7;
         break;
     case DoerflerPresetConf::HIGH: // Conservative refinement
         conf.theta_refine     = 0.3;
-        conf.threshold_refine = 1e-8;
+        conf.threshold_refine = 1e-6;
         conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = 1e-10;
+        conf.threshold_coarse = 1e-8;
         break;
     case DoerflerPresetConf::UNIFORM_REFINE:
         conf.theta_refine     = 1.0;   // force refine
