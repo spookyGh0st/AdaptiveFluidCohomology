@@ -36,7 +36,8 @@ void copyFolder(const fs::path& source, const fs::path& destination) {
 
         // Create the destination folder if it does not exist
         if(fs::exists(destination)){
-            if(destination.filename() != "run_latest" && destination.filename()!= "run_tc2" && destination.filename()!= "run_tc1") throw std::runtime_error("Carefull, we delete it here.");
+            if (!destination.filename().string().starts_with("run_tc")) { throw std::runtime_error("Careful, we delete it here."); }
+
             fs::remove_all(destination);
         }
         fs::create_directories(destination);
@@ -130,6 +131,20 @@ class TaylorVorticesCase : public TestCase{
             ev.reg(R"($\frac{d}{dt} c_IDX()"+std::to_string(i) +")$", [i](EvData d) { return d.rhs.c[i]; });
         }
     }
+    void registerStep(Evaluator& ev,int h_size){
+        ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
+        ev.reg(R"($\int_M \psi \, dA$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
+        ev.reg(R"($\int_M w\, dA$)", [](EvData d) { return integral(d.wc.w,d.geom); });
+        ev.reg(R"($\int_M \frac{d}{dt} w\, dA$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
+        ev.reg(R"($\#F$)", [](EvData d) { return d.mesh.nFaces(); });
+        ev.reg(R"($\eta_R$)", [](EvData d) { return d.poison_residual_error; });
+        for (int i = 0; i < h_size; ++i) {
+            ev.reg("$c_IDX("+std::to_string(i) +")$", [i](EvData d) {
+              return d.wc.c[i];
+            });
+            ev.reg(R"($\frac{d}{dt} c_IDX()"+std::to_string(i) +")$", [i](EvData d) { return d.rhs.c[i]; });
+        }
+    }
 
     EvData evData(double time_per_sim_sec){
         ManifoldSurfaceMesh& mesh = solver->tri.mesh();
@@ -214,7 +229,7 @@ std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
     std::unique_ptr<ManifoldSurfaceMesh> mesh = pmesh.copy();
     GeomP  geom= std::make_unique<VertexPositionGeometry>(*mesh,pgeom.vertexPositions.reinterpretTo(*mesh));
     // init data
-    AdaptiveFluidSolverData data { DOPRI5Preset(dp5conf), DoerflerPreset(DoerflerPresetConf::LOW), 0.01, adapt_time, adapt_space };
+    AdaptiveFluidSolverData data { DOPRI5Preset(dp5conf), DoerflerPreset(doerflerConf), 0.01, adapt_time, adapt_space };
 
     if (uniformRefine) {
         std::tie(mesh, geom) = uniform_refine(*mesh, *geom, 2);
@@ -379,17 +394,41 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
         makeTaylorCase("low", "Low Precision", *mesh, *geom, true, true,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::LOW),
-        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, true, true,DOPRI5PresetConf::VERY_HIGH,DoerflerPresetConf::HIGH),
+        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, true, true,DOPRI5PresetConf::HIGH,DoerflerPresetConf::MEDIUM),
     };
 
     init_ps(cpm);
-
-
     cpm.visualize(cf.f_screenshots);
     cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
     cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
 
     cpm.write(cf.fev);
+    copyFolder(cf.fev,cf.flatest);
+    cpm.visualize();
+    polyscope::show();
+}
+TEST(EvaluatorTest, EvaluateAdapt)
+{
+    CaseFolder cf ("tc3");
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
+    Comparator cpm;
+    cpm.testcases = {
+        makeTaylorCase("Adaptive", "Adaptive", *mesh, *geom, false, false,DOPRI5PresetConf::HIGH,DoerflerPresetConf::HIGH),
+    };
+    auto* tc = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
+    init_ps(cpm);
+
+
+    cpm.runUntil(2); cpm.visualize(cf.f_screenshots);
+    Evaluator ev;
+    tc->registerStep(ev,tc->solver->h.size());
+    for (int i = 0; i < 32; ++i) {
+        tc->solver->adapt();
+        if(i%5 ==0) cpm.visualize(cf.f_screenshots);
+        ev.onStep(tc->evData(1),1);
+    }
+    cpm.write(cf.fev);
+    ev.saveCSV_T(cf.fev/"data"/(tc->name+"-measurements.csv"));
     copyFolder(cf.fev,cf.flatest);
     cpm.visualize();
     polyscope::show();
