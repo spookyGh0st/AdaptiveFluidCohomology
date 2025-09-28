@@ -413,22 +413,30 @@ TEST(EvaluatorTest, EvaluateAdapt)
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
     Comparator cpm;
     cpm.testcases = {
-        makeTaylorCase("Adaptive", "Adaptive", *mesh, *geom, false, false,DOPRI5PresetConf::HIGH,DoerflerPresetConf::HIGH),
+        makeTaylorCase("adaptive", "Adaptive Refinement", *mesh, *geom, false, false,DOPRI5PresetConf::HIGH,DoerflerPresetConf::VERY_HIGH),
+        makeTaylorCase("uniform", "Uniform Refinement", *mesh, *geom, false, false,DOPRI5PresetConf::HIGH,DoerflerPresetConf::UNIFORM_REFINE),
     };
-    auto* tc = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
+    auto* tc1 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
+    auto* tc2 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[1].get());
     init_ps(cpm);
 
 
-    cpm.runUntil(2); cpm.visualize(cf.f_screenshots);
-    Evaluator ev;
-    tc->registerStep(ev,tc->solver->h.size());
-    for (int i = 0; i < 32; ++i) {
-        tc->solver->adapt();
-        if(i%(8) ==0) cpm.visualize(cf.f_screenshots);
-        ev.onStep(tc->evData(1),1);
+    cpm.runUntil(2);
+    Evaluator ev1, ev2;
+    tc1->registerStep(ev1,tc1->solver->h.size());
+    tc2->registerStep(ev2,tc2->solver->h.size());
+    for (int i = 0; i < 8; ++i) {
+        // TODO: plot against #faces
+        std::cout << "Refining step " << i << std::endl;
+        if(i%(2) ==0) cpm.visualize(cf.f_screenshots);
+        tc1->solver->adapt();
+        tc2->solver->adapt();
+        ev1.onStep(tc1->evData(1),1);
+        ev2.onStep(tc2->evData(1),1);
     }
     cpm.write(cf.fev);
-    ev.saveCSV_T(cf.fev/"data"/(tc->name+"-measurements.csv"));
+    ev1.saveCSV_T(cf.fev/"data"/(tc1->name+"-measurements.csv"));
+    ev2.saveCSV_T(cf.fev/"data"/(tc2->name+"-measurements.csv"));
     copyFolder(cf.fev,cf.flatest);
     cpm.visualize();
     polyscope::show();

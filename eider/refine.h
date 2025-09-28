@@ -86,7 +86,7 @@ struct DoeflerConf {
     double threshold_coarse = 0.000001;           ///< coarsening cutoff
 };
 
-enum class DoerflerPresetConf{ LOW, MEDIUM, HIGH, UNIFORM_REFINE, UNIFORM_COARSE };
+enum class DoerflerPresetConf{ LOW, MEDIUM, HIGH,VERY_HIGH, UNIFORM_REFINE, UNIFORM_COARSE };
 DoeflerConf DoerflerPreset(DoerflerPresetConf preset);
 
 /**
