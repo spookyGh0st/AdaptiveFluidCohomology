@@ -79,13 +79,14 @@ VertexData<Vector3> intrinsic_geom(IntrinsicTriangulation& Tri, VertexPositionGe
 
 class TestCase {
   public:
+    virtual ~TestCase() = default;
     std::chrono::duration<double> total_time;
     std::string name;
     std::string label;
     TestCase(std::string name, std::string label) :name(name), label(label), total_time(0) {}
     virtual void runUntil(double t) = 0;
     virtual void write(fs::path) = 0;
-    virtual polyscope::SurfaceMesh* visualize() = 0;
+    virtual polyscope::SurfaceMesh* visualize(fs::path f_screenshots = fs::path()) = 0;
 };
 
 using MeshP = std::unique_ptr<ManifoldSurfaceMesh>;
@@ -119,9 +120,9 @@ class TaylorVorticesCase : public TestCase{
         ev.reg("dt (s)", [](EvData d) { return d.dp5s.t_past; });
         // ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
         ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
-        ev.reg(R"($\int_M \psi \, dA$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
-        ev.reg(R"($\int_M w\, dA$)", [](EvData d) { return integral(d.wc.w,d.geom); });
-        ev.reg(R"($\int_M \frac{d}{dt} w\, dA$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
+        ev.reg(R"($\int_M \psi$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
+        ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w,d.geom); });
+        ev.reg(R"($\int_M \frac{d}{dt} w$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
         ev.reg("wall time per simulation time (s)", [](EvData d) { return d.time_per_sim_sec; });
         ev.reg(R"($\eta_R$)", [](EvData d) { return d.poison_residual_error; });
         for (int i = 0; i < h_size; ++i) {
@@ -133,10 +134,10 @@ class TaylorVorticesCase : public TestCase{
     }
     void registerStep(Evaluator& ev,int h_size){
         ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
-        ev.reg(R"($\int_M \psi \, dA$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
-        ev.reg(R"($\int_M w\, dA$)", [](EvData d) { return integral(d.wc.w,d.geom); });
-        ev.reg(R"($\int_M \frac{d}{dt} w\, dA$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
-        ev.reg(R"($\#F$)", [](EvData d) { return d.mesh.nFaces(); });
+        ev.reg(R"($\int_M \psi$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
+        ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w,d.geom); });
+        ev.reg(R"($\int_M \frac{d}{dt}$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
+        // ev.reg(R"($\#F$)", [](EvData d) { return d.mesh.nFaces(); });
         ev.reg(R"($\eta_R$)", [](EvData d) { return d.poison_residual_error; });
         for (int i = 0; i < h_size; ++i) {
             ev.reg("$c_IDX("+std::to_string(i) +")$", [i](EvData d) {
@@ -176,19 +177,48 @@ class TaylorVorticesCase : public TestCase{
             auto wall_time = s.stop();
             double tpss = (s.stop() /std::chrono::duration<double>(dp5s.t_past));
             EvData ev  = evData(tpss);
-            eval_t.onStep(ev,dp5s.t_past);
+            eval_t.onStep(ev,solver->elapsed_time);
             total_time+= wall_time;
         }
     }
 
-    polyscope::SurfaceMesh* visualize() override{
+    polyscope::SurfaceMesh* visualize(fs::path f_screenshots) override{
         AdaptiveTriangulation& atri = solver->tri;
         auto vp = intrinsic_geom(atri.intrinsicTriangulation(),*geom);
+        auto& m = atri.mesh();
         polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh(name, vp,atri.mesh().getFaceVertexList(), polyscopePermutations(atri.mesh()));
+        pm->setEdgeColor(glm::vec3(0,0,0));
+        pm->setEdgeWidth(0.3);
+        auto g =VertexPositionGeometry(m,vp);
+
         auto* vsq = pm->addVertexScalarQuantity("vorticity",solver->wc.w);
         vsq->setColorMap("coolwarm");
         vsq->setMapRange({-30,30})->setEnabled(true);
         colormap = { vsq->getColorMap(), vsq->getMapRange() };
+        if(!f_screenshots.empty()){
+            polyscope::screenshot(f_screenshots/"vorticity.png",true);
+
+            g.requireFaceTangentBasis();
+            FaceData<Vector3> e1(m),e2(m);
+            for (Face f: m.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
+
+            auto* ftvq = pm->addFaceTangentVectorQuantity("u",solver->velocity().u, e1,e2)->setEnabled(true);
+            polyscope::screenshot(f_screenshots/"u.png",true);
+            ftvq->setEnabled(false);
+
+
+            int i = 0;
+            for (auto& h:solver->h) {
+                std::string name = "h_{"+std::to_string(i) + "}";
+                auto* ftq = pm->addFaceTangentVectorQuantity("h"+std::to_string(i++),h, e1,e2);
+                ftq->setEnabled(true);
+                ftq->setVectorLengthRange(2);
+                ftq->setVectorLengthScale(0.04);
+                polyscope::screenshot(f_screenshots/(name+".png"),true);
+                ftq->setEnabled(false);
+            }
+            pm->remove();
+        }
         return pm;
     }
 
@@ -286,12 +316,12 @@ class Comparator {
     void visualize(fs::path f_screenshots = fs::path()) {
         polyscope::removeAllStructures();
         for(auto& tc: testcases){
-            polyscope::SurfaceMesh* pm = tc->visualize();
-            pm->setEdgeColor(glm::vec3(0,0,0));
-            pm->setEdgeWidth(0.3);
-            if(!f_screenshots.empty()){
-                polyscope::screenshot(f_screenshots/(tc->name+std::to_string(step)+".png"),true);
-                pm->remove();
+            if (f_screenshots.empty()) {
+                tc->visualize();
+            }else {
+                fs::path f_tc = f_screenshots / (tc->name+std::to_string(step));
+                fs::create_directories(f_tc);
+                tc->visualize(f_tc);
             }
         }
         step++;
@@ -364,7 +394,7 @@ TEST(EvaluatorTest, Evaluate)
 
     Comparator cpm;
     cpm.testcases = {
-        taylorVortices_OR(*meshO, *geomO),
+        taylorVortices_OR(*mesh, *geom),
         // taylorVortices_SSAT(*meshO,*geomO),
         // taylorVortices_SSST_REFINED(*mesh,*geom),
         taylorVortices_ASAT(*mesh,*geom),
@@ -392,9 +422,9 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
     auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
     Comparator cpm;
     cpm.testcases = {
-        taylorVortices_OR(*meshO, *geomO),
+        taylorVortices_OR(*mesh, *geom),
         makeTaylorCase("low", "Low Precision", *mesh, *geom, true, true,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::LOW),
-        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, true, true,DOPRI5PresetConf::HIGH,DoerflerPresetConf::MEDIUM),
+        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, true, true,DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM),
     };
 
     init_ps(cpm);
@@ -425,14 +455,31 @@ TEST(EvaluatorTest, EvaluateAdapt)
     Evaluator ev1, ev2;
     tc1->registerStep(ev1,tc1->solver->h.size());
     tc2->registerStep(ev2,tc2->solver->h.size());
-    for (int i = 0; i < 8; ++i) {
+
+    // Step 0
+    ev1.onStep(tc1->evData(1),tc1->solver->tri.mesh().nFaces());
+    ev2.onStep(tc2->evData(1),tc2->solver->tri.mesh().nFaces());
+    cpm.visualize(cf.f_screenshots); std::cout << " - vis" << std::endl;
+
+    auto n = 32768; int i =0;
+    std::cout << "adaptive" << std::endl;
+    std::vector<int> indices;
+    for (int j = 1; j < 5; j++) {
+        int idx = round((double)(j * (28 - 1)) / (5 - 1));
+        indices.push_back(idx);
+    }
+    while (tc1->solver->tri.mesh().nFaces() <n){
         // TODO: plot against #faces
-        std::cout << "Refining step " << i << std::endl;
-        if(i%(2) ==0) cpm.visualize(cf.f_screenshots);
+        std::cout << " - Refining step " << i <<  "faces: " << tc1->solver->tri.mesh().nFaces() << std::endl;
         tc1->solver->adapt();
-        tc2->solver->adapt();
-        ev1.onStep(tc1->evData(1),1);
-        ev2.onStep(tc2->evData(1),1);
+        ev1.onStep(tc1->evData(1),tc1->solver->tri.mesh().nFaces());
+        bool vis = std::ranges::contains(indices,i);
+        if(vis) {
+            tc2->solver->adapt();
+            ev2.onStep(tc2->evData(1),tc2->solver->tri.mesh().nFaces());
+            cpm.visualize(cf.f_screenshots); std::cout << " - vis" << std::endl;
+        };
+        i++;
     }
     cpm.write(cf.fev);
     ev1.saveCSV_T(cf.fev/"data"/(tc1->name+"-measurements.csv"));

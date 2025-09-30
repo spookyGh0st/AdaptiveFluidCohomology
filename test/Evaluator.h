@@ -48,9 +48,8 @@ struct Evaluator {
         y.emplace_back(name,f);
     }
 
-    void onStep(const EvData& data, float step){
-        float start = x.empty()? 0 :x.back();
-        x.push_back(start+step);
+    void onStep(const EvData& data, float x_value){
+        x.push_back(x_value);
         for (EvVector& v: y) {
             v.evaluate(data);
         }

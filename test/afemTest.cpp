@@ -271,8 +271,8 @@ struct AdaptiveFluidPlotter {
         ev.reg("w", [](EvData d) { return integral(d.wc.w,d.geom); });
         ev.reg("dw", [](EvData d) { return integral(d.rhs.w,d.geom); });
         for (int i = 0; i < h_size; ++i) {
-            ev.reg("c"+std::to_string(i), [&i](EvData d) { return d.wc.c[i]; });
-            ev.reg("dc"+std::to_string(i), [&i](EvData d) { return d.rhs.c[i]; });
+            ev.reg("c"+std::to_string(i), [i](EvData d) { return d.wc.c[i]; });
+            ev.reg("dc"+std::to_string(i), [i](EvData d) { return d.rhs.c[i]; });
         }
 
     }
@@ -286,7 +286,7 @@ struct AdaptiveFluidPlotter {
         IntrinsicGeometryInterface& geom = solver.tri.geom();
         wc_wrapper rhs = evalRHS(mesh,geom,solver.wc,solver.h,solver.S);
         EvData data { mesh, geom, solver.velocity(), rhs, solver.wc, solver.h, DOPRI5_sample() };
-        eva.onStep(data,1);
+        eva.onStep(data,mesh.nFaces());
     }
 
     void onStep(AdaptiveFluidSolver& solver, DOPRI5_sample sample){
@@ -294,7 +294,7 @@ struct AdaptiveFluidPlotter {
         IntrinsicGeometryInterface& geom = solver.tri.geom();
         wc_wrapper rhs = evalRHS(mesh,geom,solver.wc,solver.h,solver.S);
         EvData data { mesh, geom, solver.velocity(), rhs, solver.wc, solver.h, sample };
-        evt.onStep(data,sample.t_past);
+        evt.onStep(data,solver.elapsed_time);
     }
 
     void plote(std::string name, Evaluator& e){
