@@ -17,6 +17,7 @@ struct AdaptiveFluidSolverData{
     double dt = 0.0001;
     bool adaptive_time = true;
     bool adaptive_space = true;
+    MARKING_STRATEGY strategy = MARKING_STRATEGY::PATTERN;
 };
 
 class AdaptiveFluidSolver {

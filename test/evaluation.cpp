@@ -136,7 +136,7 @@ class TaylorVorticesCase : public TestCase{
         ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
         ev.reg(R"($\int_M \psi$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
         ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w,d.geom); });
-        ev.reg(R"($\int_M \frac{d}{dt}$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
+        ev.reg(R"($\int_M \frac{d}{dt} w$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
         // ev.reg(R"($\#F$)", [](EvData d) { return d.mesh.nFaces(); });
         ev.reg(R"($\eta_R$)", [](EvData d) { return d.poison_residual_error; });
         for (int i = 0; i < h_size; ++i) {
@@ -252,18 +252,15 @@ std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
     bool adapt_time, bool adapt_space,
     DOPRI5PresetConf dp5conf = DOPRI5PresetConf::MEDIUM,
     DoerflerPresetConf doerflerConf = DoerflerPresetConf::LOW,
-    bool uniformRefine = false)
+    MARKING_STRATEGY marking_strategy = MARKING_STRATEGY::PATTERN
+    )
 {
 
     // deep copy mesh and geom
     std::unique_ptr<ManifoldSurfaceMesh> mesh = pmesh.copy();
     GeomP  geom= std::make_unique<VertexPositionGeometry>(*mesh,pgeom.vertexPositions.reinterpretTo(*mesh));
     // init data
-    AdaptiveFluidSolverData data { DOPRI5Preset(dp5conf), DoerflerPreset(doerflerConf), 0.01, adapt_time, adapt_space };
-
-    if (uniformRefine) {
-        std::tie(mesh, geom) = uniform_refine(*mesh, *geom, 2);
-    }
+    AdaptiveFluidSolverData data { DOPRI5Preset(dp5conf), DoerflerPreset(doerflerConf), 0.01, adapt_time, adapt_space, marking_strategy };
 
     auto aCase = std::make_shared<TaylorVorticesCase>(
         name, label, std::move(mesh), std::move(geom), data
@@ -292,9 +289,6 @@ std::shared_ptr<TaylorVorticesCase> taylorVortices_SSAT(ManifoldSurfaceMesh& mes
     return makeTaylorCase("SSAT","Static Space Adaptive Time (SSAT)", mesh, geom, true, false);
 }
 
-std::shared_ptr<TaylorVorticesCase> taylorVortices_SSST_REFINED(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("SSSTR","Static Space Static Time Refined (SSSTR)", mesh, geom, false, false, DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,true);
-}
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_OR(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
     return makeTaylorCase("OR", "Original (Yin et al., 2023)", mesh, geom, false, false);
@@ -394,7 +388,7 @@ TEST(EvaluatorTest, Evaluate)
 
     Comparator cpm;
     cpm.testcases = {
-        taylorVortices_OR(*mesh, *geom),
+        taylorVortices_OR(*meshO, *geomO),
         // taylorVortices_SSAT(*meshO,*geomO),
         // taylorVortices_SSST_REFINED(*mesh,*geom),
         taylorVortices_ASAT(*mesh,*geom),
@@ -422,7 +416,7 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
     auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
     Comparator cpm;
     cpm.testcases = {
-        taylorVortices_OR(*mesh, *geom),
+        taylorVortices_OR(*meshO, *geomO),
         makeTaylorCase("low", "Low Precision", *mesh, *geom, true, true,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::LOW),
         makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, true, true,DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM),
     };
@@ -451,7 +445,6 @@ TEST(EvaluatorTest, EvaluateAdapt)
     init_ps(cpm);
 
 
-    cpm.runUntil(2);
     Evaluator ev1, ev2;
     tc1->registerStep(ev1,tc1->solver->h.size());
     tc2->registerStep(ev2,tc2->solver->h.size());
@@ -465,7 +458,7 @@ TEST(EvaluatorTest, EvaluateAdapt)
     std::cout << "adaptive" << std::endl;
     std::vector<int> indices;
     for (int j = 1; j < 5; j++) {
-        int idx = round((double)(j * (28 - 1)) / (5 - 1));
+        int idx = round((double)(j * (33 - 1)) / (5 - 1));
         indices.push_back(idx);
     }
     while (tc1->solver->tri.mesh().nFaces() <n){
@@ -487,6 +480,37 @@ TEST(EvaluatorTest, EvaluateAdapt)
     copyFolder(cf.fev,cf.flatest);
     cpm.visualize();
     polyscope::show();
+}
+
+TEST(EvaluatorTest,evaluateInitialMarkings) {
+    CaseFolder cf ("tc4");
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
+    Comparator cpm;
+    cpm.testcases = {
+        makeTaylorCase("pattern", "pattern-initialized", *mesh, *geom, false, false,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::UNIFORM_REFINE,MARKING_STRATEGY::PATTERN),
+        makeTaylorCase("random", "random-initialized", *mesh, *geom, false, false,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::UNIFORM_REFINE,MARKING_STRATEGY::RANDOM),
+    };
+    auto* tc1 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
+    auto* tc2 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[1].get());
+    int n = 9000;
+    while (tc1->solver->tri.mesh().nFaces()< n) {
+        tc1->solver->adapt();
+    }
+    while (tc2->solver->tri.mesh().nFaces()< n) {
+        tc2->solver->adapt();
+    }
+
+
+    init_ps(cpm);
+    cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+
+    cpm.write(cf.fev);
+    copyFolder(cf.fev,cf.flatest);
+    cpm.visualize();
+    polyscope::show();
+
 }
 
 TEST(EvaluatorTest, Clean)

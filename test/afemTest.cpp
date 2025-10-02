@@ -371,6 +371,7 @@ struct AdaptiveFluidVisualization {
     void load() {
         auto intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
         intrT->delaunayRefine(delauny_angle,delauny_circ);
+        intrT->flipToDelaunay();
         intrT->intrinsicMesh->compress();
         intrT->refreshQuantities();
         auto nMesh = intrT->intrinsicMesh->copy();
@@ -466,17 +467,13 @@ struct AdaptiveFluidVisualization {
 
             ImGui::Checkbox("Run", &state.running);
             ImGui::SameLine();
-            ImGui::Checkbox("Adaptive", &state.adaptive_run);
+            ImGui::Checkbox("Adapt Space", &solver->adapte_space);
+            ImGui::Checkbox("Adapt Time", &solver->adapt_time);
 
-            ImGui::InputInt("Adapt after:", &state.adapt_after);
             if (state.running || ImGui::Button("Advance")) {
                 wc_wrapper wc = solver->wc;
                 DOPRI5_sample dopri5_sample = solver->step();
                 state.step++;
-                if (state.adaptive_run && state.step % state.adapt_after == 0){
-                    solver->adapt();
-                    plotter->onAdapt(*solver);
-                }
                 plotter->onStep(*solver,dopri5_sample);
                 if (fix_c)
                     solver->wc.c = wc.c;

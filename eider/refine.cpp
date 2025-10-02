@@ -5,20 +5,82 @@
 
 namespace geometrycentral::surface {
 
-AdaptiveTriangulation::AdaptiveTriangulation(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom): tri(mesh,geom), idx(*tri.intrinsicMesh), marked_corner(*tri.intrinsicMesh,false) {
-    tri.requireEdgeLengths();
-    for (Face f : tri.intrinsicMesh->faces()) {
+CornerData<bool> mark_longest_edge(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom) {
+    CornerData<bool> marked_corner(mesh,false);
+    geom.requireEdgeLengths();
+    for (Face f : mesh.faces()) {
         double maxEl = std::numeric_limits<double>::lowest();
         Corner c;
         for (Halfedge he : f.adjacentHalfedges()) {
-            if (tri.edgeLengths[he.edge()] > maxEl) {
-                maxEl = tri.edgeLengths[he.edge()];
+            if (geom.edgeLengths[he.edge()] > maxEl) {
+                maxEl = geom.edgeLengths[he.edge()];
                 c = he.oppositeCorner();
             }
         }
         marked_corner[c] = true;
     }
-    tri.unrequireEdgeLengths();
+    geom.unrequireEdgeLengths();
+    return marked_corner;
+}
+
+CornerData<bool> mark_pattern(ManifoldSurfaceMesh& mesh) {
+    CornerData<bool> marked_corner(mesh,false);
+    std::vector<Halfedge> se;
+    auto isMarked = [&](Face f) {for (Corner c: f.adjacentCorners()) { if (marked_corner[c]) return true; } return false; };
+    for (Edge e: mesh.edges()) {
+        if (!e.isBoundary()) {
+            se.push_back(e.halfedge()); break;
+        }
+    }
+    while (!se.empty()) {
+        Halfedge e = se.back(); se.pop_back();
+        std::vector<Halfedge> border;
+        for (Halfedge he: e.edge().adjacentHalfedges()) {
+            if (!he.isInterior()) continue;
+            if (isMarked(he.face())) continue;
+            marked_corner[he.next().next().corner()] = true;
+            if (he.next().twin().isInterior())
+                border.push_back(he.next().twin().prevOrbitFace());
+            if (he.next().next().twin().isInterior())
+                border.push_back(he.next().next().twin().next());
+        }
+        for (Halfedge he:border) {
+            if (isMarked(he.face())) continue;
+            se.push_back(he);
+        }
+    }
+    return marked_corner;
+}
+
+CornerData<bool> mark_random(ManifoldSurfaceMesh& mesh) {
+    CornerData<bool> marked_corner(mesh,false);
+    std::mt19937 gen(22);
+    std::uniform_int_distribution<int> dist(0, 3);
+    for (Face f: mesh.faces()) {
+        Halfedge he = f.halfedge();
+        for (int i = 0; i < dist(gen); ++i) {
+            he = he.next();
+        }
+        marked_corner[he.corner()] = true;
+    }
+    return marked_corner;
+}
+
+CornerData<bool> mark_faces(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, MARKING_STRATEGY marking) {
+    switch (marking) {
+    case MARKING_STRATEGY::LONGEST_EDGE:
+        return mark_longest_edge(mesh,geom);
+    case MARKING_STRATEGY::PATTERN:
+        return mark_pattern(mesh);
+    case MARKING_STRATEGY::RANDOM:
+        return mark_random(mesh);
+    default: ;
+        throw std::runtime_error("Not Implemented");
+    }
+}
+
+AdaptiveTriangulation::AdaptiveTriangulation(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, MARKING_STRATEGY marking)
+    :tri(mesh,geom), idx(*tri.intrinsicMesh), marked_corner(mark_faces(*tri.intrinsicMesh, tri,marking)) {
 }
 
 Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer* transfer) {
@@ -271,6 +333,14 @@ FaceData<double> poisson_residual_error_sqr(ManifoldSurfaceMesh &mesh, Intrinsic
 }
 
 std::array<std::vector<Face>,2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, const DoeflerConf& conf) {
+    if (conf.theta_refine == 1) {
+        std::vector<Face> faces; faces.reserve(mesh.nFaces());
+        for (Face f:mesh.faces()) faces.push_back(f); return {faces,{}};
+    }
+    if (conf.theta_coarse == 1) {
+        std::vector<Face> faces; faces.reserve(mesh.nFaces());
+        for (Face f:mesh.faces()) faces.push_back(f); return std::array<std::vector<Face>,2>({ {}, faces });
+    }
     if (mesh.nFaces() == 0)
         return {};
     std::vector<Face> faces;

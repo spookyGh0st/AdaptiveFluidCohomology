@@ -7,7 +7,7 @@ velocity_wrapper AdaptiveFluidSolver::velocity() {
 }
 
 AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const AdaptiveFluidSolverData& data)
-    : tri(mesh,geom), hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()), S(tri.mesh(),tri.geom()),
+    : tri(mesh,geom,data.strategy), hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()), S(tri.mesh(),tri.geom()),
       conf(data.dopri5Conf), doerflerConf(data.doerflerConf), adapt_time(data.adaptive_time), adapte_space(data.adaptive_space), dt(data.dt),
       wc(VertexData<double>(tri.mesh()),std::vector<double>(hom.homologyB.size(),0)) // empty wc
 {

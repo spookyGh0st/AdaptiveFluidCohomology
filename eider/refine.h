@@ -20,9 +20,15 @@ struct IncrementingIndex {
     ;
 };
 
+enum class MARKING_STRATEGY {
+    LONGEST_EDGE,
+    PATTERN,
+    RANDOM,
+};
+
 class AdaptiveTriangulation {
   public:
-    AdaptiveTriangulation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface& geom);
+    AdaptiveTriangulation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface& geom, MARKING_STRATEGY = MARKING_STRATEGY::LONGEST_EDGE);
     Halfedge vertex_bisection(Halfedge he, AdaptiveTransfer *transfer = nullptr);
     void refine(std::vector<Face> faces, AdaptiveTransfer *transfer = nullptr);
 
