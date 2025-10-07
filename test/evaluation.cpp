@@ -466,7 +466,7 @@ TEST(EvaluatorTest, EvaluateAdapt)
         std::cout << " - Refining step " << i <<  "faces: " << tc1->solver->tri.mesh().nFaces() << std::endl;
         tc1->solver->adapt();
         ev1.onStep(tc1->evData(1),tc1->solver->tri.mesh().nFaces());
-        bool vis = std::ranges::contains(indices,i);
+        bool vis = std::find(indices.begin(), indices.end(), i) != indices.end();
         if(vis) {
             tc2->solver->adapt();
             ev2.onStep(tc2->evData(1),tc2->solver->tri.mesh().nFaces());
