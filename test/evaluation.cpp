@@ -512,6 +512,9 @@ TEST(EvaluatorTest,evaluateInitialMarkings) {
     polyscope::show();
 
 }
+TEST(EvaluatorTest,evaluateBoundedTorus) {
+    CaseFolder cf("tc5");
+}
 
 TEST(EvaluatorTest, Clean)
 {
