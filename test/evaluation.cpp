@@ -208,14 +208,30 @@ class TaylorVorticesCase : public TestCase{
 
 
             int i = 0;
+            auto fullh = solver->hom.fullHarmonicBasis();
             for (auto& h:solver->h) {
                 std::string name = "h_{"+std::to_string(i) + "}";
-                auto* ftq = pm->addFaceTangentVectorQuantity("h"+std::to_string(i++),h, e1,e2);
+                auto* ftq = pm->addFaceTangentVectorQuantity("h"+std::to_string(i),h, e1,e2);
                 ftq->setEnabled(true);
                 ftq->setVectorLengthRange(2);
                 ftq->setVectorLengthScale(0.04);
                 polyscope::screenshot(f_screenshots/(name+".png"),true);
                 ftq->setEnabled(false);
+
+                name = "h-df_"+std::to_string(i);
+                auto* esq = pm->addEdgeScalarQuantity(name,fullh.df[i]);
+                esq->setEnabled(true);
+                polyscope::screenshot(f_screenshots/(name+".png"),true);
+                esq->setEnabled(false);
+
+                name = "h-proj_df_"+std::to_string(i);
+                esq = pm->addEdgeScalarQuantity(name,fullh.proj_df[i]);
+                esq->setEnabled(true);
+                polyscope::screenshot(f_screenshots/(name+".png"),true);
+                esq->setEnabled(false);
+
+                i++;
+
             }
             pm->remove();
         }
