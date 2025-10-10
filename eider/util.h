@@ -11,6 +11,20 @@ inline double L2Norm(FaceData<Vector2> d, IntrinsicGeometryInterface& geom){
     for (Face f: geom.mesh.faces()) { s += d[f].norm2() * geom.faceAreas[f]; }
     return std::sqrt(s);
 }
+inline double L2NormSqr(VertexData<double> d, IntrinsicGeometryInterface& geom){
+    double s = 0;
+    geom.requireVertexDualAreas();
+    for (Vertex v: geom.mesh.vertices()) {
+        double area = geom.vertexDualAreas[v];  // dual area around vertex
+        s += d[v] * d[v] * area;
+    }
+    geom.unrequireVertexDualAreas();
+    return s;
+}
+inline double L2Norm(VertexData<double> d, IntrinsicGeometryInterface& geom){
+    return std::sqrt(L2NormSqr(d,geom));
+}
+
 inline double integral(VertexData<double> d, IntrinsicGeometryInterface& geom){
     double s = 0;
     for (Face f: geom.mesh.faces()){

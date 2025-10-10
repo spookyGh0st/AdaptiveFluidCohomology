@@ -104,6 +104,15 @@ std::pair<MeshP, GeomP > uniform_refine(ManifoldSurfaceMesh& mesh, VertexPositio
     auto nGeom = std::make_unique<VertexPositionGeometry>(*nMesh,intrinsic_geom(atri.intrinsicTriangulation(),geom).reinterpretTo(*nMesh));
     return { std::move(nMesh), std::move(nGeom)};
 }
+std::pair<MeshP, GeomP > delauny_refine(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom, double degree = 25, double h_size = std::numeric_limits<double>::infinity()){
+    IntegerCoordinatesIntrinsicTriangulation atri(mesh,geom);
+    atri.delaunayRefine(degree);
+    atri.intrinsicMesh->compress();
+    atri.refreshQuantities();
+    auto nMesh = atri.intrinsicMesh->copy();
+    auto nGeom = std::make_unique<VertexPositionGeometry>(*nMesh,intrinsic_geom(atri,geom).reinterpretTo(*nMesh));
+    return { std::move(nMesh), std::move(nGeom)};
+}
 
 class TaylorVorticesCase : public TestCase{
   public:

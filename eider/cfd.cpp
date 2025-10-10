@@ -125,8 +125,14 @@ wc_wrapper RK6_2(const std::array<double, 7> &b, const wc_wrapper &y0, double h,
     return y1;
 }
 
-double error(ManifoldSurfaceMesh &mesh, const wc_wrapper &y0, wc_wrapper &y1, wc_wrapper &y_hat, const double &Atol_i, const double &Rtol_i) {
+// TODO: Rewrite, think  about this!
+double error(ManifoldSurfaceMesh &mesh,IntrinsicGeometryInterface& geom, const wc_wrapper &y0, wc_wrapper &y1, wc_wrapper &y_hat, const double &Atol_i, const double &Rtol_i) {
+    double err_w = 0, err_c = 0;
     double sum = 0;
+    {
+        // double sc_i = Atol_i + std::max(L2Norm(y0.w,geom), L2Norm(y1.w,geom)) * Rtol_i;
+        // err_w += std::sqrt(std::pow(integral(y1.w - y_hat.w,geom) /sc_i,2));
+    }
     for (Vertex v : mesh.vertices()) {
         double sc_i = Atol_i + std::max(std::abs(y0.w[v]), std::abs(y1.w[v])) * Rtol_i;
         assert(sc_i > 0);
@@ -139,6 +145,9 @@ double error(ManifoldSurfaceMesh &mesh, const wc_wrapper &y0, wc_wrapper &y1, wc
     }
     double n = (mesh.nVertices() + y0.c.size());
     return std::sqrt(sum / n);
+
+    err_c = std::sqrt(err_c/y0.c.size());
+    return err_w  + err_c;
 }
 
 inline double compute_h_new(double h, double err, double q, double facmin, double facmax) {
@@ -167,6 +176,7 @@ std::array<wc_wrapper, 2> DOPRI5(const wc_wrapper &y0, double h, const F_type &F
 
 DOPRI5_sample DOPRI5_step(
     ManifoldSurfaceMesh &mesh,
+    IntrinsicGeometryInterface& geom,
     const wc_wrapper &y0,
     double h,
     const F_type &F,
@@ -182,7 +192,7 @@ DOPRI5_sample DOPRI5_step(
         constexpr double q = 5; // min of order y and y_hat
         y = DOPRI5(y0, h, F);
         h_past = h; // store time step
-        double err = error(mesh, y0, y[0], y[1], conf.Atol_i, conf.Rtol_i);
+        double err = error(mesh, geom, y0, y[0], y[1], conf.Atol_i, conf.Rtol_i);
         accepted = accept_step(err);
         h = compute_h_new(h, err, q, conf.facmin, facMax);
         facMax = 1; // addvised to override after step-rejection
@@ -199,7 +209,7 @@ DOPRI5_sample adaptive_step(
     const StreamFunctionSolver &S,
     const DOPRI5_conf &conf) {
     F_type F = [&mesh, &geom, &h, &S](const wc_wrapper &wc) -> wc_wrapper { return evalRHS(mesh, geom, wc, h, S); };
-    return DOPRI5_step(mesh, x, dt, F, conf);
+    return DOPRI5_step(mesh,geom, x, dt, F, conf);
 }
 DOPRI5_conf DOPRI5Preset(DOPRI5PresetConf preset) {
     DOPRI5_conf conf;
