@@ -366,20 +366,27 @@ struct AdaptiveFluidVisualization {
     AdaptiveFluidSolverData solverData;
     MeshSelecter selecter;
     double delauny_angle = 25, delauny_circ = std::numeric_limits<double>::infinity();
-    bool normalize_basis = true, fix_c = false;
+    bool fix_c = false, delauny_refine = false;
+    int start_refine = 0;
 
     void load() {
         auto intrT = std::make_unique<IntegerCoordinatesIntrinsicTriangulation>(*pMesh, *pGeom);
-        intrT->delaunayRefine(delauny_angle,delauny_circ);
-        intrT->flipToDelaunay();
-        intrT->intrinsicMesh->compress();
-        intrT->refreshQuantities();
+        if (delauny_refine) {
+            intrT->delaunayRefine(delauny_angle,delauny_circ);
+            intrT->flipToDelaunay();
+            intrT->intrinsicMesh->compress();
+            intrT->refreshQuantities();
+        }
         auto nMesh = intrT->intrinsicMesh->copy();
         pGeom = std::make_unique<VertexPositionGeometry>(*nMesh,intrinsic_geom(*intrT,*pGeom).reinterpretTo(*nMesh));
         pMesh = std::move(nMesh);
 
         AdaptiveFluidSolverData data = solver? solver->data() : AdaptiveFluidSolverData();
         solver = std::make_unique<AdaptiveFluidSolver>(*pMesh,*pGeom,data);
+        solver->wc.w = TaylorInitializer().wc(solver->tri.intrinsicTriangulation(),*pGeom).w;
+        for (int i = 0; i < start_refine; ++i) {
+            solver->adapt();
+        }
         solver->wc.w = TaylorInitializer().wc(solver->tri.intrinsicTriangulation(),*pGeom).w;
         plotter = std::make_unique<AdaptiveFluidPlotter>(*solver);
     }
@@ -421,16 +428,21 @@ struct AdaptiveFluidVisualization {
         polym->addVertexScalarQuantity("stream_function",v.stream_function);
 
 
+        auto full_h =solver->hom.fullHarmonicBasis();
         for (int i = 0; i < solver->h.size(); ++i) {
             auto &basis = solver->hom.homologyB[i];
             auto df = delta_form(mesh, basis);
             polym->addEdgeScalarQuantity("harmonic form Whitney" + std::to_string(i),df);
 
             FaceData<Vector2> b = solver->h[i];
-            if (normalize_basis) for (Face f: mesh.faces()) { b[f] /= g.faceArea(f); }
             polym->addFaceTangentVectorQuantity("harmonic form " + std::to_string(i),b,e1,e2);
-            auto dwf = normalize_basis ? dw_face[i] / g.faceAreas : dw_face[i];
+            auto dwf = dw_face[i];
             polym->addFaceScalarQuantity("dw_face - " + std::to_string(i),dwf);
+
+            polym->addEdgeScalarQuantity("h -df" + std::to_string(i),full_h.df[i]);
+            polym->addEdgeScalarQuantity("h -proj df" + std::to_string(i),full_h.proj_df[i]);
+            polym->addFaceTangentVectorQuantity("h -unorthorgonal" + std::to_string(i),full_h.h_unorth[i],e1,e2);
+            polym->addFaceTangentVectorQuantity("h -orthorgonal" + std::to_string(i),full_h.h_orth[i],e1,e2);
         }
 
         polym->addFaceTangentVectorQuantity("Lamb Form ", lamb_form(mesh,solver->wc.w,v.u),e1,e2);
@@ -450,8 +462,10 @@ struct AdaptiveFluidVisualization {
     void callBackImpl() {
         taylor.callback();
         if (ImGui::TreeNode("Delauny Settings")){
+            ImGui::Checkbox("Delauny Refine", &delauny_refine);
             ImGui::InputDouble("Delauny Angle", &delauny_angle);
             ImGui::InputDouble("Delauny circ", &delauny_circ);
+            ImGui::InputInt("Start Refinement", &start_refine);
             ImGui::TreePop();
         }
         if (selecter.select(pMesh, pGeom) || ImGui::Button("reset")) { load(); visualize(); }
@@ -466,9 +480,10 @@ struct AdaptiveFluidVisualization {
             }
 
             ImGui::Checkbox("Run", &state.running);
-            ImGui::SameLine();
             ImGui::Checkbox("Adapt Space", &solver->adapte_space);
             ImGui::Checkbox("Adapt Time", &solver->adapt_time);
+            ImGui::Checkbox("Fix C", &fix_c);
+            ImGui::InputDouble("Delta Time", &solver->dt);
 
             if (state.running || ImGui::Button("Advance")) {
                 wc_wrapper wc = solver->wc;
@@ -482,11 +497,6 @@ struct AdaptiveFluidVisualization {
             ImGui::TreePop();
         }
 
-        if(ImGui::TreeNode("Debug Configuration")){
-            if(ImGui::Checkbox("Normalize Basis", &normalize_basis)) visualize();
-            ImGui::Checkbox("Fix C", &fix_c);
-            ImGui::TreePop();
-        }
         visDoerflerConf(solver->doerflerConf);
         visDopriConf(solver->conf);
 
