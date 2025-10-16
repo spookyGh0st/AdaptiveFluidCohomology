@@ -280,6 +280,7 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
     Data data_uniform, data_adaptive;
 
 
+    bool left = true;
     auto vis_mg = [&](std::string name, IntegerCoordinatesIntrinsicTriangulation& icit, Data& data, FaceData<double>& residual) {
         ManifoldSurfaceMesh& m = *icit.intrinsicMesh;
         m.compress();
@@ -288,6 +289,7 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
             int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
         }
         polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh(name, int_positions,m.getFaceVertexList());
+        if(left) {pm->setPosition(glm::vec3(-2,0,0)); left = false; } else {left = true;}
 
         VertexData<double> f(m,1);
         VertexData<double> u(m,0);
@@ -302,7 +304,7 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
         auto* sq = pm->addFaceScalarQuantity(name + " - residual error",residual);
         data.nTri.push_back(m.nFaces());
         data.abs_error.push_back(abs_error(icit,u));
-        data.residual.push_back(s);
+        data.residual.push_back(std::sqrt(s));
         data.rel_error.push_back(rel_error(icit,u));
     };
     auto vis_all = [&]() { vis_mg("uniform", uniform_a.intrinsicTriangulation(),data_uniform,res_u); vis_mg("adaptive", adaptive_a.intrinsicTriangulation(),data_adaptive,res_a); };
@@ -312,6 +314,8 @@ TEST(refineTest, uniform_vs_adaptive_refinement) {
 
         res_a = poisson_residual_error_sqr(adaptive_m, adaptive_a.geom(), u, f);
         DoeflerConf conf;
+        conf.threshold_refine = 0;
+        conf.theta_refine = theta;
         auto faces = select_doerfler(adaptive_m, res_a,conf);
         adaptive_a.refine(faces[0]);
     };

@@ -287,7 +287,7 @@ double etaRSqr(Face T, IntrinsicGeometryInterface &geom, const VertexData<double
         f_st += f[v];
     f_st /= 3;
 
-    double lu = 0;
+    double lu = 0; // TODO: Is this correct?
     for (Vertex v : T.adjacentVertices())
         lu += laplacian(geom, v, u);
     lu /= 3;
@@ -299,12 +299,13 @@ double etaRSqr(Face T, IntrinsicGeometryInterface &geom, const VertexData<double
         double h_e = diameter(geom, e), l_e = geom.edgeLengths[e], j = 0;
         for (Halfedge he : e.adjacentHalfedges()) // for both sides of edge
         {
-            j += dot(grad(geom, he.face(), u), geom.halfedgeVectorsInFace[he].rotateCW(PI / 2));
+            auto n_e = geom.halfedgeVectorsInFace[he].rotateCW(PI / 2).normalize();
+            j += dot(grad(geom, he.face(), u), n_e);
         }
-        jump_sum += h_e * h_e * j * j; // one_he_e form L_2 norm.
+        jump_sum += h_e * j*j *l_e;
     }
     jump_sum *= 1. / 2.;
-    return h_t * h_t * (std::pow(f_st + lu, 2) * geom.faceAreas[T]) + jump_sum;
+    return h_t * h_t * (std::pow(f_st + lu, 2) ) + jump_sum;
 }
 
 void AdaptiveTriangulation::setRefinementEdge(Halfedge he) {

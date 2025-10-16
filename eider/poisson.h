@@ -6,7 +6,7 @@
 namespace geometrycentral::surface {
 void solve_poisson_dirichlet_zero_mean(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom, VertexData<double> &f, const VertexData<double> &g);
 
-/// Solves Δu = f in Ω, u = 0 in ∂Ω
+/// Solves -Δu = f in Ω, u = 0 in ∂Ω
 struct StreamFunctionSolver {
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
 
@@ -28,7 +28,7 @@ struct StreamFunctionSolver {
 
     void solve_dirichlet(VertexData<double> &u, const VertexData<double> &f) const;
     void solve_zero_mean(SurfaceMesh &mesh, VertexData<double> &u, const VertexData<double> &f) const;
-    /// Solves Δu = f in Ω, u = 0 in ∂Ω
+    /// Solves -Δu = f in Ω, u = 0 in ∂Ω
     void solve(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom, VertexData<double> &u, const VertexData<double> &f) const;
 };
 } // namespace geometrycentral::surface
