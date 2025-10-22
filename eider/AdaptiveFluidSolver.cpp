@@ -20,7 +20,7 @@ AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeo
 void AdaptiveFluidSolver::adapt() {
     tri.mesh().compress();
 
-    AdaptiveTransfer transfer(tri.intrinsicTriangulation(), wc.w);
+    AdaptiveVertexTransfer transfer(tri.intrinsicTriangulation(), wc.w);
 
     VertexData<double> u(tri.mesh(), 0);
     // TODO: duplicate, but im unsure about indices

@@ -83,7 +83,7 @@ AdaptiveTriangulation::AdaptiveTriangulation(ManifoldSurfaceMesh& mesh, Intrinsi
     :tri(mesh,geom), idx(*tri.intrinsicMesh), marked_corner(mark_faces(*tri.intrinsicMesh, tri,marking)) {
 }
 
-Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer* transfer) {
+Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveVertexTransfer* transfer) {
     assert (he.isInterior());
     assert(marked_corner[he.oppositeCorner()]);
     if (he.twin().isInterior()) { assert(marked_corner[he.twin().oppositeCorner()]); }
@@ -118,7 +118,7 @@ Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer* 
     return he;
 }
 
-void AdaptiveTriangulation::refine(std::vector<Face> faces, AdaptiveTransfer* transfer) {
+void AdaptiveTriangulation::refine(std::vector<Face> faces, AdaptiveVertexTransfer* transfer) {
     FaceData<bool> marked_faces (mesh(),false);
     std::unordered_set<Edge> start_edges;
 
@@ -192,7 +192,7 @@ Halfedge AdaptiveTriangulation::coarse_halfedge(Vertex v) {
     return he.twin().next();
 }
 
-Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveTransfer* transfer) {
+Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveVertexTransfer* transfer) {
     // TODO: Assert left face has smaller idx then right face
     assert(he.isInterior());
     std::size_t l_idx = idx[he.prevOrbitFace().twin().face()];
@@ -239,7 +239,7 @@ inline bool vertexMarked(Vertex v, const FaceData<bool>& marked_faces){
     return true;
 }
 
-void AdaptiveTriangulation::coarse(const std::vector<Face> &faces, AdaptiveTransfer* transfer) {
+void AdaptiveTriangulation::coarse(const std::vector<Face> &faces, AdaptiveVertexTransfer* transfer) {
     if(transfer) transfer->startCoarse();
 
     // Mark all potential good vertices, i.e. these vertices with only marked faces around it

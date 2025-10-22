@@ -4,40 +4,28 @@
 
 namespace geometrycentral::surface {
 
-AdaptiveTransfer::AdaptiveTransfer(IntrinsicTriangulation &tri, VertexData<double>& f_B)
-    :mesh(*tri.intrinsicMesh), geom(tri), base_Idx ( mesh.getVertexIndices()), nB(mesh.nVertices()), vecfB(f_B.toVector(base_Idx)), f_B(f_B) {
-}
+AdaptiveVertexTransfer::AdaptiveVertexTransfer(IntrinsicTriangulation &tri, VertexData<double> &f_B)
+    : AdaptiveTransfer(tri, f_B) { }
 
-void AdaptiveTransfer::startRefine() {
+void AdaptiveVertexTransfer::startRefine() {
     for (Vertex v: mesh.vertices()) {
         triplets_B.emplace_back(v,v,1);
     }
 }
-void AdaptiveTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
+void AdaptiveVertexTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
     triplets_B.emplace_back(vp,vi,0.5);
     triplets_B.emplace_back(vp,vj,0.5);
 }
-void AdaptiveTransfer::endRefine() {
-    nR = mesh.nVertices();
-
-    geom.refreshQuantities();
-    refined_idx = mesh.getVertexIndices();
-
-    std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
-    triplets.reserve(triplets_B.size());
-    for (const AdaptiveTriplet& at: triplets_B) {
-        triplets.emplace_back(at.toEigen(refined_idx,base_Idx));
-    }
-    triplets_B.clear(); // clear elements
-    P_B = SparseMatrix<double>(nR,nB);
-    P_B.setFromTriplets(triplets.begin(),triplets.end());
+void AdaptiveVertexTransfer::endRefine() {
+    AdaptiveTransfer::endRefine();
     geom.requireVertexGalerkinMassMatrix();
     GLMM = geom.vertexGalerkinMassMatrix;
     geom.unrequireVertexGalerkinMassMatrix();
     assert(GLMM.rows() == nR);
     assert(GLMM.cols() == nR);
 }
-void AdaptiveTransfer::startCoarse() {
+
+void AdaptiveVertexTransfer::startCoarse() {
     if(nR != 0){
         // Assert we did not change any elements since end of refinement
         assert(refined_idx.raw() == mesh.getVertexIndices().raw());
@@ -47,42 +35,56 @@ void AdaptiveTransfer::startCoarse() {
         nR = mesh.nVertices();
     }
 }
-void AdaptiveTransfer::coarseEdge(Vertex vi, Vertex vj, Vertex vp) {
+void AdaptiveVertexTransfer::coarseEdge(Vertex vi, Vertex vj, Vertex vp) {
     triplets_C.emplace_back(vp,vi,0.5);
     triplets_C.emplace_back(vp,vj,0.5);
 }
-void AdaptiveTransfer::endCoarse() {
-    coarse_idx = mesh.getVertexIndices();
-    nC = mesh.nVertices();
-
+void AdaptiveVertexTransfer::endCoarse() {
     for (Vertex v: mesh.vertices()) {
         triplets_C.emplace_back(v,v,1);
     }
-    std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
-    triplets.reserve(triplets_C.size());
-    for (const AdaptiveTriplet& at: triplets_C) {
-        triplets.emplace_back(at.toEigen(refined_idx,coarse_idx));
-    }
-    triplets_C.clear(); // clear elements
-    P_C = SparseMatrix<double>(nR,nC);
-    P_C.setFromTriplets(triplets.begin(),triplets.end());
+    AdaptiveTransfer::endCoarse();
 }
 
-VertexData<double> AdaptiveTransfer::transfer() {
-    assert(P_B.rows() == nR && P_B.cols() == nB);
-    assert(P_B.cols() == vecfB.size());
-    assert(P_C.rows() == nR && P_C.cols() == nC);
-    assert(GLMM.cols() == nR);
-    assert(GLMM.rows() == nR);
+void AdaptiveFaceTransfer::setSplitHeVec(Halfedge he, HalfedgeData<Vector2>& hev) {
+    Vector2 v_kp= hev[he]*0.5 - (hev[he] + hev[he.next()]);
+    splitHeVec[he.face()] = v_kp.normalize();
+}
 
-    // SparseMatrix<double> mat = P_C.transpose() * GLMM * P_C;
-     //auto AtoB_L2_Solver_F = std::make_unique<SquareSolver<double>>(mat);
-    Eigen::ConjugateGradient<SparseMatrix<double>> lscg;
-    lscg.compute(P_C.transpose() * GLMM * P_C);
-    Vector<double> vec = P_C.transpose() * GLMM * P_B * vecfB;
-    Vector<double> vec_fC = lscg.solveWithGuess(vec,f_B.toVector(coarse_idx));
-    assert(vec_fC.allFinite());
-    return VertexData<double>(mesh,vec_fC,coarse_idx);
+void AdaptiveFaceTransfer::refineEdge(Halfedge h_pj) {
+    if (!h_pj.isInterior()) return;
+    HalfedgeData<Vector2> &hev = geom.halfedgeVectorsInFace;
+    Halfedge h_ip = h_pj.prevOrbitFace().twin().prevOrbitFace();
+    Halfedge h_kp = h_pj.prevOrbitFace(), h_pk = h_ip.next();
+    assert(h_ip.face() == h_pk.face());
+    assert(h_pj.face() == h_kp.face());
+    Face f1 = h_ip.face(),f2 = h_pj.face();
+    assert(splitHeVec[f2] == Vector2::infinity());
+    Vector2 v_kp = splitHeVec[f1], v_pk = - v_pk;
+    assert(v_kp != Vector2::infinity());
+    Vector2 e1 = hev[f1.halfedge()].normalize();
+    Vector2 e2 = hev[f2.halfedge()].normalize();
+    assert(e2.y == 0);
+    Vector2 r1 = e1/v_pk, r2 = e2/v_kp;
+    r[f1] *= r1; r[f2] *= r2;
+
+    setSplitHeVec(h_pj.next(),hev);
+    setSplitHeVec(h_ip.prevOrbitFace(),hev);
+}
+
+
+void AdaptiveFaceTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
+    HalfedgeData<Vector2> &hev = geom.halfedgeVectorsInFace;
+    Halfedge hi, hj;
+    for (Halfedge he: vp.outgoingHalfedges()) {
+        if (he.tipVertex() == vi) hi = he;
+        if (he.tipVertex() == vj) hj = he;
+    }
+
+    assert(hi != Halfedge() && hj != Halfedge());
+    for (Halfedge he: {hi,hj}) {
+        refineEdge(he);
+    }
 }
 
 }

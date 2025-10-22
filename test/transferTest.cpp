@@ -77,6 +77,110 @@ TEST(transfertTest,deadVerticesRetainValues) {
     ASSERT_EQ(idx[center_v],1);
 }
 
+// We rely on the following undocumented behaviour of geometry central:
+// The tangent space on each face f is build, s.t. halfedge(f) lies on the x  axis,
+// with Tangent(he_f)[0] / length[he_f] = 1
+TEST(transferTest,testAdaptiveTangentSpace) {
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "torus.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+    AdaptiveTriangulation atri(*parent_m, *parent_g);
+
+    ManifoldSurfaceMesh& m = atri.mesh();
+    IntrinsicGeometryInterface& g = atri.geom();
+
+    g.requireHalfedgeVectorsInFace();
+    std::vector<Face> faces;
+    for (Face f: m.faces()) {
+        Vector2 vec_he = g.halfedgeVectorsInFace[f.halfedge()];
+        ASSERT_EQ(vec_he[1],0);
+        ASSERT_NEAR(vec_he[0]/g.edgeLengths[f.halfedge().edge()],1,0.0001);
+        faces.push_back(f);
+    }
+
+    g.unrequireHalfedgeVectorsInFace();
+    atri.refine(faces);
+    g.refreshQuantities(); g.requireHalfedgeVectorsInFace();
+    faces.clear();
+
+    for (Face f: m.faces()) {
+        Vector2 vec_he = g.halfedgeVectorsInFace[f.halfedge()];
+        ASSERT_EQ(vec_he[1],0);
+        ASSERT_NEAR(vec_he[0]/g.edgeLengths[f.halfedge().edge()],1,0.0001);
+        faces.push_back(f);
+    }
+
+    g.unrequireHalfedgeVectorsInFace();
+    atri.coarse(faces);
+    g.refreshQuantities(); g.requireHalfedgeVectorsInFace();
+    faces.clear();
+
+    for (Face f: m.faces()) {
+        Vector2 vec_he = g.halfedgeVectorsInFace[f.halfedge()];
+        ASSERT_EQ(vec_he[1],0);
+        ASSERT_NEAR(vec_he[0]/g.edgeLengths[f.halfedge().edge()],1,0.0001);
+        faces.push_back(f);
+    }
+}
+
+TEST(transferTest,testAdaptiveTangentSpaceSplitHe) {
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "triangle.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+    AdaptiveTriangulation atri(*parent_m, *parent_g);
+
+    ManifoldSurfaceMesh& m = atri.mesh();
+    IntrinsicGeometryInterface& g = atri.geom();
+
+    Face f = m.face(0); Halfedge he = f.halfedge();
+
+    // mark opposite corner of f.he
+    for (Halfedge h: f.adjacentHalfedges()) atri.marked_corner[h.corner()] = false;
+    atri.marked_corner[he.corner()] = true;
+
+    g.requireHalfedgeVectorsInFace();
+    auto& g_tang = g.halfedgeVectorsInFace;
+    Vector2 he_tang = g_tang[he];
+    Vector2 (g_tang[he] + g_tang[he.next()]) - g_tang[he] * 0.5;
+    atri.refine({f});
+    g.refreshQuantities();
+    ASSERT_EQ(m.nFaces(),2);
+    Face f0 = m.face(0), f1 = m.face(1);
+    // Split sets faces to orthogonal halfedges
+    ASSERT_EQ(f0.halfedge().twin(), f1.halfedge());
+}
+
+TEST(transferTest,testVectorRotation) {
+    Vector2 x = Vector2(1,0);
+    Vector2 r = Vector2::fromAngle(PI/4);
+    ASSERT_EQ(r*x, r);
+    Vector2 y = r*x;
+    ASSERT_EQ(y/x,r);
+    std::cout << y/x <<std::endl;
+}
+
+TEST(transferTest,testSplitPreserveFace) {
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "quad.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+    ManifoldSurfaceMesh& m = *parent_m;
+    IntrinsicGeometryInterface& g = *parent_g;
+    FaceData<bool> fd(m,false);
+
+    Halfedge he;
+    for (Edge e: m.edges() ) if (!e.isBoundary()) he = e.halfedge(); // should also hold for twin
+    for (Face f: he.edge().adjacentFaces()) fd[f] = true;
+    Vertex vi = he.tailVertex(), vj = he.tipVertex();
+    Halfedge new_he = m.splitEdgeTriangular(he.edge());
+    ASSERT_EQ(new_he.tipVertex(), vj);
+    ASSERT_TRUE(!new_he.tailVertex().isBoundary());
+    ASSERT_FALSE(fd[new_he.face()]);
+    ASSERT_TRUE(fd[new_he.prevOrbitFace().twin().face()]);
+    ASSERT_EQ(new_he.face().halfedge(),new_he.prevOrbitFace());
+    ASSERT_EQ(new_he.prevOrbitFace().twin().face().halfedge(),new_he.prevOrbitFace().twin());
+
+}
+
 TEST(transfertTest,testL2VerticesCoarse) {
     std::filesystem::path fds(__FILE__);
     fds = fds.parent_path()/ "models" / "grid.stl";
@@ -105,7 +209,7 @@ TEST(transfertTest,testL2VerticesCoarse) {
         else facesC.push_back(f);
     }
 
-    AdaptiveTransfer transfer(atri.intrinsicTriangulation(),fA);
+    AdaptiveVertexTransfer transfer(atri.intrinsicTriangulation(),fA);
     atri.refine(facesR,&transfer);
     atri.coarse(facesC,&transfer);
     VertexData<double> fB = transfer.transfer();
