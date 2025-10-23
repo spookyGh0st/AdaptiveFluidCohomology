@@ -178,7 +178,59 @@ TEST(transferTest,testSplitPreserveFace) {
     ASSERT_TRUE(fd[new_he.prevOrbitFace().twin().face()]);
     ASSERT_EQ(new_he.face().halfedge(),new_he.prevOrbitFace());
     ASSERT_EQ(new_he.prevOrbitFace().twin().face().halfedge(),new_he.prevOrbitFace().twin());
+}
 
+TEST(transfertTest,testL2FaceU) {
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "quad.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+    ManifoldSurfaceMesh& m = *parent_m; VertexPositionGeometry& g = *parent_g;
+    g.requireHalfedgeVectorsInFace();
+    g.requireFaceTangentBasis();
+
+    Edge e;
+    for (Edge me: m.edges()) if(!me.isBoundary()) e= me;
+
+    FaceData<Vector2> u(m);
+    CornerData<bool> corner(m, false);
+    for (Halfedge he: e.adjacentHalfedges()) {
+        u[he.face()] = g.halfedgeVectorsInFace[he];
+        corner[he.prevOrbitFace().corner()] = true;
+    }
+
+    Vertex vi = e.halfedge().tailVertex(), vj = e.halfedge().tipVertex();
+    AdaptiveFaceTransfer transfer(m, g, u, corner);
+    transfer.startRefine();
+    std::cout << e.halfedge().face() << std::endl;
+    std::cout << m.face(0).halfedge() << std::endl;
+    std::cout << m.face(1).halfedge() << std::endl;
+    Halfedge he = m.splitEdgeTriangular(e);
+    ASSERT_EQ(he.tipVertex(), vj);
+    g.refreshQuantities();
+    transfer.refineEdge(vi,vj,he.vertex());
+    transfer.endRefine();
+
+    m.collapseEdgeTriangular(he);
+
+    HalfedgeData<double> frame_base(m,0);
+    for (Face f: m.faces()) {
+        frame_base[f.halfedge()] =1;
+    }
+
+    auto u_new = transfer.transfer();
+
+    m.compress();
+    g.refreshQuantities();
+
+    polyscope::init();
+    polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", g.vertexPositions,m.getFaceVertexList(),polyscopePermutations(m));
+    FaceData<Vector3> e1(m),e2(m);
+    for (Face f: m.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
+    pm_A->addFaceTangentVectorQuantity("unrotated",u,e1,e2)->setEnabled(true);
+    pm_A->addFaceTangentVectorQuantity("rotated",u_new,e1,e2)->setEnabled(true);
+    pm_A->addHalfedgeScalarQuantity("frame",frame_base);
+
+    polyscope::show();
 }
 
 TEST(transfertTest,testL2VerticesCoarse) {
