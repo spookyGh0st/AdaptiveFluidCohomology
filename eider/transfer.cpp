@@ -302,4 +302,30 @@ SparseMatrix<AdaptiveFaceTransfer::complex_t> AdaptiveFaceTransfer::M_CS_Lumped(
     M.setFromTriplets(triplets.begin(), triplets.end());
     return M;
 }
+
+void AggregateTransfer::startRefine() {
+    for (const auto& a: transfers) a->startRefine();
+}
+
+void AggregateTransfer::endRefine() {
+    for (const auto& a: transfers) a->endRefine();
+}
+
+void AggregateTransfer::startCoarse() {
+    for (const auto& a: transfers) a->startCoarse();
+}
+
+void AggregateTransfer::endCoarse() {
+    for (const auto& a: transfers) a->endCoarse();
+}
+
+void AggregateTransfer::refineEdge(const SplitData &d) {
+    for (const auto& a: transfers) a->refineEdge(d);
+}
+
+void AggregateTransfer::coarseEdge(const SplitData &d) {
+    for (const auto& a: transfers) a->coarseEdge(d);
+}
+
+
 }

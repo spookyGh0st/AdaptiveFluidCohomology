@@ -143,4 +143,17 @@ private:
     void refineSide(const Face &t, const Side &s, Vector2 v_kp);
     void coarseSide(const Face &t, const Side &s, Vector2 v_kp);
 };
+
+class AggregateTransfer: public  AdaptiveTransfer {
+public:
+    void startRefine() override;
+    void endRefine() override;
+    void startCoarse() override;
+    void endCoarse() override;
+    void refineEdge(const SplitData &d) override;
+    void coarseEdge(const SplitData &d) override;
+
+private:
+    std::vector<AdaptiveTransfer*> transfers;
+};
 }
