@@ -216,14 +216,14 @@ TEST(transfertTest,testL2FaceU) {
     Halfedge he = m.splitEdgeTriangular(e);
     g.refreshQuantities();
     Diamond d ( he,g.halfedgeVectorsInFace);
-    transfer.refineEdge(q,d);
+    transfer.refineEdge(SplitData(q,d));
     transfer.endRefine();
 
     transfer.startCoarse();
      m.collapseEdgeTriangular(he);
      for (Halfedge ohe: vi.outgoingHalfedges()){ if(ohe.tipVertex() == vj) he = ohe; }
      g.refreshQuantities();
-     transfer.coarseEdge(Quad(he,g.halfedgeVectorsInFace),d);
+     transfer.coarseEdge(SplitData(Quad(he,g.halfedgeVectorsInFace),d));
     transfer.endCoarse();
 
 

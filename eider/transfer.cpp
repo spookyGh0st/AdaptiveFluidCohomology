@@ -50,15 +50,46 @@ VertexData<double> AdaptiveVertexTransfer::transfer() const {
     return VertexData<double>(mesh,vec_fC,coarse_idx);
 }
 
+
 template class AdaptiveTransferL2<Vertex,double>;
 template class AdaptiveTransferL2<Face,Vector2>;
 
 
 
 /************************************************************
- *                    Vertex L2 Transfer
+ *                    Data Wrappers
  ************************************************************/
 
+Side::Side(Halfedge pj, const HalfedgeData<Vector2> &he_tang)
+    : tris({pj.prevOrbitFace().twin().face(), pj.face()}),
+      vec_orth({he_tang[pj.prevOrbitFace().twin()], he_tang[pj.prevOrbitFace()]}) { }
+
+Diamond::Diamond(Halfedge pj, const HalfedgeData<Vector2> &he_tang) {
+    vi = pj.prevOrbitFace().twin().prevOrbitFace().vertex();
+    vj = pj.tipVertex();
+    vp = pj.tailVertex();
+
+    sides[0] = Side(pj, he_tang);
+    if (pj.twin().isInterior())
+        sides[1] = Side(pj.twin().next().twin().next(), he_tang);
+}
+
+Quad::Quad(Halfedge ij, const HalfedgeData<Vector2> &he_tang) {
+    v_kp[0] = (he_tang[ij] * 0.5 - (he_tang[ij] + he_tang[ij.next()])).normalize();
+    vi = ij.tailVertex();
+    vj = ij.tipVertex();
+    tris[0] = ij.face();
+
+    if (ij.twin().isInterior()) {
+        Halfedge ji = ij.twin();
+        tris[1] = ji.face();
+        v_kp[1] = (he_tang[ji] * 0.5 - (he_tang[ji] + he_tang[ji.next()])).normalize();
+    }
+}
+
+/************************************************************
+ *                    Vertex L2 Transfer
+ ************************************************************/
 // TODO: change to mesh, geom
 AdaptiveVertexTransfer::AdaptiveVertexTransfer(IntrinsicTriangulation &tri, VertexData<double> &f_B)
     : AdaptiveTransferL2(*tri.intrinsicMesh, tri), f_B(f_B), vecfB(f_B.toVector(base_Idx)) { }
@@ -72,6 +103,12 @@ void AdaptiveVertexTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
     triplets_B.emplace_back(vp,vi,0.5);
     triplets_B.emplace_back(vp,vj,0.5);
 }
+
+void AdaptiveVertexTransfer::refineEdge(const SplitData& d) {
+    triplets_B.emplace_back(d.diamond.vp,d.diamond.vi,0.5);
+    triplets_B.emplace_back(d.diamond.vp,d.diamond.vj,0.5);
+}
+
 void AdaptiveVertexTransfer::endRefine() {
     nR = mesh.nVertices();
     geom.refreshQuantities();
@@ -107,6 +144,12 @@ void AdaptiveVertexTransfer::coarseEdge(Vertex vi, Vertex vj, Vertex vp) {
     triplets_C.emplace_back(vp,vi,0.5);
     triplets_C.emplace_back(vp,vj,0.5);
 }
+
+void AdaptiveVertexTransfer::coarseEdge(const SplitData& d) {
+    triplets_B.emplace_back(d.diamond.vp,d.diamond.vi,0.5);
+    triplets_B.emplace_back(d.diamond.vp,d.diamond.vj,0.5);
+}
+
 void AdaptiveVertexTransfer::endCoarse() {
     for (Vertex v: mesh.vertices()) {
         triplets_C.emplace_back(v,v,1);
@@ -154,90 +197,41 @@ template <typename E> Eigen::VectorXcd toVectorC(MeshData<E,Vector2> d, MeshData
 
 AdaptiveFaceTransfer::AdaptiveFaceTransfer(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, FaceData<Vector2> &f_B, CornerData<bool> &marked_corners)
     : AdaptiveTransferL2<Face, complex_t>(mesh, geom),
-      f_B(f_B), f_B_complex(toComplex(f_B)), vecfB(f_B_complex.toVector(base_Idx)),
-      r(mesh,Vector2::fromAngle(0)),
-      splitHeVec(mesh,Vector2::infinity())
+      f_B(f_B), f_B_complex(toComplex(f_B)), vecfB(f_B_complex.toVector(base_Idx))
 {
-    geom.requireHalfedgeVectorsInFace();
-    for (Face f: mesh.faces()) {
-        for(Halfedge he: f.adjacentHalfedges()){
-            if(marked_corners[he.oppositeCorner()])  setSplitHeVec(he,geom.halfedgeVectorsInFace);
-        }
-    }
+    geom.requireHalfedgeVectorsInFace(); // todo remove
 }
 
-void AdaptiveFaceTransfer::setSplitHeVec(Halfedge he, HalfedgeData<Vector2>& hev) {
-    Vector2 v_kp= hev[he]*0.5 - (hev[he] + hev[he.next()]);
-    splitHeVec[he.face()] = v_kp.normalize();
-}
 
-void AdaptiveFaceTransfer::refineSide(const Tri& t, const Side& s, Vector2 v_kp){
-    Face f1 = s.tris[0].f, f2 = s.tris[1].f;
-    Vector2 r1 = s.tris[0].e1()/(-v_kp), r2 = s.tris[1].e1()/v_kp;
-    triplets_B.emplace_back(f1,t.f,r1);
-    triplets_B.emplace_back(f2,t.f,r2);
-}
-
-void AdaptiveFaceTransfer::refineEdge(const Quad& T0, const Diamond& T1) {
-    refineSide(T0.tris[0].value(),T1.sides[0].value(),T0.v_kp[0]);
-    if(T0.tris[1].has_value()){ refineSide(T0.tris[1].value(),T1.sides[1].value(),T0.v_kp[1]); }
-}
-
-void AdaptiveFaceTransfer::coarseSide(const Tri& t, const Side& s, Vector2 v_kp){
-    Face f1 = s.tris[0].f, f2 = s.tris[1].f;
-    Vector2 e1 = s.tris[0].e1(), e2 = s.tris[1].e1();
-    //TODO: Instead of e1, (which depends on the fact that e1 is kp here), get vector associated to k_p
+void AdaptiveFaceTransfer::refineSide(const Face& t, const Side& s, Vector2 v_kp){
+    Face f1 = s.tris[0], f2 = s.tris[1];
+    Vector2 e1 = s.vec_orth[0].normalize(), e2 = s.vec_orth[1].normalize();
     Vector2 r1 = e1/(-v_kp), r2 = e2/v_kp;
-    triplets_C.emplace_back(f1,t.f,r1);
-    triplets_C.emplace_back(f2,t.f,r2);
+    triplets_B.emplace_back(f1,t,r1);
+    triplets_B.emplace_back(f2,t,r2);
 }
 
-void AdaptiveFaceTransfer::coarseEdge(const Quad& T0,const Diamond& T1) {
-    coarseSide(T0.tris[0].value(),T1.sides[0].value(),T0.v_kp[0]);
-    if(T0.tris[1].has_value()){ coarseSide(T0.tris[1].value(),T1.sides[1].value(),T0.v_kp[1]); }
+void AdaptiveFaceTransfer::refineEdge(const SplitData& d) {
+    refineSide(d.q.tris[0].value(),d.diamond.sides[0].value(),d.q.v_kp[0]);
+    if(d.q.tris[1].has_value()){ refineSide(d.q.tris[1].value(),d.diamond.sides[1].value(),d.q.v_kp[1]); }
 }
 
-
-void AdaptiveFaceTransfer::refineEdge(Halfedge h_pj) {
-    if (!h_pj.isInterior()) return;
-    HalfedgeData<Vector2> &hev = geom.halfedgeVectorsInFace;
-    Halfedge h_ip = h_pj.prevOrbitFace().twin().prevOrbitFace();
-    Halfedge h_kp = h_pj.prevOrbitFace(), h_pk = h_ip.next();
-    assert(h_ip.face() == h_pk.face());
-    assert(h_pj.face() == h_kp.face());
-    Face f1 = h_ip.face(),f2 = h_pj.face();
-    assert(f1.halfedge() == h_pk);
-    assert(f2.halfedge() == h_kp);
-    assert(splitHeVec[f2] == Vector2::infinity());
-    Vector2 v_kp = splitHeVec[f1], v_pk = - v_kp;
-    assert(v_kp != Vector2::infinity());
-    Vector2 e1 = hev[f1.halfedge()].normalize();
-    Vector2 e2 = hev[f2.halfedge()].normalize();
-    assert(e2.y == 0);
-    Vector2 r1 = e1/v_pk, r2 = e2/v_kp;
-    r[f1] *= r1; r[f2] *= r2;
-
-    triplets_B.emplace_back(f1,f1,r1);
-    triplets_B.emplace_back(f2,f1,r2);
-
-    setSplitHeVec(h_pj.next(),hev);
-    setSplitHeVec(h_ip.prevOrbitFace(),hev);
+void AdaptiveFaceTransfer::coarseSide(const Face& t, const Side& s, Vector2 v_kp){
+    Face f1 = s.tris[0], f2 = s.tris[1];
+    Vector2 e1 = s.vec_orth[0].normalize(), e2 = s.vec_orth[1].normalize();
+    Vector2 r1 = e1/(-v_kp), r2 = e2/v_kp;
+    triplets_C.emplace_back(f1,t,r1);
+    triplets_C.emplace_back(f2,t,r2);
 }
 
+void AdaptiveFaceTransfer::coarseEdge(const SplitData& d) {
+    coarseSide(d.q.tris[0].value(),d.diamond.sides[0].value(),d.q.v_kp[0]);
+    if(d.q.tris[1].has_value()){ coarseSide(d.q.tris[1].value(),d.diamond.sides[1].value(),d.q.v_kp[1]); }
+}
 
 void AdaptiveFaceTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
-    Halfedge hi, hj;
-    for (Halfedge he: vp.outgoingHalfedges()) {
-        if (he.tipVertex() == vi) hi = he;
-        if (he.tipVertex() == vj) hj = he;
-    }
-
-    assert(hi != Halfedge() && hj != Halfedge());
-    for (Halfedge he: {hi,hj}) {
-        refineEdge(he);
-    }
+    throw std::runtime_error("not implemented");
 }
-
 
 void AdaptiveFaceTransfer::startRefine() {
     for (Face f: mesh.faces()) {
@@ -274,11 +268,7 @@ void AdaptiveFaceTransfer::startCoarse() {
     }
 }
 void AdaptiveFaceTransfer::coarseEdge(Vertex vi, Vertex vj, Vertex vp) {
-    assert(vp.isDead());
-    Halfedge hij;
-    for (Halfedge he: vi.outgoingHalfedges()) { if (he.tipVertex()==vj) hij = he; }
-    assert(hij!=Halfedge());
-
+throw std::runtime_error("not implemented");
 }
 void AdaptiveFaceTransfer::endCoarse() {
 
