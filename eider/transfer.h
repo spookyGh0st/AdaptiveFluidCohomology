@@ -61,10 +61,8 @@ struct TransferSolver {
 class AdaptiveTransfer {
 public:
     virtual void startRefine() = 0;
-    virtual void refineEdge(Vertex vi, Vertex vj, Vertex vp) = 0;
     virtual void endRefine() = 0;
     virtual void startCoarse() =0;
-    virtual void coarseEdge(Vertex vi, Vertex vj, Vertex vp) =0;
     virtual void endCoarse() = 0;
     virtual void refineEdge(const SplitData& d) = 0;
     virtual void coarseEdge(const SplitData& d) = 0;
@@ -105,15 +103,11 @@ class AdaptiveVertexTransfer: public AdaptiveTransferL2<Vertex,double>{
 
     void startRefine() override;
 
-    void refineEdge(Vertex vi, Vertex vj, Vertex vp) override;
-
     void refineEdge(const SplitData& d) override;
 
     void endRefine() override;
 
     void startCoarse() override;
-
-    void coarseEdge(Vertex vi, Vertex vj, Vertex vp) override;
 
     void coarseEdge(const SplitData& d) override;
 
@@ -131,11 +125,9 @@ class AdaptiveFaceTransfer: public AdaptiveTransferL2<Face,std::complex<double>>
     AdaptiveFaceTransfer(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, FaceData<Vector2> &f_B, CornerData<bool> &marked_corners);
 
     void startRefine() override;
-    void refineEdge(Vertex vi, Vertex vj, Vertex vp) override;
     void refineEdge(const SplitData& d) override;
     void endRefine() override;
     void startCoarse() override;
-    void coarseEdge(Vertex vi, Vertex vj, Vertex vp) override;
     void coarseEdge(const SplitData& d) override;
     void endCoarse() override;
 

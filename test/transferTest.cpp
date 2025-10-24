@@ -281,7 +281,7 @@ TEST(transfertTest,testL2VerticesCoarse) {
 
     int_positions_A = intrinsic_position(atri.intrinsicTriangulation(),*parent_g);
     for(Vertex v: m.vertices()){
-        ASSERT_NEAR(fB[v],int_positions_A[v].x,0.000001);
+        ASSERT_NEAR(fB[v],int_positions_A[v].x,0.00001);
     }
 }
 

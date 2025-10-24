@@ -29,11 +29,13 @@ enum class MARKING_STRATEGY {
 class AdaptiveTriangulation {
   public:
     AdaptiveTriangulation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface& geom, MARKING_STRATEGY = MARKING_STRATEGY::LONGEST_EDGE);
+    // bisect the given halfedge ij into ipj. returns pj.
     Halfedge vertex_bisection(Halfedge he, AdaptiveTransfer *transfer = nullptr);
     void refine(std::vector<Face> faces, AdaptiveTransfer *transfer = nullptr);
 
     // get halfedge that was used in the edgesplit resulting in vertex v
     Halfedge coarse_halfedge(Vertex v);
+    // joins ipj into ij, returns ij
     Halfedge vertex_biunion(Halfedge he, AdaptiveTransfer *transfer = nullptr);
     void coarse(const std::vector<Face> &f, AdaptiveTransfer *transfer = nullptr);
 

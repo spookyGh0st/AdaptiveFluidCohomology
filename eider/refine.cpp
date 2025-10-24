@@ -91,10 +91,12 @@ Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer *
     Halfedge twin_he = he.twin();
     Vertex vi = he.tailVertex(), vj = he.tipVertex();
 
+    Quad q(he,tri);
     he = tri.splitEdge(he, 0.5);
+    Diamond d(he,tri);
 
     // If transfer is supplied, update that
-    if(transfer) { transfer->refineEdge(vi,vj,he.tailVertex()); }
+    if(transfer) { transfer->refineEdge(SplitData(q,d)); }
 
     // ensure indices are kept in order
     assert(twin_he.tipVertex() == he.tailVertex());
@@ -207,12 +209,15 @@ Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveTransfer *tr
     Vertex vi = he.prevOrbitFace().twin().next().tipVertex();
     Vertex vj = he.tipVertex();
     Vertex vp = he.tailVertex();
+
+    Diamond d(he,tri);
     he = tri.collapseEdgeTriangular(he);
+    Quad q(he,tri);
     assert(vi == he.tailVertex());
     assert(vj == he.tipVertex());
 
     // Update Inverse coarsening map
-    if(transfer){ transfer->coarseEdge(vi,vj,vp); }
+    if(transfer){ transfer->coarseEdge(SplitData(q,d)); }
 
     // update refinement edges
     for (Halfedge ahe: he.edge().adjacentHalfedges()) { if (ahe.isInterior()) setRefinementEdge(ahe); }

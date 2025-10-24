@@ -102,10 +102,6 @@ void AdaptiveVertexTransfer::startRefine() {
         triplets_B.emplace_back(v,v,1);
     }
 }
-void AdaptiveVertexTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
-    triplets_B.emplace_back(vp,vi,0.5);
-    triplets_B.emplace_back(vp,vj,0.5);
-}
 
 void AdaptiveVertexTransfer::refineEdge(const SplitData& d) {
     triplets_B.emplace_back(d.diamond.vp,d.diamond.vi,0.5);
@@ -143,14 +139,10 @@ void AdaptiveVertexTransfer::startCoarse() {
         nR = mesh.nVertices();
     }
 }
-void AdaptiveVertexTransfer::coarseEdge(Vertex vi, Vertex vj, Vertex vp) {
-    triplets_C.emplace_back(vp,vi,0.5);
-    triplets_C.emplace_back(vp,vj,0.5);
-}
 
 void AdaptiveVertexTransfer::coarseEdge(const SplitData& d) {
-    triplets_B.emplace_back(d.diamond.vp,d.diamond.vi,0.5);
-    triplets_B.emplace_back(d.diamond.vp,d.diamond.vj,0.5);
+    triplets_C.emplace_back(d.diamond.vp,d.diamond.vi,0.5);
+    triplets_C.emplace_back(d.diamond.vp,d.diamond.vj,0.5);
 }
 
 void AdaptiveVertexTransfer::endCoarse() {
@@ -231,10 +223,6 @@ void AdaptiveFaceTransfer::coarseEdge(const SplitData& d) {
     if(d.q.tris[1].has_value()){ coarseSide(d.q.tris[1].value(),d.diamond.sides[1].value(),d.q.v_kp[1]); }
 }
 
-void AdaptiveFaceTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
-    throw std::runtime_error("not implemented");
-}
-
 void AdaptiveFaceTransfer::startRefine() {
     for (Face f: mesh.faces()) {
         triplets_B.emplace_back(f,f,complex_t(1,0));
@@ -269,9 +257,7 @@ void AdaptiveFaceTransfer::startCoarse() {
         nR = mesh.nFaces();
     }
 }
-void AdaptiveFaceTransfer::coarseEdge(Vertex vi, Vertex vj, Vertex vp) {
-throw std::runtime_error("not implemented");
-}
+
 void AdaptiveFaceTransfer::endCoarse() {
 
     for (Face f: mesh.faces()) {
