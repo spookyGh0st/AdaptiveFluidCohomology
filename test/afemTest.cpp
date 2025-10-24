@@ -139,25 +139,11 @@ void visDopriConf(DOPRI5_conf &conf) {
         if (ImGui::Combo("Precision Preset", &current_preset, precision_presets, IM_ARRAYSIZE(precision_presets))) {
             switch (current_preset) {
             case 0: // Low precision (fast)
-                conf.Rtol_i  = 1e-3;
-                conf.Atol_i  = 1e-6;
-                conf.facmin  = 0.2;
-                conf.faxmax  = 10.0;
-                break;
-
+                conf = DOPRI5Preset(DOPRI5PresetConf::LOW); break;
             case 1: // Medium precision (balanced)
-                conf.Rtol_i  = 1e-6;
-                conf.Atol_i  = 1e-9;
-                conf.facmin  = 0.2;
-                conf.faxmax  = 5.0;
-                break;
-
+                conf = DOPRI5Preset(DOPRI5PresetConf::MEDIUM); break;
             case 2: // High precision (slow, stable)
-                conf.Rtol_i  = 1e-8;
-                conf.Atol_i  = 1e-11;
-                conf.facmin  = 0.25;
-                conf.faxmax  = 2.0;
-                break;
+                conf = DOPRI5Preset(DOPRI5PresetConf::HIGH); break;
             }
         }
 
@@ -172,9 +158,9 @@ void visDopriConf(DOPRI5_conf &conf) {
 void visDoerflerConf(DoeflerConf &conf) {
     // Preset names
     const char* doerfler_presets[] = {
-        "Conservative",
-        "Aggressive Refine",
-        "Aggressive Coarse",
+        "Low",
+        "Medium",
+        "High",
         "Uniform Refine",
         "Uniform Coarse"
     };
@@ -185,39 +171,15 @@ void visDoerflerConf(DoeflerConf &conf) {
         if (ImGui::Combo("Preset", &current_preset, doerfler_presets, IM_ARRAYSIZE(doerfler_presets))) {
             switch (current_preset) {
             case 0: // Conservative refinement
-                conf.theta_refine     = 0.1;
-                conf.threshold_refine = 1e-6;
-                conf.theta_coarse     = 0.1;
-                conf.threshold_coarse = 1e-8;
-                break;
-
+                conf = DoerflerPreset(DoerflerPresetConf::LOW); break;
             case 1: // Aggressive refinement
-                conf.theta_refine     = 0.5;
-                conf.threshold_refine = 1e-8;
-                conf.theta_coarse     = 0.05;
-                conf.threshold_coarse = 1e-9;
-                break;
-
+                conf = DoerflerPreset(DoerflerPresetConf::MEDIUM); break;
             case 2: // Aggressive coarsening
-                conf.theta_refine     = 0.3;
-                conf.threshold_refine = 1e-6;
-                conf.theta_coarse     = 0.3;
-                conf.threshold_coarse = 1e-6;
-                break;
-
+                conf = DoerflerPreset(DoerflerPresetConf::HIGH); break;
             case 3: // Uniform refine
-                conf.theta_refine     = 1.0;   // force refine
-                conf.threshold_refine = 0.0;   // no threshold
-                conf.theta_coarse     = 0.0;   // disable coarsening
-                conf.threshold_coarse = 0.0;   // disable coarsening
-                break;
-
+                conf = DoerflerPreset(DoerflerPresetConf::UNIFORM_REFINE); break;
             case 4: // Uniform coarse
-                conf.theta_refine     = 0.0;   // disable refining
-                conf.threshold_refine = 1e9;   // effectively prevent refining
-                conf.theta_coarse     = 1.0;   // force coarsening
-                conf.threshold_coarse = 1e9;   // no threshold
-                break;
+                conf = DoerflerPreset(DoerflerPresetConf::UNIFORM_COARSE); break;
             }
         }
 
