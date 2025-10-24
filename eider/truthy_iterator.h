@@ -1,7 +1,8 @@
 #pragma once
+#include <span>
 #include <iterator>
 
-template<typename T, size_t N>
+template<typename T>
 class truthy_iterator {
     T* ptr;
     T* end_ptr;
@@ -11,7 +12,7 @@ class truthy_iterator {
             ++ptr;
     }
 
-public:
+  public:
     using iterator_category = std::forward_iterator_tag;
     using value_type = T;
     using difference_type = std::ptrdiff_t;
@@ -33,11 +34,11 @@ public:
     bool operator!=(const truthy_iterator& other) const { return ptr != other.ptr; }
 };
 
-template<typename T, size_t N>
+template<typename T>
 class truthy_range {
-    T* data;
-public:
-    truthy_range(T (&arr)[N]) : data(arr) {}
-    auto begin() { return truthy_iterator<T, N>(data, data + N); }
-    auto end() { return truthy_iterator<T, N>(data + N, data + N); }
+    std::span<T> data;
+  public:
+    explicit truthy_range(std::span<T> s) : data(s) {}
+    auto begin() { return truthy_iterator<T>(data.data(), data.data() + data.size()); }
+    auto end() { return truthy_iterator<T>(data.data() + data.size(), data.data() + data.size()); }
 };

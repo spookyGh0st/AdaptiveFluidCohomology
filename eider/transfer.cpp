@@ -39,22 +39,6 @@ AdaptiveTransferL2<E,T>::AdaptiveTransferL2(ManifoldSurfaceMesh &mesh, Intrinsic
 }
 
 
-template <typename E, typename T>
-void AdaptiveTransferL2<E,T>::endCoarse() {
-    coarse_idx = getElementIndices<E>(mesh);
-    nC = nElements<E>(mesh);
-
-    std::vector<Eigen::Triplet<T,Eigen::Index>> triplets;
-    triplets.reserve(triplets_C.size());
-    for (const AdaptiveTriplet<E,T>& at: triplets_C) {
-        triplets.emplace_back(at.toEigen(refined_idx,coarse_idx));
-    }
-    triplets_C.clear(); // clear elements
-    P_C = SparseMatrix<T>(nR,nC);
-    P_C.setFromTriplets(triplets.begin(),triplets.end());
-
-}
-
 VertexData<double> AdaptiveVertexTransfer::transfer() const {
     assert(P_B.rows() == nR && P_B.cols() == nB);
     assert(P_B.cols() == vecfB.size());
@@ -187,8 +171,30 @@ void AdaptiveFaceTransfer::setSplitHeVec(Halfedge he, HalfedgeData<Vector2>& hev
     splitHeVec[he.face()] = v_kp.normalize();
 }
 
-void AdaptiveFaceTransfer::refineEdge(Quad& T0, Diamond& T1) {
-    // TODO:
+void AdaptiveFaceTransfer::refineSide(const Tri& t, const Side& s, Vector2 v_kp){
+    Face f1 = s.tris[0].f, f2 = s.tris[1].f;
+    Vector2 r1 = s.tris[0].e1()/(-v_kp), r2 = s.tris[1].e1()/v_kp;
+    triplets_B.emplace_back(f1,t.f,r1);
+    triplets_B.emplace_back(f2,t.f,r2);
+}
+
+void AdaptiveFaceTransfer::refineEdge(const Quad& T0, const Diamond& T1) {
+    refineSide(T0.tris[0].value(),T1.sides[0].value(),T0.v_kp[0]);
+    if(T0.tris[1].has_value()){ refineSide(T0.tris[1].value(),T1.sides[1].value(),T0.v_kp[1]); }
+}
+
+void AdaptiveFaceTransfer::coarseSide(const Tri& t, const Side& s, Vector2 v_kp){
+    Face f1 = s.tris[0].f, f2 = s.tris[1].f;
+    Vector2 e1 = s.tris[0].e1(), e2 = s.tris[1].e1();
+    //TODO: Instead of e1, (which depends on the fact that e1 is kp here), get vector associated to k_p
+    Vector2 r1 = e1/(-v_kp), r2 = e2/v_kp;
+    triplets_C.emplace_back(f1,t.f,r1);
+    triplets_C.emplace_back(f2,t.f,r2);
+}
+
+void AdaptiveFaceTransfer::coarseEdge(const Quad& T0,const Diamond& T1) {
+    coarseSide(T0.tris[0].value(),T1.sides[0].value(),T0.v_kp[0]);
+    if(T0.tris[1].has_value()){ coarseSide(T0.tris[1].value(),T1.sides[1].value(),T0.v_kp[1]); }
 }
 
 
@@ -275,7 +281,6 @@ void AdaptiveFaceTransfer::coarseEdge(Vertex vi, Vertex vj, Vertex vp) {
 
 }
 void AdaptiveFaceTransfer::endCoarse() {
-    AdaptiveTransferL2::endCoarse();
 
     for (Face f: mesh.faces()) {
         triplets_C.emplace_back(f,f,complex_t(1,0));
@@ -291,7 +296,7 @@ void AdaptiveFaceTransfer::endCoarse() {
     }
     triplets_C.clear(); // clear elements
     P_C = SparseMatrix<complex_t>(nR,nC);
-    P_C.setFromTriplets(triplets.begin(),triplets.end());
+    P_C.setFromTriplets(triplets.begin(),triplets.end(),[]( const complex_t& a, const complex_t& b) { return a * b; });
 }
 
 FaceData<Vector2> AdaptiveFaceTransfer::transfer() const {

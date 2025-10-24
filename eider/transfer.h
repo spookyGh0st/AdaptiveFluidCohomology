@@ -2,6 +2,7 @@
 
 #include <geometrycentral/surface/intrinsic_triangulation.h>
 #include <vector>
+#include <optional>
 
 namespace geometrycentral::surface {
 
@@ -21,7 +22,7 @@ struct AdaptiveTriplet{
 template <typename T>
 struct TransferSolver {
     TransferSolver(SparseMatrix<T> P_B, SparseMatrix<T> P_A, SparseMatrix<T> M)
-    : solver(P_B.transpose() * M * P_B), PBT_M_PA(P_B.transpose()*M*P_A) {}
+        : solver(P_B.adjoint() * M * P_B), PBT_M_PA(P_B.adjoint()*M*P_A) { }
     Eigen::ConjugateGradient<SparseMatrix<T>> solver;
     SparseMatrix<T>PBT_M_PA;
     Vector<T> solveWithGuess(const Vector<T> &fA, const Vector<T> &guess) const {
@@ -37,8 +38,6 @@ class AdaptiveTransfer {
      virtual void startCoarse()=0;
      virtual void coarseEdge(Vertex vi, Vertex vj, Vertex vp) =0;
      virtual void endCoarse() = 0;
-     void refineEdge(::geometrycentral::surface::Quad &T0, ::geometrycentral::surface::Diamond &T1);
-
 };
 
 struct Tri {
@@ -47,53 +46,71 @@ struct Tri {
     std::array<Halfedge,3> halfedges;
     std::array<Vector2,3> vectors;
     int8_t idx_f_he, idx_split_he;
-    Halfedge face_he(){ return halfedges[idx_f_he]; };
-    Halfedge edge_he(){ return halfedges[idx_split_he];}
-    bool isDead() {return f.isDead(); }
-    Tri(Halfedge he, const HalfedgeData<Vector2>& he_tang): f(he.face()), halfedges({he, he.next(), he.next().next()}), idx_split_he(0) {
+
+    Halfedge face_he() const { return halfedges[idx_f_he]; }
+    Halfedge edge_he() const { return halfedges[idx_split_he]; }
+    Vector2 e1() const { return vectors[idx_f_he].normalize(); }
+    bool isDead() const { return f.isDead(); }
+
+    Tri(Halfedge he, const HalfedgeData<Vector2>& he_tang)
+        : f(he.face()),
+          halfedges({he, he.next(), he.next().next()}),
+          idx_split_he(0)
+    {
         int8_t i = 0;
-        for (Halfedge he: f.adjacentHalfedges()) {
+        for (Halfedge he : f.adjacentHalfedges()) {
             vectors[i] = he_tang[he];
             if (he == f.halfedge()) idx_f_he = i;
             i++;
         }
     }
+
     Tri() = default;
-    operator bool(){ return (*this == Tri()); };
 };
 
 struct Side {
     std::array<Tri, 2> tris;
     Side() = default;
 
-    Side(Halfedge pj, const HalfedgeData<Vector2> &he_tang) : tris({
-        Tri(pj, he_tang),
-        Tri(pj.prevOrbitFace().twin().prevOrbitFace(),he_tang)
-    }) { }
-    operator bool(){ return (*this == Side()); };
+    Side(Halfedge pj, const HalfedgeData<Vector2> &he_tang)
+        : tris({
+              Tri(pj.prevOrbitFace().twin().prevOrbitFace(), he_tang),
+              Tri(pj, he_tang),
+          })
+    {}
 };
 
 struct Diamond {
     Vertex vi, vj, vp;
-    std::array<Side, 2> sides;
+    std::array<std::optional<Side>, 2> sides;
+
     Diamond(Halfedge pj, const HalfedgeData<Vector2> &he_tang) {
         vi = pj.prevOrbitFace().twin().prevOrbitFace().vertex();
         vj = pj.tipVertex();
         vp = pj.tailVertex();
 
-        sides[0] = Side(pj,he_tang);
+        sides[0] = Side(pj, he_tang);
         if (pj.twin().isInterior())
-            sides[1] = Side(pj.twin().next().twin().next(),he_tang);
+            sides[1] = Side(pj.twin().next().twin().next(), he_tang);
     }
 };
 
 struct Quad {
     Vertex vi, vj;
-    std::array<Tri,2> tris;
+    std::array<std::optional<Tri>,2> tris;
+    std::array<Vector2,2> v_kp;
+
     Quad(Halfedge ij, const HalfedgeData<Vector2> &he_tang) {
-        vi = ij.tailVertex(); vj = ij.tipVertex();
-        tris[0] = Tri(ij,he_tang);
-        if (ij.twin().isInterior()) tris[1] = Tri(ij.twin(),he_tang);
+        v_kp[0] = (he_tang[ij] * 0.5 - (he_tang[ij] + he_tang[ij.next()])).normalize();
+        vi = ij.tailVertex();
+        vj = ij.tipVertex();
+        tris[0] = Tri(ij, he_tang);
+
+        if (ij.twin().isInterior()) {
+            Halfedge ji = ij.twin();
+            tris[1] = Tri(ij.twin(), he_tang);
+            v_kp[1] = (he_tang[ji] * 0.5 - (he_tang[ji] + he_tang[ji.next()])).normalize();
+        }
     }
 };
 
@@ -108,7 +125,6 @@ class AdaptiveTransferL2: public AdaptiveTransfer{
 public:
   AdaptiveTransferL2(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom);
     virtual ~AdaptiveTransferL2() = default;
-    virtual void endCoarse();
 protected:
     // function at base
 
@@ -154,9 +170,11 @@ class AdaptiveFaceTransfer: public AdaptiveTransferL2<Face,std::complex<double>>
 
     void startRefine() override;
     void refineEdge(Vertex vi, Vertex vj, Vertex vp) override;
+    void refineEdge(const Quad &T0, const Diamond &T1);
     void endRefine() override;
     void startCoarse() override;
     void coarseEdge(Vertex vi, Vertex vj, Vertex vp) override;
+    void coarseEdge(const Quad &T0, const Diamond &T1);
     void endCoarse() override;
 
     FaceData<Vector2> transfer() const;
@@ -164,15 +182,15 @@ private:
     using complex_t = std::complex<double>;
     SparseMatrix<complex_t> M_CS_Lumped();
     void setSplitHeVec(Halfedge he, HalfedgeData<Vector2>& hev);
-    void refineEdge(Quad &T0, Diamond &T1);
     void refineEdge(Halfedge hpjd);
     FaceData<Vector2> r;
     FaceData<Vector2> splitHeVec;
-    Eigen::SparseMatrix<complex_t> R_B, R_C, GLMM_c;
     FaceData<complex_t> fB_complex;
 
     FaceData<Vector2>& f_B;
     FaceData<complex_t> f_B_complex;
     Vector<complex_t> vecfB;
+    void refineSide(const Tri &t, const Side &s, Vector2 v_kp);
+    void coarseSide(const Tri &t, const Side &s, Vector2 v_kp);
 };
 }
