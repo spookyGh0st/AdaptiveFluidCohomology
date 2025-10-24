@@ -72,10 +72,20 @@ TEST(transfertTest,deadVerticesRetainValues) {
     ASSERT_NE(center_v,Vertex());
     idx[center_v] = 1;
     faces.clear();for (Face f: m.faces()) faces.push_back(f);
+    Face f_back = m.face(m.nFaces()-2);
     atri.coarse(faces);
     ASSERT_TRUE(center_v.isDead());
     ASSERT_EQ(idx[center_v],1);
+    ASSERT_TRUE(f_back.isDead());
+
+    int i = 0;
+    for (Halfedge he: f_back.adjacentHalfedges()) {
+        ASSERT_TRUE(he.isDead()); i++;
+    }
+    ASSERT_EQ(i,3);
 }
+
+
 
 // We rely on the following undocumented behaviour of geometry central:
 // The tangent space on each face f is build, s.t. halfedge(f) lies on the x  axis,
@@ -209,8 +219,10 @@ TEST(transfertTest,testL2FaceU) {
     g.refreshQuantities();
     transfer.refineEdge(vi,vj,he.vertex());
     transfer.endRefine();
+    transfer.startCoarse();
+    transfer.endCoarse();
 
-    m.collapseEdgeTriangular(he);
+    // m.collapseEdgeTriangular(he);
 
     HalfedgeData<double> frame_base(m,0);
     for (Face f: m.faces()) {

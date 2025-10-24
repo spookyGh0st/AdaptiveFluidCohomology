@@ -287,10 +287,13 @@ double etaRSqr(Face T, IntrinsicGeometryInterface &geom, const VertexData<double
         f_st += f[v];
     f_st /= 3;
 
-    double lu = 0; // TODO: Is this correct?
-    for (Vertex v : T.adjacentVertices())
-        lu += laplacian(geom, v, u);
-    lu /= 3;
+    double lu = 0;
+    // I have also thought about the discrete laplace beltrami,
+    // but this is meant to be the continuous over the triangle.
+    // As we use afine function it is always 0.
+    // for (Vertex v : T.adjacentVertices())
+    //      lu += laplacian(geom, v, u);
+    // lu /= 3;
 
     double jump_sum = 0;
     for (Edge e : T.adjacentEdges()) {

@@ -1,4 +1,7 @@
 #include "transfer.h"
+
+#include "truthy_iterator.h"
+
 #include <geometrycentral/numerical/linear_solvers.h>
 #include <cassert>
 
@@ -35,22 +38,6 @@ AdaptiveTransferL2<E,T>::AdaptiveTransferL2(ManifoldSurfaceMesh &mesh, Intrinsic
     triplets_C.reserve(nB*2);
 }
 
-template <typename E, typename T>
-void AdaptiveTransferL2<E, T>::endRefine() {
-    nR = nElements<E>(mesh);
-
-    geom.refreshQuantities();
-    refined_idx = getElementIndices<E>(mesh);
-
-    std::vector<Eigen::Triplet<T,Eigen::Index>> triplets;
-    triplets.reserve(triplets_B.size());
-    for (const AdaptiveTriplet<E,T>& at: triplets_B) {
-        triplets.emplace_back(at.toEigen(refined_idx,base_Idx));
-    }
-    triplets_B.clear(); // clear elements
-    P_B = SparseMatrix<T>(nR,nB);
-    P_B.setFromTriplets(triplets.begin(),triplets.end());
-}
 
 template <typename E, typename T>
 void AdaptiveTransferL2<E,T>::endCoarse() {
@@ -102,7 +89,19 @@ void AdaptiveVertexTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
     triplets_B.emplace_back(vp,vj,0.5);
 }
 void AdaptiveVertexTransfer::endRefine() {
-    AdaptiveTransferL2::endRefine();
+    nR = mesh.nVertices();
+    geom.refreshQuantities();
+    refined_idx = getElementIndices<Vertex>(mesh);
+
+    std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
+    triplets.reserve(triplets_B.size());
+    for (const AdaptiveTriplet<Vertex,double>& at: triplets_B) {
+        triplets.emplace_back(at.toEigen(refined_idx,base_Idx));
+    }
+    triplets_B.clear(); // clear elements
+    P_B = SparseMatrix<double>(nR,nB);
+    P_B.setFromTriplets(triplets.begin(),triplets.end());
+
     geom.requireVertexGalerkinMassMatrix();
     GLMM = geom.vertexGalerkinMassMatrix;
     geom.unrequireVertexGalerkinMassMatrix();
@@ -128,7 +127,18 @@ void AdaptiveVertexTransfer::endCoarse() {
     for (Vertex v: mesh.vertices()) {
         triplets_C.emplace_back(v,v,1);
     }
-    AdaptiveTransferL2::endCoarse();
+
+    coarse_idx = getElementIndices<Vertex>(mesh);
+    nC = nElements<Vertex>(mesh);
+
+    std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
+    triplets.reserve(triplets_C.size());
+    for (const AdaptiveTriplet<Vertex,double>& at: triplets_C) {
+        triplets.emplace_back(at.toEigen(refined_idx,coarse_idx));
+    }
+    triplets_C.clear(); // clear elements
+    P_C = SparseMatrix<double>(nR,nC);
+    P_C.setFromTriplets(triplets.begin(),triplets.end());
 }
 
 /************************************************************
@@ -136,14 +146,16 @@ void AdaptiveVertexTransfer::endCoarse() {
  ************************************************************/
 template <typename E> MeshData<E,std::complex<double>> toComplex(MeshData<E,Vector2> d){
     MeshData<E,std::complex<double>> result(*d.getMesh());
-    for (E e : iterateElements<E>(d.getMesh())) {
-        result[e] = std::complex<double>(d[e].x, d[e].y);
-    }
+    for (E e : iterateElements<E>(d.getMesh())) { result[e] = d[e]; }
+    return result;
+}
+template <typename E> MeshData<E,Vector2> toVector(MeshData<E,std::complex<double>> d){
+    MeshData<E,Vector2> result(*d.getMesh());
+    for (E e : iterateElements<E>(d.getMesh())) { result[e] = Vector2::fromComplex(d[e]); }
     return result;
 }
 template <typename E> Eigen::VectorXcd toVectorC(MeshData<E,Vector2> d, MeshData<E,std::size_t> indexer){
     using complex_t = std::complex<double>;
-    size_t outSize = 0;
     Eigen::VectorXcd result(nElements<E>(*d.getMesh()));
     for (E e : iterateElements<E>(d.getMesh())) {
         if (indexer[e] != std::numeric_limits<size_t>::max()) {
@@ -175,6 +187,11 @@ void AdaptiveFaceTransfer::setSplitHeVec(Halfedge he, HalfedgeData<Vector2>& hev
     splitHeVec[he.face()] = v_kp.normalize();
 }
 
+void AdaptiveFaceTransfer::refineEdge(Quad& T0, Diamond& T1) {
+    // TODO:
+}
+
+
 void AdaptiveFaceTransfer::refineEdge(Halfedge h_pj) {
     if (!h_pj.isInterior()) return;
     HalfedgeData<Vector2> &hev = geom.halfedgeVectorsInFace;
@@ -194,12 +211,8 @@ void AdaptiveFaceTransfer::refineEdge(Halfedge h_pj) {
     Vector2 r1 = e1/v_pk, r2 = e2/v_kp;
     r[f1] *= r1; r[f2] *= r2;
 
-    // TODO: set triplets
-    // TODO, use custom accumulator for setFromTriplets, multiplying instead of adding
-    //     A.setFromTriplets(triplets.begin(), triplets.end(),
-    //        [](const cplx& a, const cplx& b) { return a * b; });
-
-    f_B[f2] = f_B[f1];
+    triplets_B.emplace_back(f1,f1,r1);
+    triplets_B.emplace_back(f2,f1,r2);
 
     setSplitHeVec(h_pj.next(),hev);
     setSplitHeVec(h_ip.prevOrbitFace(),hev);
@@ -207,7 +220,6 @@ void AdaptiveFaceTransfer::refineEdge(Halfedge h_pj) {
 
 
 void AdaptiveFaceTransfer::refineEdge(Vertex vi, Vertex vj, Vertex vp) {
-    HalfedgeData<Vector2> &hev = geom.halfedgeVectorsInFace;
     Halfedge hi, hj;
     for (Halfedge he: vp.outgoingHalfedges()) {
         if (he.tipVertex() == vi) hi = he;
@@ -227,25 +239,84 @@ void AdaptiveFaceTransfer::startRefine() {
     }
 }
 void AdaptiveFaceTransfer::endRefine() {
-    AdaptiveTransferL2::endRefine();
+    nR = nElements<Face>(mesh);
+    geom.refreshQuantities();
+    refined_idx = getElementIndices<Face>(mesh);
+
+    std::vector<Eigen::Triplet<complex_t,Eigen::Index>> triplets;
+    triplets.reserve(triplets_B.size());
+    for (const AdaptiveTriplet<Face,complex_t>& at: triplets_B) {
+        triplets.emplace_back(at.toEigen(refined_idx,base_Idx));
+    }
+    triplets_B.clear(); // clear elements
+    P_B = SparseMatrix<complex_t>(nR,nB);
+
+    P_B.setFromTriplets(triplets.begin(),triplets.end(),[]( const complex_t& a, const complex_t& b) { return a * b; });
+
+
+    GLMM = M_CS_Lumped();
+    assert(GLMM.rows() == nR);
+    assert(GLMM.cols() == nR);
+
 }
 void AdaptiveFaceTransfer::startCoarse() {
+    if(nR != 0){
+        assert(nR == mesh.nFaces());
+    } else {
+        refined_idx = mesh.getFaceIndices();
+        nR = mesh.nFaces();
+    }
 }
 void AdaptiveFaceTransfer::coarseEdge(Vertex vi, Vertex vj, Vertex vp) {
+    assert(vp.isDead());
+    Halfedge hij;
+    for (Halfedge he: vi.outgoingHalfedges()) { if (he.tipVertex()==vj) hij = he; }
+    assert(hij!=Halfedge());
+
 }
 void AdaptiveFaceTransfer::endCoarse() {
     AdaptiveTransferL2::endCoarse();
+
+    for (Face f: mesh.faces()) {
+        triplets_C.emplace_back(f,f,complex_t(1,0));
+    }
+
+    coarse_idx = getElementIndices<Face>(mesh);
+    nC = nElements<Face>(mesh);
+
+    std::vector<Eigen::Triplet<complex_t,Eigen::Index>> triplets;
+    triplets.reserve(triplets_C.size());
+    for (const AdaptiveTriplet<Face,complex_t>& at: triplets_C) {
+        triplets.emplace_back(at.toEigen(refined_idx,coarse_idx));
+    }
+    triplets_C.clear(); // clear elements
+    P_C = SparseMatrix<complex_t>(nR,nC);
+    P_C.setFromTriplets(triplets.begin(),triplets.end());
 }
 
 FaceData<Vector2> AdaptiveFaceTransfer::transfer() const {
-    Eigen::VectorXcd  fB_complex = toVectorC<Face>(f_B,coarse_idx);
-    TransferSolver<complex_t> solver = TransferSolver(R_B,R_C,GLMM_c);
-    // FaceData<Vector2> u = array_transfer(mesh,solver,coarse_idx,f_B,vecfB);
-    FaceData<Vector2> u = f_B;
-    for (Face f: mesh.faces()){
-        u[f] = r[f] * u[f];
-    }
-    return u;
+    assert(P_B.rows() == nR && P_B.cols() == nB);
+    assert(P_B.cols() == vecfB.size());
+    assert(P_C.rows() == nR && P_C.cols() == nC);
+    assert(GLMM.cols() == nR);
+    assert(GLMM.rows() == nR);
+    auto solver = TransferSolver(P_C,P_B,GLMM);
+    Vector<complex_t> vec_fC = solver.solveWithGuess(vecfB,f_B_complex.toVector(coarse_idx));
+    FaceData<complex_t> fC_complex(mesh,vec_fC,coarse_idx);
+    return toVector(fC_complex);
 }
 
+SparseMatrix<AdaptiveFaceTransfer::complex_t> AdaptiveFaceTransfer::M_CS_Lumped() {
+    std::vector<Eigen::Triplet<complex_t, Eigen::Index>> triplets;
+    geom.requireFaceAreas();
+    for (Face f : mesh.faces()) {
+        int i = refined_idx[f];
+        double v = geom.faceAreas[f];
+        triplets.emplace_back(i, i, complex_t(v, 0));
+    }
+    geom.unrequireFaceAreas();
+    SparseMatrix<complex_t> M(mesh.nFaces(), mesh.nFaces());
+    M.setFromTriplets(triplets.begin(), triplets.end());
+    return M;
+}
 }
