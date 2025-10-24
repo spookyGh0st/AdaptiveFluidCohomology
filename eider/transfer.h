@@ -13,20 +13,20 @@ struct Side {
     // vector associated to the orthogonal halfedges,
     std::array<Vector2,2> vec_orth;
     Side() = default;
-    Side(Halfedge pj, const HalfedgeData<Vector2> &he_tang);
+    Side(Halfedge pj, const IntrinsicGeometryInterface& geom);
 };
 
 struct Diamond {
     Vertex vi, vj, vp;
     std::array<std::optional<Side>, 2> sides;
-    Diamond(Halfedge pj, const HalfedgeData<Vector2> &he_tang);
+    Diamond(Halfedge pj, const IntrinsicGeometryInterface& geom);
 };
 
 struct Quad {
     Vertex vi, vj;
     std::array<std::optional<Face>,2> tris;
     std::array<Vector2,2> v_kp;
-    Quad(Halfedge ij, const HalfedgeData<Vector2> &he_tang);
+    Quad(Halfedge ij, const IntrinsicGeometryInterface& geom);
 };
 
 struct SplitData {

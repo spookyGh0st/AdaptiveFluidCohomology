@@ -212,21 +212,19 @@ TEST(transfertTest,testL2FaceU) {
     AdaptiveFaceTransfer transfer(m, g, u, corner);
 
     transfer.startRefine();
-    Quad q (e.halfedge(),g.halfedgeVectorsInFace);
+    Quad q (e.halfedge(),g);
     Halfedge he = m.splitEdgeTriangular(e);
     g.refreshQuantities();
-    Diamond d ( he,g.halfedgeVectorsInFace);
+    Diamond d ( he,g);
     transfer.refineEdge(SplitData(q,d));
     transfer.endRefine();
 
     transfer.startCoarse();
-     m.collapseEdgeTriangular(he);
-     for (Halfedge ohe: vi.outgoingHalfedges()){ if(ohe.tipVertex() == vj) he = ohe; }
-     g.refreshQuantities();
-     transfer.coarseEdge(SplitData(Quad(he,g.halfedgeVectorsInFace),d));
+    m.collapseEdgeTriangular(he);
+    g.refreshQuantities();
+    for (Halfedge ohe: vi.outgoingHalfedges()){ if(ohe.tipVertex() == vj) he = ohe; }
+    transfer.coarseEdge(SplitData(Quad(he,g),d));
     transfer.endCoarse();
-
-
     HalfedgeData<double> frame_base(m,0);
     for (Face f: m.faces()) {
         frame_base[f.halfedge()] =1;

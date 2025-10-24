@@ -60,30 +60,33 @@ template class AdaptiveTransferL2<Face,Vector2>;
  *                    Data Wrappers
  ************************************************************/
 
-Side::Side(Halfedge pj, const HalfedgeData<Vector2> &he_tang)
+Side::Side(Halfedge pj, const IntrinsicGeometryInterface& geom)
     : tris({pj.prevOrbitFace().twin().face(), pj.face()}),
-      vec_orth({he_tang[pj.prevOrbitFace().twin()], he_tang[pj.prevOrbitFace()]}) { }
+      vec_orth({geom.halfedgeVector(pj.prevOrbitFace().twin()), geom.halfedgeVector(pj.prevOrbitFace())}) { }
 
-Diamond::Diamond(Halfedge pj, const HalfedgeData<Vector2> &he_tang) {
+Diamond::Diamond(Halfedge pj, const IntrinsicGeometryInterface &geom) {
     vi = pj.prevOrbitFace().twin().prevOrbitFace().vertex();
     vj = pj.tipVertex();
     vp = pj.tailVertex();
 
-    sides[0] = Side(pj, he_tang);
+    sides[0] = Side(pj, geom);
     if (pj.twin().isInterior())
-        sides[1] = Side(pj.twin().next().twin().next(), he_tang);
+        sides[1] = Side(pj.twin().next().twin().next(), geom);
 }
 
-Quad::Quad(Halfedge ij, const HalfedgeData<Vector2> &he_tang) {
-    v_kp[0] = (he_tang[ij] * 0.5 - (he_tang[ij] + he_tang[ij.next()])).normalize();
+inline Vector2 orth_vec_n(Halfedge ij, const IntrinsicGeometryInterface& geom) {
+    return (geom.halfedgeVector(ij) * 0.5 - (geom.halfedgeVector(ij) + geom.halfedgeVector(ij.next()))).normalize();
+}
+
+Quad::Quad(Halfedge ij, const IntrinsicGeometryInterface &geom) {
+    v_kp[0] = orth_vec_n(ij,geom);
     vi = ij.tailVertex();
     vj = ij.tipVertex();
     tris[0] = ij.face();
 
     if (ij.twin().isInterior()) {
-        Halfedge ji = ij.twin();
-        tris[1] = ji.face();
-        v_kp[1] = (he_tang[ji] * 0.5 - (he_tang[ji] + he_tang[ji.next()])).normalize();
+        tris[1] = ij.twin().face();
+        v_kp[1] = orth_vec_n(ij.twin(),geom);
     }
 }
 
@@ -199,7 +202,6 @@ AdaptiveFaceTransfer::AdaptiveFaceTransfer(ManifoldSurfaceMesh &mesh, IntrinsicG
     : AdaptiveTransferL2<Face, complex_t>(mesh, geom),
       f_B(f_B), f_B_complex(toComplex(f_B)), vecfB(f_B_complex.toVector(base_Idx))
 {
-    geom.requireHalfedgeVectorsInFace(); // todo remove
 }
 
 
