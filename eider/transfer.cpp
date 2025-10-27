@@ -291,13 +291,11 @@ FaceData<Vector2> AdaptiveFaceTransfer::transfer() const {
 
 SparseMatrix<AdaptiveFaceTransfer::complex_t> AdaptiveFaceTransfer::M_CS_Lumped() {
     std::vector<Eigen::Triplet<complex_t, Eigen::Index>> triplets;
-    geom.requireFaceAreas();
     for (Face f : mesh.faces()) {
         int i = refined_idx[f];
-        double v = geom.faceAreas[f];
+        double v = geom.faceAreaFromLength(f);
         triplets.emplace_back(i, i, complex_t(v, 0));
     }
-    geom.unrequireFaceAreas();
     SparseMatrix<complex_t> M(mesh.nFaces(), mesh.nFaces());
     M.setFromTriplets(triplets.begin(), triplets.end());
     return M;

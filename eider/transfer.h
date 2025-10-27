@@ -50,7 +50,9 @@ struct AdaptiveTriplet{
 template <typename T>
 struct TransferSolver {
     TransferSolver(SparseMatrix<T> P_B, SparseMatrix<T> P_A, SparseMatrix<T> M)
-        : solver(P_B.adjoint() * M * P_B), PBT_M_PA(P_B.adjoint()*M*P_A) { }
+        : solver(P_B.adjoint() * M * P_B), PBT_M_PA(P_B.adjoint()*M*P_A) {
+        solver.setTolerance(solver.tolerance()*0.1);
+    }
     Eigen::ConjugateGradient<SparseMatrix<T>> solver;
     SparseMatrix<T>PBT_M_PA;
     Vector<T> solveWithGuess(const Vector<T> &fA, const Vector<T> &guess) const {
@@ -146,14 +148,12 @@ private:
 
 class AggregateTransfer: public  AdaptiveTransfer {
 public:
+    std::vector<AdaptiveTransfer*> transfers;
     void startRefine() override;
     void endRefine() override;
     void startCoarse() override;
     void endCoarse() override;
     void refineEdge(const SplitData &d) override;
     void coarseEdge(const SplitData &d) override;
-
-private:
-    std::vector<AdaptiveTransfer*> transfers;
 };
 }

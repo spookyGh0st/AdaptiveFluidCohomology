@@ -274,10 +274,7 @@ void refineAndReset(TaylorVorticesCase& aCase, GeomP& geom) {
 std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
     std::string name, std::string label,
     ManifoldSurfaceMesh& pmesh, VertexPositionGeometry& pgeom,
-    bool adapt_time, bool adapt_space,
-    DOPRI5PresetConf dp5conf = DOPRI5PresetConf::MEDIUM,
-    DoerflerPresetConf doerflerConf = DoerflerPresetConf::LOW,
-    MARKING_STRATEGY marking_strategy = MARKING_STRATEGY::PATTERN
+    AdaptiveFluidSolverData d
     )
 {
 
@@ -285,39 +282,25 @@ std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
     std::unique_ptr<ManifoldSurfaceMesh> mesh = pmesh.copy();
     GeomP  geom= std::make_unique<VertexPositionGeometry>(*mesh,pgeom.vertexPositions.reinterpretTo(*mesh));
     // init data
-    AdaptiveFluidSolverData data { DOPRI5Preset(dp5conf), DoerflerPreset(doerflerConf), 0.01, adapt_time, adapt_space, marking_strategy };
 
-    auto aCase = std::make_shared<TaylorVorticesCase>(
-        name, label, std::move(mesh), std::move(geom), data
-    );
+    auto aCase = std::make_shared<TaylorVorticesCase>( name, label, std::move(mesh), std::move(geom), d );
 
-    if (adapt_space) {
-        refineAndReset(*aCase, aCase->geom);
-    }
+    if (d.adaptive_space) { refineAndReset(*aCase, aCase->geom); }
 
     return aCase;
 }
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_ASAT(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("ASAT", "Adaptive Space Adaptive Time (ASAT)", mesh, geom, true, true);
+    AdaptiveFluidSolverData data(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false);
+    return makeTaylorCase("ASAT", "Adaptive Space Adaptive Time (ASAT)", mesh, geom, data);
 }
-
-std::shared_ptr<TaylorVorticesCase> taylorVortices_SSST(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("SSST","Static Space Static Time (SSST)", mesh, geom, false, false);
-}
-
-std::shared_ptr<TaylorVorticesCase> taylorVortices_ASST(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("ASST", "Adaptive Space Static Time", mesh, geom, false, true);
-}
-
-std::shared_ptr<TaylorVorticesCase> taylorVortices_SSAT(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("SSAT","Static Space Adaptive Time (SSAT)", mesh, geom, true, false);
-}
-
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_OR(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    return makeTaylorCase("OR", "Original (Yin et al., 2023)", mesh, geom, false, false);
+    AdaptiveFluidSolverData data(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,0.01,false,false,MARKING_STRATEGY::PATTERN,false);
+    return makeTaylorCase("OR", "Original (Yin et al., 2023)", mesh, geom, data);
 }
+
+class 
 
 class Comparator {
   public:
@@ -442,8 +425,8 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
     Comparator cpm;
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
-        makeTaylorCase("low", "Low Precision", *mesh, *geom, true, true,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::LOW),
-        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, true, true,DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM),
+        makeTaylorCase("low", "Low Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false)),
+        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM,0.01,true,true,MARKING_STRATEGY::PATTERN,false)),
     };
 
     init_ps(cpm);
@@ -462,8 +445,8 @@ TEST(EvaluatorTest, EvaluateAdapt)
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
     Comparator cpm;
     cpm.testcases = {
-        makeTaylorCase("adaptive", "Adaptive Refinement", *mesh, *geom, false, false,DOPRI5PresetConf::HIGH,DoerflerPresetConf::VERY_HIGH),
-        makeTaylorCase("uniform", "Uniform Refinement", *mesh, *geom, false, false,DOPRI5PresetConf::HIGH,DoerflerPresetConf::UNIFORM_REFINE),
+        makeTaylorCase("adaptive", "Adaptive Refinement", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::VERY_HIGH,0.01,false,false)),
+        makeTaylorCase("uniform", "Uniform Refinement", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::UNIFORM_REFINE,0.01,false,false)),
     };
     auto* tc1 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
     auto* tc2 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[1].get());
@@ -512,8 +495,8 @@ TEST(EvaluatorTest,evaluateInitialMarkings) {
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
     Comparator cpm;
     cpm.testcases = {
-        makeTaylorCase("pattern", "pattern-initialized", *mesh, *geom, false, false,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::UNIFORM_REFINE,MARKING_STRATEGY::PATTERN),
-        makeTaylorCase("random", "random-initialized", *mesh, *geom, false, false,DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::UNIFORM_REFINE,MARKING_STRATEGY::RANDOM),
+        makeTaylorCase("pattern", "pattern-initialized", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::UNIFORM_REFINE,0.01,false,false,MARKING_STRATEGY::PATTERN,true)),
+        makeTaylorCase("random", "random-initialized", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::UNIFORM_REFINE,0.01,false,false,MARKING_STRATEGY::RANDOM,true)),
     };
     auto* tc1 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
     auto* tc2 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[1].get());
@@ -525,6 +508,30 @@ TEST(EvaluatorTest,evaluateInitialMarkings) {
         tc2->solver->adapt();
     }
 
+
+    init_ps(cpm);
+    cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+
+    cpm.write(cf.fev);
+    copyFolder(cf.fev,cf.flatest);
+    cpm.visualize();
+    polyscope::show();
+
+}
+
+TEST(EvaluatorTest,evaluateHarmonicDistance) {
+    CaseFolder cf ("tc5");
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
+    Comparator cpm;
+    AdaptiveFluidSolverData data(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false);
+    cpm.testcases = { makeTaylorCase("harmonic_distance","hdist",*mesh,*geom,data) };
+    auto* tc1 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
+    int n = 9000;
+    while (tc1->solver->tri.mesh().nFaces()< n) {
+        tc1->solver->adapt();
+    }
 
     init_ps(cpm);
     cpm.visualize(cf.f_screenshots);

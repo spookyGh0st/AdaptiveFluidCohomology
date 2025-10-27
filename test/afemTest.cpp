@@ -406,6 +406,9 @@ struct AdaptiveFluidVisualization {
             polym->addFaceTangentVectorQuantity("h -unorthorgonal" + std::to_string(i),full_h.h_unorth[i],e1,e2);
             polym->addFaceTangentVectorQuantity("h -orthorgonal" + std::to_string(i),full_h.h_orth[i],e1,e2);
         }
+        for (int i = 0; i < solver->h_interpolated.size(); ++i) {
+            polym->addFaceTangentVectorQuantity("h -interpolated" + std::to_string(i),solver->h_interpolated[i],e1,e2);
+        }
 
         polym->addFaceTangentVectorQuantity("Lamb Form ", lamb_form(mesh,solver->wc.w,v.u),e1,e2);
 
