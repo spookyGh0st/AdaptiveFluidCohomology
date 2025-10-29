@@ -12,6 +12,7 @@ AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeo
     : tri(mesh, geom, data.strategy), hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()), S(tri.mesh(), tri.geom()),
       conf(data.dopri5Conf), doerflerConf(data.doerflerConf), adapt_time(data.adaptive_time), adapte_space(data.adaptive_space),
       interpolate_h(data.interpolate_harmonic_basis), dt(data.dt),
+      use_interpolated_h(data.use_interpolated_harmonic_basis),
       wc(VertexData<double>(tri.mesh()), std::vector<double>(hom.homologyB.size(), 0)) // empty wc
 {
     if (interpolate_h) {
@@ -52,8 +53,6 @@ void AdaptiveFluidSolver::adapt() {
 
 
     VertexData<double> u(tri.mesh(), 0);
-    // TODO: duplicate, but im unsure about indices
-    S.compute(tri.mesh(), tri.geom());
     S.solve(tri.mesh(), tri.geom(), u, wc.w);
     FaceData<double> eta = poisson_residual_error_sqr(tri.mesh(), tri.geom(), u, wc.w);
     std::array<std::vector<Face>, 2> ref_coarse = select_doerfler(tri.mesh(), eta, doerflerConf);
@@ -74,7 +73,9 @@ void AdaptiveFluidSolver::adapt() {
     // next, compress the mesh and update required quantities
     tri.mesh().compress();
     // on the new mesh, now recompute the rest of the mesh
-    h = hom.harmonicBasis();
+
+    if (use_interpolated_h) h = h_interpolated; else h = hom.harmonicBasis();
+
     S.compute(tri.mesh(), tri.geom());
 }
 
@@ -94,6 +95,6 @@ DOPRI5_sample AdaptiveFluidSolver::step() {
     return dps;
 }
 AdaptiveFluidSolverData AdaptiveFluidSolver::data() const {
-    return AdaptiveFluidSolverData(conf,doerflerConf,dt,adapt_time,adapte_space,MARKING_STRATEGY::PATTERN,interpolate_h);
+    return AdaptiveFluidSolverData(conf,doerflerConf,dt,adapt_time,adapte_space,MARKING_STRATEGY::PATTERN,interpolate_h,use_interpolated_h);
 }
 }

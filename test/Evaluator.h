@@ -28,6 +28,7 @@ struct EvData {
     std::vector<FaceData<double>> dc;
     double time_per_sim_sec;
     double poison_residual_error;
+    Harmonic_basis h_interpol;
 };
 
 struct EvVector {
@@ -77,6 +78,34 @@ struct Evaluator {
 
 void to_csv(const DoeflerConf& conf, const std::filesystem::path& filename);
 void to_csv(const DOPRI5_conf& conf, const std::filesystem::path& filename);
+
+// when changing this, change registerProperties()
+enum ExportProperty {
+    EXPORT_None      = 0,
+    EXPORT_DT        = 1 << 0,
+    EXPORT_ATTEMPTS  = 1 << 1,
+    EXPORT_velocity  = 1 << 2,
+    EXPORT_int_psi   = 1 << 3,
+    EXPORT_int_w     = 1 << 4,
+    EXPORT_int_dwdt  = 1 << 5,
+    EXPORT_WTST      = 1 << 6,
+    EXPORT_RESIDUAL  = 1 << 7,
+    EXPORT_C         = 1 << 8,
+    EXPORT_dCdW      = 1 << 9,
+    EXPORT_nF        = 1 << 10,
+    EXPORT_nV        = 1 << 11,
+    EXPORT_DHC_HI    = 1 << 12
+};
+
+inline ExportProperty operator|(ExportProperty lhs, ExportProperty rhs) {
+    return static_cast<ExportProperty>(static_cast<int>(lhs) | static_cast<int>(rhs));
+}
+inline ExportProperty operator&(ExportProperty lhs, ExportProperty rhs) {
+    return static_cast<ExportProperty>(static_cast<int>(lhs) & static_cast<int>(rhs));
+}
+
+void registerProperties(Evaluator &ev, ExportProperty p, int h_size);
+ExportProperty defaultTimeProperties();
 
 
 

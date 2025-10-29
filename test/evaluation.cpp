@@ -127,20 +127,7 @@ class TaylorVorticesCase : public TestCase{
     DoeflerConf doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
     DOPRI5_conf dopri5Conf = DOPRI5Preset(DOPRI5PresetConf::LOW);;
     void registerAll(Evaluator& ev,int h_size){
-        ev.reg("dt (s)", [](EvData d) { return d.dp5s.t_past; });
-        // ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
-        ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
-        ev.reg(R"($\int_M \psi$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
-        ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w,d.geom); });
-        ev.reg(R"($\int_M \frac{d}{dt} w$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
-        ev.reg("wall time per simulation time (s)", [](EvData d) { return d.time_per_sim_sec; });
-        ev.reg(R"($\eta_R$)", [](EvData d) { return d.poison_residual_error; });
-        for (int i = 0; i < h_size; ++i) {
-            ev.reg("$c_IDX("+std::to_string(i) +")$", [i](EvData d) {
-                return d.wc.c[i];
-            });
-            ev.reg(R"($\frac{d}{dt} c_IDX()"+std::to_string(i) +")$", [i](EvData d) { return d.rhs.c[i]; });
-        }
+        registerProperties(ev,defaultTimeProperties(),h_size);
     }
     void registerStep(Evaluator& ev,int h_size){
         ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
@@ -166,7 +153,7 @@ class TaylorVorticesCase : public TestCase{
         auto errorsqr = poisson_residual_error_sqr(mesh,geom,solver->wc.w,u.stream_function);
         double prsq = 0;
         for (Face f: mesh.faces()) prsq += std::sqrt(errorsqr[f]);
-        EvData data(mesh,geom,u, rhs,solver->wc,solver->h,dp5s,face_dc,time_per_sim_sec,prsq);
+        EvData data(mesh,geom,u, rhs,solver->wc,solver->h,dp5s,face_dc,time_per_sim_sec,prsq,solver->h_interpolated);
         return data;
     }
 
@@ -399,13 +386,13 @@ TEST(EvaluatorTest, Evaluate)
     auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
 
     Comparator cpm;
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolverData data_interp_ha= data_comp_h; data_interp_ha.interpolate_harmonic_basis = true; data_interp_ha.use_interpolated_harmonic_basis =true;
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
-        // taylorVortices_SSAT(*meshO,*geomO),
-        // taylorVortices_SSST_REFINED(*mesh,*geom),
-        taylorVortices_ASAT(*mesh,*geom),
+        makeTaylorCase("ASAT", "Adaptive, recomputed h", *mesh, *geom, data_comp_h),
+        makeTaylorCase("ASATIH", "Adaptive, interpolated h", *mesh, *geom, data_interp_ha),
     };
-
     init_ps(cpm);
 
 

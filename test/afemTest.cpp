@@ -448,6 +448,7 @@ struct AdaptiveFluidVisualization {
             ImGui::Checkbox("Adapt Space", &solver->adapte_space);
             ImGui::Checkbox("Adapt Time", &solver->adapt_time);
             ImGui::Checkbox("Fix C", &fix_c);
+            ImGui::Checkbox("Use interpolated h", &solver->use_interpolated_h);
             ImGui::InputDouble("Delta Time", &solver->dt);
 
             if (state.running || ImGui::Button("Advance")) {
