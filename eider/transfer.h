@@ -144,6 +144,8 @@ private:
     Vector<complex_t> vecfB;
     void refineSide(const Face &t, const Side &s, Vector2 v_kp);
     void coarseSide(const Face &t, const Side &s, Vector2 v_kp);
+    std::unordered_map<Face,std::pair<Face,Vector2>> r_refine;
+    std::vector<std::array<std::tuple<Face,Face,Vector2>,2>> r_coarse;
 };
 
 class AggregateTransfer: public  AdaptiveTransfer {

@@ -190,58 +190,129 @@ TEST(transferTest,testSplitPreserveFace) {
     ASSERT_EQ(new_he.prevOrbitFace().twin().face().halfedge(),new_he.prevOrbitFace().twin());
 }
 
+bool selectFace(polyscope::SurfaceMesh* myMesh, std::size_t* index) {
+    myMesh->setSelectionMode(polyscope::MeshSelectionMode::FacesOnly);
+
+    // get the mouse location from ImGui
+    ImGuiIO &io = ImGui::GetIO();
+    if (io.MouseClicked[0]) {
+        // if clicked
+        glm::vec2 screenCoords{io.MousePos.x, io.MousePos.y};
+        polyscope::PickResult pickResult = polyscope::pickAtScreenCoords(screenCoords);
+
+        // check out pickResult.isHit, pickResult.structureName, pickResult.depth, etc
+
+        // get additional information if we clicked on a mesh
+        if (pickResult.isHit && pickResult.structure == myMesh) {
+            polyscope::SurfaceMeshPickResult meshPickResult =
+                myMesh->interpretPickResult(pickResult);
+
+            if (meshPickResult.elementType == polyscope::MeshElement::FACE) {
+                *index = meshPickResult.index;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::array<FaceData<Vector3>,2> face_tangent_basis(ManifoldSurfaceMesh& m, VertexData<Vector3>& p) {
+    VertexPositionGeometry g(m,p);
+    g.requireFaceTangentBasis();
+    FaceData<Vector3> e1(m),e2(m);
+    for (Face f: m.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
+    return {e1, e2};
+}
+
+std::vector<Face> selectedFaces(FaceData<int>& d) {
+    std::vector<Face> faces;
+    for (Face f: d.getMesh()->faces()) {
+        if (d[f]) faces.push_back(f);
+    }
+    return faces;
+}
+
 TEST(transfertTest,testL2FaceU) {
     std::filesystem::path fds(__FILE__);
     fds = fds.parent_path()/ "models" / "quad.stl";
     auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
-    ManifoldSurfaceMesh& m = *parent_m; VertexPositionGeometry& g = *parent_g;
-    g.requireHalfedgeVectorsInFace();
-    g.requireFaceTangentBasis();
+    AdaptiveTriangulation atri(*parent_m, *parent_g);
+    ManifoldSurfaceMesh& m = atri.mesh();
+    IntrinsicGeometryInterface& g = atri.geom();
 
-    Edge e;
-    for (Edge me: m.edges()) if(!me.isBoundary()) e= me;
+    Edge ce; for (Edge e: m.edges() ) if (!e.isBoundary()) ce = e;
+    atri.marked_corner.fill(false);
+    atri.marked_corner[ce.halfedge().prevOrbitFace().corner()] = true;
+    atri.marked_corner[ce.halfedge().twin().next().corner()] = true;
 
+    auto v_pos = intrinsic_position(atri.intrinsicTriangulation(),*parent_g);
+    auto tang_basis  = face_tangent_basis(m,v_pos);
     FaceData<Vector2> u(m);
-    CornerData<bool> corner(m, false);
-    for (Halfedge he: e.adjacentHalfedges()) {
-        u[he.face()] = g.halfedgeVectorsInFace[he];
-        corner[he.prevOrbitFace().corner()] = true;
-    }
-
-    Vertex vi = e.halfedge().tailVertex(), vj = e.halfedge().tipVertex();
-    AdaptiveFaceTransfer transfer(m, g, u, corner);
-
-    transfer.startRefine();
-    Quad q (e.halfedge(),g);
-    Halfedge he = m.splitEdgeTriangular(e);
-    g.refreshQuantities();
-    Diamond d ( he,g);
-    transfer.refineEdge(SplitData(q,d));
-    transfer.endRefine();
-
-    transfer.startCoarse();
-    m.collapseEdgeTriangular(he);
-    g.refreshQuantities();
-    for (Halfedge ohe: vi.outgoingHalfedges()){ if(ohe.tipVertex() == vj) he = ohe; }
-    transfer.coarseEdge(SplitData(Quad(he,g),d));
-    transfer.endCoarse();
-    HalfedgeData<double> frame_base(m,0);
     for (Face f: m.faces()) {
-        frame_base[f.halfedge()] =1;
+        Vector3 e1 = tang_basis[0][f], e2 = tang_basis[1][f];
+        Vector2 f1 = g.halfedgeVectorsInFace[f.halfedge()], f2 = f1.rotate90();
+        Vector3 f1w = f1.x* e1 + f1.y*e2, f2w = f2.x*e1 + f2.y*e2;
+        u[f] = Vector2(
+            dot(f1w,Vector3(1,0,0)),
+            dot(f2w,Vector3(1,0,0))
+        );
     }
 
-    auto u_new = transfer.transfer();
-
-    m.compress();
-    g.refreshQuantities();
+    g.requireHalfedgeVectorsInFace();
 
     polyscope::init();
-    polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", g.vertexPositions,m.getFaceVertexList(),polyscopePermutations(m));
-    FaceData<Vector3> e1(m),e2(m);
-    for (Face f: m.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
-    pm_A->addFaceTangentVectorQuantity("unrotated",u,e1,e2)->setEnabled(true);
-    pm_A->addFaceTangentVectorQuantity("rotated",u_new,e1,e2)->setEnabled(true);
-    pm_A->addHalfedgeScalarQuantity("frame",frame_base);
+
+    HalfedgeData<int> f_basis(m,0), marked_halfedges(m,0);
+    auto vis = [&]()->polyscope::SurfaceMesh* {
+        g.refreshQuantities();
+        m.compress();
+        v_pos = intrinsic_position(atri.intrinsicTriangulation(),*parent_g);
+        tang_basis  = face_tangent_basis(m,v_pos);
+        polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", v_pos,m.getFaceVertexList(),polyscopePermutations(m));
+        pm_A->addFaceTangentVectorQuantity("vector field",u,tang_basis[0],tang_basis[1])->setEnabled(true);
+
+        f_basis.fill(0);
+        for (Face f:m.faces()){f_basis[f.halfedge()] = 1;}
+        pm_A->addHalfedgeScalarQuantity("Base Halfedges",f_basis);
+
+        marked_halfedges.fill(0);
+        for (Halfedge he: m.halfedges()) if (atri.marked_corner[he.oppositeCorner()]) marked_halfedges[he] = 1;
+        pm_A->addHalfedgeScalarQuantity("Marked Halfedges",marked_halfedges);
+
+        return pm_A;
+    };
+
+    polyscope::SurfaceMesh* pm_A = vis();
+    FaceData<int> selected(m,0);
+    polyscope::state::userCallback = [&]() {
+        // get the mouse location from ImGui
+        std::size_t select_idx;
+        if (selectFace(pm_A,&select_idx)) {
+            int& i = selected[m.face(select_idx)];
+            i = (i+1) % 2;
+            pm_A->addFaceScalarQuantity("selected",selected,polyscope::DataType::CATEGORICAL)->setMapRange({0,1})->setEnabled(true);
+        }
+        if (ImGui::Button("Select all faces")) {
+            selected.fill(1);
+            pm_A = vis();
+        }
+        if (ImGui::Button("Refine selected faces")) {
+            AdaptiveFaceTransfer transfer(m,g,u,atri.marked_corner);
+            atri.refine(selectedFaces(selected),&transfer);
+            atri.coarse({},&transfer);
+            u = transfer.transfer();
+            selected.fill(0);
+            pm_A = vis();
+        }
+        if (ImGui::Button("Coarse selected faces")) {
+            AdaptiveFaceTransfer transfer(m,g,u,atri.marked_corner);
+            atri.refine({},&transfer);
+            atri.coarse(selectedFaces(selected),&transfer);
+            u = transfer.transfer();
+            selected.fill(0);
+            pm_A = vis();
+        }
+    };
 
     polyscope::show();
 }
