@@ -450,6 +450,8 @@ struct AdaptiveFluidVisualization {
             ImGui::Checkbox("Fix C", &fix_c);
             ImGui::Checkbox("Use interpolated h", &solver->use_interpolated_h);
             ImGui::InputDouble("Delta Time", &solver->dt);
+            if (ImGui::Button("Set h as interpolated h"))
+                solver->h_interpolated = solver->h;
 
             if (state.running || ImGui::Button("Advance")) {
                 wc_wrapper wc = solver->wc;
