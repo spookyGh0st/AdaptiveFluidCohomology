@@ -386,7 +386,7 @@ TEST(EvaluatorTest, Evaluate)
     auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
 
     Comparator cpm;
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
     AdaptiveFluidSolverData data_interp_ha= data_comp_h; data_interp_ha.interpolate_harmonic_basis = true; data_interp_ha.use_interpolated_harmonic_basis =true;
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
@@ -397,10 +397,10 @@ TEST(EvaluatorTest, Evaluate)
 
 
     cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(9); cpm.visualize(cf.f_screenshots);
-     cpm.runUntil(12); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(1.5); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3.0); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(4.5); cpm.visualize(cf.f_screenshots);
+     cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
 
     cpm.write(cf.fev);
     copyFolder(cf.fev,cf.flatest);
@@ -442,12 +442,14 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
     Comparator cpm;
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
-        makeTaylorCase("low", "Low Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::VERY_LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false)),
-        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM,0.01,true,true,MARKING_STRATEGY::PATTERN,false)),
+        makeTaylorCase("low", "Low Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false)),
+        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false)),
     };
 
     init_ps(cpm);
     cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(1);
+    cpm.runUntil(2);
     cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
     cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
 
@@ -542,7 +544,7 @@ TEST(EvaluatorTest,evaluateBadTriangulation) {
     CaseFolder cf ("tc7");
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
     std::tie(mesh,geom) = uniform_refine(*mesh,*geom,1,MARKING_STRATEGY::RANDOM);
-    AdaptiveFluidSolverData staticD(DOPRI5PresetConf::LOW,DoerflerPresetConf::UNIFORM_REFINE,0.01,false,false,MARKING_STRATEGY::RANDOM,false);
+    AdaptiveFluidSolverData staticD(DOPRI5PresetConf::LOW,DoerflerPresetConf::UNIFORM_REFINE,0.001,false,false,MARKING_STRATEGY::RANDOM,false);
     AdaptiveFluidSolverData adaptDC = staticD;
     adaptDC.strategy = MARKING_STRATEGY::LONGEST_EDGE; adaptDC.adaptive_space =true; adaptDC.adaptive_time=true; adaptDC.doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
     AdaptiveFluidSolverData adaptDI = adaptDC;
@@ -550,7 +552,7 @@ TEST(EvaluatorTest,evaluateBadTriangulation) {
 
     Comparator cpm;
     cpm.testcases = {
-        makeTaylorCase("Original","Original (Yin et al., 2023)", *mesh, *geom, staticD),
+        makeTaylorCase("OR","Original (Yin et al., 2023)", *mesh, *geom, staticD),
         makeTaylorCase("ASAT", "Adaptive, recomputed h", *mesh, *geom, adaptDC),
         makeTaylorCase("ASATIH", "Adaptive, interpolated h", *mesh, *geom, adaptDI),
 
@@ -564,10 +566,10 @@ TEST(EvaluatorTest,evaluateBadTriangulation) {
 
     init_ps(cpm);
     cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(1.5); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(4.5); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(1./4* 3); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(2./4 * 3); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3./4 * 3); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(4./4 * 3); cpm.visualize(cf.f_screenshots);
 
     cpm.write(cf.fev);
     copyFolder(cf.fev,cf.flatest);
@@ -756,7 +758,7 @@ TEST(EvaluatorTest,evaluateBoundedTorus) {
     polyscope::show();
 }
 
-TEST(EvaluatorTest, Clean)
+TEST(CleanEvaluatorTest, Clean)
 {
     fs::path folder = results_folder();
     if (!fs::exists(folder) || !fs::is_directory(folder)) {
