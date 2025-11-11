@@ -11,8 +11,11 @@ std::vector<Singular_Circle> singular_homology_basis(ManifoldSurfaceMesh &mesh, 
 EdgeData<double> delta_form(ManifoldSurfaceMesh &mesh, const Singular_Circle &co_loop);
 EdgeData<double> delta_form(ManifoldSurfaceMesh &mesh, const std::vector<Halfedge> &co_loop);
 
+
+SparseMatrix<double> hodgeStar1Galerkin3Point(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<std::size_t> index);
+
 struct PressureProjectionSolver {
-    void compute(IntrinsicGeometryInterface &geom);
+    void compute(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface &geom);
     EdgeData<double> solve(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop) const;
     Eigen::SparseMatrix<double> A, AT;
     // Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> solver {};

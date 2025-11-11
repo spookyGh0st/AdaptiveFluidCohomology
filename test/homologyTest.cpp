@@ -124,7 +124,7 @@ TEST(homologyTest, TestDeRhamCohom)
     FaceData<Vector3> e1(*m),e2(*m);
     for (Face f: m->faces()) { e1[f] = g->faceTangentBasis[f][0], e2[f] = g->faceTangentBasis[f][1]; }
     PressureProjectionSolver pp_solver {};
-    pp_solver.compute(*g);
+    pp_solver.compute(*m,*g);
 
     for (const auto& basis: h_basis) {
         EdgeData<int> b(*m, 0);
@@ -229,7 +229,7 @@ TEST(homologyTest, testProjection)
     fds = fds.parent_path()/ "models" /"torus_bounded_max.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     PressureProjectionSolver P {};
-    P.compute(*g);
+    P.compute(*m,*g);
     EdgeData<double> x(*m, Eigen::VectorXd::Random(m->nEdges()));
     EdgeData<double> px = P.solve(*m, x);
     Eigen::VectorXd dTx = (g->d0.transpose() * px.toVector());
@@ -288,24 +288,37 @@ void reportMatrix(std::string name, Eigen::MatrixXd A) {
 TEST(homologyTest, d0Test) {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus_min.stl";
+    fds = fds.parent_path()/ "models" /"band.stl";
     auto [mesh,geom] = readManifoldSurfaceMesh(fds.string());
     geom->required0();
     geom->requireDECOperators();
-    auto homotopy_b = greedy_homotopy_basis(*mesh,*geom,arbitrary_base_face(*mesh));
-    auto cycle = Singular_Circle(*mesh, homotopy_b[0]);
-    auto df = delta_form(*mesh,cycle);
 
+
+    // Eigen::MatrixXd A = hodgeStar1Galerkin3Point(*mesh,*geom,geom->edgeIndices).transpose() * geom->d0 * geom->hodge0Inverse.transpose();
     Eigen::MatrixXd A = geom->d0;
     Eigen::MatrixXd AT = A.transpose();
     auto m = A.rows(), n = A.cols();
     ASSERT_EQ(m,mesh->nEdges());
     ASSERT_EQ(n,mesh->nVertices());
 
+
+    std::cout <<std::fixed << std::setprecision(2);
+    std::cout << "*_0^{-1}\n" << geom->hodge0Inverse.toDense() << std::endl;
+    std::cout << "*_1\n" << hodgeStar1Galerkin3Point(*mesh,*geom,geom->edgeIndices).toDense() << std::endl;
+
+
     reportMatrix("I", Eigen::MatrixXd::Identity(m,m));
     reportMatrix("A", A);
+    std::cout << "d0\n" << geom->d0.toDense() << std::endl;
+    std::cout << "New d0\n" << A << std::endl;
     reportMatrix("A A^T", A * AT);
     reportMatrix("A^T A", AT * A);
+
+    auto homotopy_b = greedy_homotopy_basis(*mesh,*geom,arbitrary_base_face(*mesh));
+    auto cycle = Singular_Circle(*mesh, homotopy_b[0]);
+    auto df = delta_form(*mesh,cycle);
+
+    EXPECT_EIGEN_NEAR(geom->d1 * df.toVector(), Eigen::VectorXd::Zero(mesh->nFaces()),0.00001);
 
     Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
     const Eigen::VectorXd& S = svd.singularValues();
@@ -340,9 +353,9 @@ TEST(homologyTest, d0Test) {
     Eigen::VectorXd h = b - A * x_ls;
     Eigen::VectorXd h_hat = b - b_hat;
 
-    EXPECT_EIGEN_NEAR(AT *h_hat, Eigen::VectorXd::Zero(n),0.00001);
     EXPECT_EIGEN_NEAR(AT *h, Eigen::VectorXd::Zero(n),0.00001);
+    EXPECT_EIGEN_NEAR(AT *h_hat, Eigen::VectorXd::Zero(n),0.00001);
 
-    EXPECT_EIGEN_NEAR(geom->d1 *h_hat, Eigen::VectorXd::Zero(mesh->nFaces()),0.00001);
     EXPECT_EIGEN_NEAR(geom->d1 * h, Eigen::VectorXd::Zero(mesh->nFaces()),0.00001);
+    EXPECT_EIGEN_NEAR(geom->d1 *h_hat, Eigen::VectorXd::Zero(mesh->nFaces()),0.00001);
 }
