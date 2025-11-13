@@ -508,6 +508,32 @@ TEST(EvaluatorTest, EvaluateAdapt)
     cpm.visualize();
     polyscope::show();
 }
+TEST(EvaluatorTest, EvaluatePerformance1)
+{
+    CaseFolder cf("tc8");
+
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
+
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
+    solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
+    while (solver.elapsed_time < 1) {
+        solver.step();
+    }
+}
+TEST(EvaluatorTest, EvaluatePerformance2)
+{
+    CaseFolder cf("tc8");
+
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
+
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,true,true);
+    AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
+    solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
+    while (solver.elapsed_time < 1) {
+        solver.step();
+    }
+}
 
 TEST(EvaluatorTest,evaluateInitialMarkings) {
     CaseFolder cf ("tc4");
