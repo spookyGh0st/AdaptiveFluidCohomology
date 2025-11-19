@@ -534,6 +534,21 @@ TEST(EvaluatorTest, EvaluatePerformance2)
         solver.step();
     }
 }
+TEST(VideoTest,TorusAnimation) {
+    CaseFolder cf("tc9");
+    auto [mesh,geom,param] = readParameterizedManifoldSurfaceMesh(cf.fmodels /"torus.obj");
+    VertexData<Vector2> uv; for (Vertex v: mesh->vertices()) { uv[v] = (*param)[v.corner()]; }
+
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
+    solver.wc.w = TaylorInitializer().wc(*mesh,uv).w;
+
+    polyscope::init();
+    while (solver.elapsed_time < 1) {
+        solver.step();
+    }
+
+}
 
 TEST(EvaluatorTest,evaluateInitialMarkings) {
     CaseFolder cf ("tc4");
@@ -783,6 +798,7 @@ TEST(EvaluatorTest,evaluateBoundedTorus) {
     cpm.visualize();
     polyscope::show();
 }
+
 
 TEST(CleanEvaluatorTest, Clean)
 {
