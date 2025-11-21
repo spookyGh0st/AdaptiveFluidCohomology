@@ -153,7 +153,7 @@ class TaylorVorticesCase : public TestCase{
         auto errorsqr = poisson_residual_error_sqr(mesh,geom,solver->wc.w,u.stream_function);
         double prsq = 0;
         for (Face f: mesh.faces()) prsq += std::sqrt(errorsqr[f]);
-        EvData data(mesh,geom,u, rhs,solver->wc,solver->h,dp5s,face_dc,time_per_sim_sec,prsq,solver->h_interpolated);
+        EvData data(mesh,geom,u, rhs,solver->wc,solver->h,dp5s,face_dc,time_per_sim_sec,prsq,solver->h_interpolated,intrinsic_geom(solver->tri.intrinsicTriangulation(),*this->geom));
         return data;
     }
 
@@ -401,6 +401,33 @@ TEST(EvaluatorTest, Evaluate)
     cpm.runUntil(3.0); cpm.visualize(cf.f_screenshots);
     cpm.runUntil(4.5); cpm.visualize(cf.f_screenshots);
      cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+
+    cpm.write(cf.fev);
+    copyFolder(cf.fev,cf.flatest);
+    cpm.visualize();
+    polyscope::show();
+}
+
+TEST(EvaluatorTest, EvaluateLongTerm)
+{
+    CaseFolder cf("tc8");
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
+
+    Comparator cpm;
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolverData data_interp_ha= data_comp_h; data_interp_ha.interpolate_harmonic_basis = true; data_interp_ha.use_interpolated_harmonic_basis =true;
+    auto tc1 = makeTaylorCase("AR", "Adaptive, recomputed h (AR)", *mesh, *geom, data_comp_h);
+    auto tc2 = makeTaylorCase("AI", "Adaptive, interpolated h (AI)", *mesh, *geom, data_interp_ha);
+    ExportProperty p = EXPORT_int_w | EXPORT_C| EXPORT_velocity | EXPORT_Vort_Y;
+    tc1->eval_t.y.clear(); registerProperties(tc1->eval_t,p,tc1->solver->h.size());
+    tc2->eval_t.y.clear(); registerProperties(tc2->eval_t,p,tc2->solver->h.size());
+    cpm.testcases = { taylorVortices_OR(*mesh, *geom), tc1,tc2  }; // TODO: Uniform Refine Original
+    init_ps(cpm);
+
+    cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(10); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(20); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(30); cpm.visualize(cf.f_screenshots);
 
     cpm.write(cf.fev);
     copyFolder(cf.fev,cf.flatest);

@@ -29,6 +29,7 @@ struct EvData {
     double time_per_sim_sec;
     double poison_residual_error;
     Harmonic_basis h_interpol;
+    VertexData<geometrycentral::Vector3> vertexPosition;
 };
 
 struct EvVector {
@@ -94,7 +95,8 @@ enum ExportProperty {
     EXPORT_dCdW      = 1 << 9,
     EXPORT_nF        = 1 << 10,
     EXPORT_nV        = 1 << 11,
-    EXPORT_DHC_HI    = 1 << 12
+    EXPORT_DHC_HI    = 1 << 12,
+    EXPORT_Vort_Y    = 1 << 13
 };
 
 inline ExportProperty operator|(ExportProperty lhs, ExportProperty rhs) {

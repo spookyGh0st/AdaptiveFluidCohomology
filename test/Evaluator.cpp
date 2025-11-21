@@ -82,6 +82,12 @@ void registerProperties(Evaluator &ev, ExportProperty p, int h_size) {
     if (p & EXPORT_RESIDUAL)
         ev.reg(R"($\eta_R$)", [](EvData d) { return d.poison_residual_error; });
 
+    if (p & EXPORT_int_w)
+        ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w, d.geom); });
+
+    if (p & EXPORT_int_dwdt)
+        ev.reg(R"($\int_M \frac{d}{dt} w$)", [](EvData d) { return integral(d.rhs.w, d.geom); });
+
     if (p & EXPORT_C) {
         for (int i = 0; i < h_size; ++i)
             ev.reg("$c_IDX(" + std::to_string(i) + ")$",
@@ -93,12 +99,6 @@ void registerProperties(Evaluator &ev, ExportProperty p, int h_size) {
             ev.reg(R"($\frac{d}{dt} c_IDX()" + std::to_string(i) + ")$",
                    [i](EvData d) { return d.rhs.c[i]; });
     }
-
-    if (p & EXPORT_int_w)
-        ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w, d.geom); });
-
-    if (p & EXPORT_int_dwdt)
-        ev.reg(R"($\int_M \frac{d}{dt} w$)", [](EvData d) { return integral(d.rhs.w, d.geom); });
 
     if (p & EXPORT_ATTEMPTS)
         ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
@@ -120,6 +120,15 @@ void registerProperties(Evaluator &ev, ExportProperty p, int h_size) {
         for (int i = 0; i < h_size; ++i)
             ev.reg(R"($\| h_IDX()" + std::to_string(i) + R"() - \widehat{h}_IDX($)" + std::to_string(i) + R"()  \|_2)",
                    [i](EvData d) { return L2Norm(d.h[i] - d.h_interpol[i],d.geom); });
+    }
+
+    if (p & EXPORT_Vort_Y) {
+            ev.reg("vorticity center",
+                   [](EvData d) {
+                       Vertex high_v; double max = std::numeric_limits<double>::lowest();
+                       for (Vertex v: d.mesh.vertices()) { if (d.wc.w[v] > max) {high_v = v; max = d.wc.w[v];} }
+                       return d.vertexPosition[high_v].y;
+                   });
     }
 }
 
