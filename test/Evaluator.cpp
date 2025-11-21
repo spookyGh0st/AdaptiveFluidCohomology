@@ -76,22 +76,6 @@ void registerProperties(Evaluator &ev, ExportProperty p, int h_size) {
     if (p & EXPORT_DT)
         ev.reg("dt (s)", [](EvData d) { return d.dp5s.t_past; });
 
-    if (p & EXPORT_ATTEMPTS)
-        ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
-
-
-    if (p & EXPORT_velocity)
-        ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u, d.geom); });
-
-    if (p & EXPORT_int_psi)
-        ev.reg(R"($\int_M \psi$)", [](EvData d) { return integral(d.vel.stream_function, d.geom); });
-
-    if (p & EXPORT_int_w)
-        ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w, d.geom); });
-
-    if (p & EXPORT_int_dwdt)
-        ev.reg(R"($\int_M \frac{d}{dt} w$)", [](EvData d) { return integral(d.rhs.w, d.geom); });
-
     if (p & EXPORT_WTST)
         ev.reg("wall time per simulation time (s)", [](EvData d) { return d.time_per_sim_sec; });
 
@@ -109,6 +93,22 @@ void registerProperties(Evaluator &ev, ExportProperty p, int h_size) {
             ev.reg(R"($\frac{d}{dt} c_IDX()" + std::to_string(i) + ")$",
                    [i](EvData d) { return d.rhs.c[i]; });
     }
+
+    if (p & EXPORT_int_w)
+        ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w, d.geom); });
+
+    if (p & EXPORT_int_dwdt)
+        ev.reg(R"($\int_M \frac{d}{dt} w$)", [](EvData d) { return integral(d.rhs.w, d.geom); });
+
+    if (p & EXPORT_ATTEMPTS)
+        ev.reg("attempts", [](EvData d) { return d.dp5s.attempts; });
+
+    if (p & EXPORT_int_psi)
+        ev.reg(R"($\int_M \psi$)", [](EvData d) { return integral(d.vel.stream_function, d.geom); });
+
+    if (p & EXPORT_velocity)
+        ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u, d.geom); });
+
 
     if (p & EXPORT_nF)
         ev.reg(R"($\#F$)", [](EvData d) { return d.mesh.nFaces(); });
