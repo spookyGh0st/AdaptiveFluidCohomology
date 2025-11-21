@@ -390,8 +390,8 @@ TEST(EvaluatorTest, Evaluate)
     AdaptiveFluidSolverData data_interp_ha= data_comp_h; data_interp_ha.interpolate_harmonic_basis = true; data_interp_ha.use_interpolated_harmonic_basis =true;
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
-        makeTaylorCase("AR", "Adaptive, recomputed h", *mesh, *geom, data_comp_h),
-        makeTaylorCase("AI", "Adaptive, interpolated h", *mesh, *geom, data_interp_ha),
+        makeTaylorCase("AR", "Adaptive, recomputed h (AR)", *mesh, *geom, data_comp_h),
+        makeTaylorCase("AI", "Adaptive, interpolated h (AI)", *mesh, *geom, data_interp_ha),
     };
     init_ps(cpm);
 
