@@ -87,6 +87,7 @@ class TestCase {
     virtual void runUntil(double t) = 0;
     virtual void write(fs::path) = 0;
     virtual polyscope::SurfaceMesh* visualize(fs::path f_screenshots = fs::path()) = 0;
+    virtual ManifoldSurfaceMesh& getMesh() = 0;
 };
 
 using MeshP = std::unique_ptr<ManifoldSurfaceMesh>;
@@ -238,6 +239,8 @@ class TaylorVorticesCase : public TestCase{
         return pm;
     }
 
+    ManifoldSurfaceMesh& getMesh() override { return solver->tri.mesh(); }
+
     std::pair<std::string,std::pair<double,double>> colormap;
     void writeCM(fs::path p){
         std::ofstream ss(p);
@@ -321,6 +324,18 @@ class Comparator {
         step++;
     };
 
+    void csv_faces(fs::path filename){
+        std::ofstream file(filename);
+        if (!file.is_open()) { throw std::runtime_error("Cannot open file for writing: " + filename.string()); }
+
+        file << ",nfaces" << std::endl;
+
+        for (int i = 0; i < testcases.size(); ++i) {
+            file << testcases[i]->name << "," << testcases[i]->getMesh().nFaces() << std::endl;
+        }
+        file.close();
+    };
+
     void csv_total_times(fs::path filename){
         std::ofstream file(filename);
         if (!file.is_open()) { throw std::runtime_error("Cannot open file for writing: " + filename.string()); }
@@ -349,6 +364,7 @@ class Comparator {
             tc->write(f_data);
         }
         csv_total_times(f_data / "total_time.csv");
+        csv_faces(f_data / "nfaces.csv");
         csv_comparator(p / "config.csv");
     }
 };
@@ -384,7 +400,8 @@ TEST(EvaluatorTest, Evaluate)
     CaseFolder cf("tc1");
 
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
-    auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
+    auto [meshO, geomO] = uniform_refine(*mesh,*geom,4);
+    // auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
 
     Comparator cpm;
     AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
@@ -415,7 +432,7 @@ TEST(EvaluatorTest, EvaluateLongTerm)
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
 
     Comparator cpm;
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,0.01,false,true,MARKING_STRATEGY::PATTERN,false,false);
     AdaptiveFluidSolverData data_interp_ha= data_comp_h; data_interp_ha.interpolate_harmonic_basis = true; data_interp_ha.use_interpolated_harmonic_basis =true;
     auto tc1 = makeTaylorCase("AR", "Adaptive, recomputed h (AR)", *mesh, *geom, data_comp_h);
     auto tc2 = makeTaylorCase("AI", "Adaptive, interpolated h (AI)", *mesh, *geom, data_interp_ha);
@@ -427,8 +444,6 @@ TEST(EvaluatorTest, EvaluateLongTerm)
 
     cpm.visualize(cf.f_screenshots);
     cpm.runUntil(10); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(20); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(30); cpm.visualize(cf.f_screenshots);
 
     cpm.write(cf.fev);
     copyFolder(cf.fev,cf.flatest);
@@ -466,7 +481,7 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
 {
     CaseFolder cf ("tc2");
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
-    auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
+    auto [meshO, geomO] = uniform_refine(*mesh,*geom,4);
     Comparator cpm;
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
@@ -510,7 +525,7 @@ TEST(EvaluatorTest, EvaluateAdapt)
     cpm.visualize(cf.f_screenshots);
     cmp2.visualize(cf.f_screenshots);
 
-    auto n = 30000; int i =0;
+    auto n = 35000; int i =0;
     while (tc2->solver->tri.mesh().nFaces() < n) {
         std::cout << " - Refining step " << i <<  "faces: " << tc2->solver->tri.mesh().nFaces() << std::endl;
         tc2->solver->adapt();
@@ -524,8 +539,10 @@ TEST(EvaluatorTest, EvaluateAdapt)
             tc3->solver->adapt();
             ev3.onStep(tc3->evData(1), tc3->solver->tri.mesh().nFaces());
         }
-        cpm.visualize(cf.f_screenshots);
-        cmp2.visualize(cf2.f_screenshots);
+        if(i%2 == 0){
+            cpm.visualize(cf.f_screenshots);
+            cmp2.visualize(cf2.f_screenshots);
+        }
         i++;
     }
     cpm.write(cf.fev);
@@ -600,12 +617,14 @@ TEST(EvaluatorTest,evaluateInitialMarkings) {
     while (tc2->solver->tri.mesh().nFaces()< n) {
         tc2->solver->adapt();
     }
+    tc1->solver->wc.w = TaylorInitializer().wc(tc1->solver->tri.intrinsicTriangulation(),*geom).w;
+    tc2->solver->wc.w = TaylorInitializer().wc(tc2->solver->tri.intrinsicTriangulation(),*geom).w;
 
 
     init_ps(cpm);
     cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(2); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(4); cpm.visualize(cf.f_screenshots);
 
     cpm.write(cf.fev);
     copyFolder(cf.fev,cf.flatest);
@@ -618,9 +637,10 @@ TEST(EvaluatorTest,evaluateBadTriangulation) {
     CaseFolder cf ("tc7");
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
     std::tie(mesh,geom) = uniform_refine(*mesh,*geom,1,MARKING_STRATEGY::RANDOM);
+    auto [meshO,geomO] = uniform_refine(*mesh,*geom,2,MARKING_STRATEGY::RANDOM);
     AdaptiveFluidSolverData staticD(DOPRI5PresetConf::LOW,DoerflerPresetConf::UNIFORM_REFINE,0.001,false,false,MARKING_STRATEGY::RANDOM,false);
     AdaptiveFluidSolverData adaptDC = staticD;
-    adaptDC.strategy = MARKING_STRATEGY::LONGEST_EDGE; adaptDC.adaptive_space =true; adaptDC.adaptive_time=true; adaptDC.doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
+    adaptDC.dt = 0.02; adaptDC.strategy = MARKING_STRATEGY::LONGEST_EDGE; adaptDC.adaptive_space =true; adaptDC.adaptive_time=true; adaptDC.doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
     AdaptiveFluidSolverData adaptDI = adaptDC;
     adaptDI.interpolate_harmonic_basis =true; adaptDI.use_interpolated_harmonic_basis = true;
 
@@ -772,6 +792,8 @@ class ClosedLambCase : public TestCase{
         }
         return pm;
     }
+
+    ManifoldSurfaceMesh& getMesh() override { return solver->tri.mesh(); }
 
     std::pair<std::string,std::pair<double,double>> colormap;
     void writeCM(fs::path p){
