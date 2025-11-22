@@ -131,15 +131,15 @@ class TaylorVorticesCase : public TestCase{
     }
     void registerStep(Evaluator& ev,int h_size){
         ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u,d.geom); });
-        ev.reg(R"($\int_M \psi$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
-        ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w,d.geom); });
+        // ev.reg(R"($\int_M \psi$)", [](EvData d) { return integral(d.vel.stream_function,d.geom); });
+        // ev.reg(R"($\int_M w$)", [](EvData d) { return integral(d.wc.w,d.geom); });
         ev.reg(R"($\int_M \frac{d}{dt} w$)", [](EvData d) { return integral(d.rhs.w,d.geom); });
         // ev.reg(R"($\#F$)", [](EvData d) { return d.mesh.nFaces(); });
         ev.reg(R"($\eta_R$)", [](EvData d) { return d.poison_residual_error; });
         for (int i = 0; i < h_size; ++i) {
-            ev.reg("$c_IDX("+std::to_string(i) +")$", [i](EvData d) {
-              return d.wc.c[i];
-            });
+            // # ev.reg("$c_IDX("+std::to_string(i) +")$", [i](EvData d) {
+            // #   return d.wc.c[i];
+            // # });
             ev.reg(R"($\frac{d}{dt} c_IDX()"+std::to_string(i) +")$", [i](EvData d) { return d.rhs.c[i]; });
         }
     }
@@ -152,7 +152,8 @@ class TaylorVorticesCase : public TestCase{
         auto u = solver->velocity();
         auto errorsqr = poisson_residual_error_sqr(mesh,geom,solver->wc.w,u.stream_function);
         double prsq = 0;
-        for (Face f: mesh.faces()) prsq += std::sqrt(errorsqr[f]);
+        for (Face f: mesh.faces()) prsq += errorsqr[f];
+        prsq = std::sqrt(prsq);
         EvData data(mesh,geom,u, rhs,solver->wc,solver->h,dp5s,face_dc,time_per_sim_sec,prsq,solver->h_interpolated,intrinsic_geom(solver->tri.intrinsicTriangulation(),*this->geom));
         return data;
     }
@@ -487,51 +488,56 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
 }
 TEST(EvaluatorTest, EvaluateAdapt)
 {
-    CaseFolder cf ("tc3");
+    CaseFolder cf ("tc3.1");
+    CaseFolder cf2 ("tc3.2");
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
-    Comparator cpm;
-    cpm.testcases = {
-        makeTaylorCase("adaptive", "Adaptive Refinement", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::VERY_HIGH,0.01,false,false)),
-        makeTaylorCase("uniform", "Uniform Refinement", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::UNIFORM_REFINE,0.01,false,false)),
-    };
-    auto* tc1 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
-    auto* tc2 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[1].get());
-    init_ps(cpm);
+    Comparator cpm, cmp2;
+    auto tc1 = makeTaylorCase("AR", "Adaptive Refinement (recomputed harmonic forms)", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::VERY_HIGH,0.01,false,false,MARKING_STRATEGY::PATTERN,false,false));
+    auto tc2 = makeTaylorCase("UN", "Uniform Refinement", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::UNIFORM_REFINE,0.01,false,false));
+    auto tc3 = makeTaylorCase("AI", "Adaptive Refinement (interpolated harmonic forms)", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::VERY_HIGH,0.01,false,false,MARKING_STRATEGY::PATTERN,true,true));
+    cpm.testcases = { tc2, tc1 }; cmp2.testcases = {tc2,tc3 };
+    init_ps(cpm); init_ps(cmp2);
 
-
-    Evaluator ev1, ev2;
+    Evaluator ev1, ev2, ev3;
     tc1->registerStep(ev1,tc1->solver->h.size());
     tc2->registerStep(ev2,tc2->solver->h.size());
+    tc3->registerStep(ev3,tc3->solver->h.size());
 
     // Step 0
     ev1.onStep(tc1->evData(1),tc1->solver->tri.mesh().nFaces());
     ev2.onStep(tc2->evData(1),tc2->solver->tri.mesh().nFaces());
-    cpm.visualize(cf.f_screenshots); std::cout << " - vis" << std::endl;
+    ev3.onStep(tc3->evData(1),tc3->solver->tri.mesh().nFaces());
+    cpm.visualize(cf.f_screenshots);
+    cmp2.visualize(cf.f_screenshots);
 
-    auto n = 32768; int i =0;
-    std::cout << "adaptive" << std::endl;
-    std::vector<int> indices;
-    for (int j = 1; j < 5; j++) {
-        int idx = round((double)(j * (33 - 1)) / (5 - 1));
-        indices.push_back(idx);
-    }
-    while (tc1->solver->tri.mesh().nFaces() <n){
-        // TODO: plot against #faces
-        std::cout << " - Refining step " << i <<  "faces: " << tc1->solver->tri.mesh().nFaces() << std::endl;
-        tc1->solver->adapt();
-        ev1.onStep(tc1->evData(1),tc1->solver->tri.mesh().nFaces());
-        bool vis = std::find(indices.begin(), indices.end(), i) != indices.end();
-        if(vis) {
-            tc2->solver->adapt();
-            ev2.onStep(tc2->evData(1),tc2->solver->tri.mesh().nFaces());
-            cpm.visualize(cf.f_screenshots); std::cout << " - vis" << std::endl;
-        };
+    auto n = 30000; int i =0;
+    while (tc2->solver->tri.mesh().nFaces() < n) {
+        std::cout << " - Refining step " << i <<  "faces: " << tc2->solver->tri.mesh().nFaces() << std::endl;
+        tc2->solver->adapt();
+        ev2.onStep(tc2->evData(1), tc2->solver->tri.mesh().nFaces());
+
+        while (tc1->solver->tri.mesh().nFaces() < tc2->solver->tri.mesh().nFaces()) {
+            tc1->solver->adapt();
+            ev1.onStep(tc1->evData(1), tc1->solver->tri.mesh().nFaces());
+        }
+        while (tc3->solver->tri.mesh().nFaces() < tc2->solver->tri.mesh().nFaces()) {
+            tc3->solver->adapt();
+            ev3.onStep(tc3->evData(1), tc3->solver->tri.mesh().nFaces());
+        }
+        cpm.visualize(cf.f_screenshots);
+        cmp2.visualize(cf2.f_screenshots);
         i++;
     }
     cpm.write(cf.fev);
-    ev1.saveCSV_T(cf.fev/"data"/(tc1->name+"-measurements.csv"));
     ev2.saveCSV_T(cf.fev/"data"/(tc2->name+"-measurements.csv"));
+    ev1.saveCSV_T(cf.fev/"data"/(tc1->name+"-measurements.csv"));
     copyFolder(cf.fev,cf.flatest);
+
+    cmp2.write(cf2.fev);
+    ev2.saveCSV_T(cf2.fev/"data"/(tc2->name+"-measurements.csv"));
+    ev3.saveCSV_T(cf2.fev/"data"/(tc3->name+"-measurements.csv"));
+    copyFolder(cf2.fev,cf2.flatest);
+
     cpm.visualize();
     polyscope::show();
 }
