@@ -486,7 +486,7 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
         makeTaylorCase("low", "Low Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false)),
-        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false)),
+        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::MEDIUM,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false)),
     };
 
     init_ps(cpm);
