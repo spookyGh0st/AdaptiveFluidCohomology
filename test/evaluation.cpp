@@ -584,19 +584,59 @@ TEST(EvaluatorTest, EvaluatePerformance2)
         solver.step();
     }
 }
+
+
+// x, y in [0, 1]
+double double_shear_layer(double x, double y) {
+    const double delta = 0.05; // Perturbation magnitude
+    const double rho   = 100.0; // Shear layer thickness/sharpness
+
+    auto sech2 = [](double z) { double t = 1.0 / std::cosh(z); return t * t; };
+
+    // Two opposing vorticity strips perturbed by a cosine wave
+    return delta * std::cos(2.0 * M_PI * x)
+           + rho * sech2(rho * (y - 0.25))
+           - rho * sech2(rho * (y - 0.75));
+}
+
 TEST(VideoTest,TorusAnimation) {
     CaseFolder cf("tc9");
     auto [mesh,geom,param] = readParameterizedManifoldSurfaceMesh(cf.fmodels /"torus.obj");
-    VertexData<Vector2> uv; for (Vertex v: mesh->vertices()) { uv[v] = (*param)[v.corner()]; }
+    VertexData<Vector2> uv(*mesh); for (Vertex v: mesh->vertices()) { uv[v] = (*param)[v.corner()]; }
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::HIGH,DoerflerPresetConf::LOW,0.001,true, true,MARKING_STRATEGY::LONGEST_EDGE,false,false);
+    data_comp_h.doerflerConf.threshold_refine = 5;
+    data_comp_h.doerflerConf.threshold_coarse = 1;
     AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
-    solver.wc.w = TaylorInitializer().wc(*mesh,uv).w;
+
+    for (int i = 0; i < 16; ++i) {
+        for (Vertex v: solver.tri.mesh().vertices()){
+            auto vec = solver.tri.intrinsicTriangulation().vertexLocations[v].interpolate(uv);
+            solver.wc.w[v] = double_shear_layer(vec.y,vec.x);
+        }
+        solver.adapt();
+    }
+
 
     polyscope::init();
-    while (solver.elapsed_time < 1) {
-        solver.step();
-    }
+
+    bool running = false;
+    polyscope::state::userCallback = [&]()
+    {
+        ImGui::Checkbox("run", &running);
+        if(running) {
+            solver.step();
+            solver.tri.mesh().compress();
+            solver.tri.geom().refreshQuantities();
+            auto *pm = polyscope::registerSurfaceMesh("mesh", intrinsic_geom(solver.tri.intrinsicTriangulation(), *geom), solver.tri.mesh().getFaceVertexList(), polyscopePermutations(solver.tri.mesh()));
+            pm->addVertexScalarQuantity("vorticity", solver.wc.w)->setEnabled(true);
+            auto u = solver.velocity();
+            auto errorsqr = poisson_residual_error_sqr(solver.tri.mesh(), solver.tri.geom(), solver.wc.w, u.stream_function);
+            pm->addFaceScalarQuantity("errorsqr", errorsqr);;
+        }
+
+    };
+    polyscope::show();
 
 }
 
