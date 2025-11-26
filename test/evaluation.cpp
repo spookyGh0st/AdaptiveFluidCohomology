@@ -262,7 +262,7 @@ void refineAndReset(TaylorVorticesCase& aCase, GeomP& geom) {
     //aCase.registerAll(aCase.eval_a, aCase.solver->h.size());
     for (int i = 0; i < 16; ++i) {
         aCase.solver->adapt();
-        // aCase.eval_a.onStep(aCase.evData(), 1);
+        aCase.solver->wc.w = TaylorInitializer().wc(aCase.solver->tri.intrinsicTriangulation(),*geom).w;
     }
     aCase.solver->wc.w = TaylorInitializer().wc(aCase.solver->tri.intrinsicTriangulation(), *geom).w;
 }
@@ -486,7 +486,7 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
     cpm.testcases = {
         taylorVortices_OR(*meshO, *geomO),
         makeTaylorCase("low", "Low Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false)),
-        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::MEDIUM,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false)),
+        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM,0.001,true,true,MARKING_STRATEGY::PATTERN,false,false)),
     };
 
     init_ps(cpm);

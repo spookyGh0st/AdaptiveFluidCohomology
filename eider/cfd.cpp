@@ -237,14 +237,14 @@ DOPRI5_conf DOPRI5Preset(DOPRI5PresetConf preset) {
     case DOPRI5PresetConf::HIGH:
         conf.Rtol_i = 1e-8;
         conf.Atol_i = 1e-11;
-        conf.facmin = 0.25;
+        conf.facmin = 0.2;
         conf.faxmax = 2.0;
         break;
     case DOPRI5PresetConf::VERY_HIGH:
         conf.Rtol_i = 1e-10;
         conf.Atol_i = 1e-13;
-        conf.facmin = 0.25;
-        conf.faxmax = 1.5;
+        conf.facmin = 0.2;
+        conf.faxmax = 2.0;
         break;
     }
     return conf;
