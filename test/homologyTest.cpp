@@ -63,19 +63,70 @@ void updateTriagulationViz(SurfaceMesh& mesh, VertexPositionGeometry& geometry, 
     psCurves->setEnabled(true);
 }
 
+Halfedge add_boundary_edge(Face x, EdgeData<EdgeType> &data) {
+    Halfedge h;
+    for (Halfedge he : x.adjacentHalfedges()) {
+        if (he.edge().isBoundary()) {
+            h = he;
+            break;
+        }
+    }
+    if (h == Halfedge())
+        return Halfedge();
+    data[h.edge()] = EdgeType::maximal_co_st;
+    return h;
+}
+
+// Compute for each edge e in G\T^*  the length of the shortest loop in T^* that contains e
+EdgeData<double> edge_coloop_lengths(ManifoldSurfaceMesh &mesh, FaceData<double> &dist, const EdgeData<EdgeType> &data) {
+    EdgeData<double> loop_length(mesh, NAN);
+    for (Edge e : mesh.edges()) {
+        if (data[e] == EdgeType::maximal_co_st)
+            continue;
+        double d = 0;
+        for (Halfedge he : e.adjacentHalfedges())
+            if (he.isInterior())
+                d += dist[he.face()];
+        loop_length[e] = d;
+    }
+    return loop_length;
+}
+
 TEST(homologyTest, TestHomotopyBasis)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"grid_hole.stl";
+    fds = fds.parent_path()/ "models" /"cylinder-min.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
-    EdgeData<EdgeType> edge_data(*m, EdgeType::bridge);
+    ManifoldSurfaceMesh& mesh = *m;
+    VertexPositionGeometry& geom = *g;
     g->requireDualEdgeLengths();
-    computePrimalEdgesOfDualMaxST(*m,edge_data, [&l = g->dualEdgeLengths] (Edge a, Edge b) {return l[a] < l[b]; });
-    computeMinimalSpanningTree(*m,edge_data,[&l = g->edgeLengths] (Edge a, Edge b) {return l[a] > l[b]; });
-    auto d_edges = distinctEdges(*m,edge_data);
+    Face x = arbitrary_base_face(*m);
 
-    Face x = m->face(0);
+    EdgeData<EdgeType> edge_data(mesh, EdgeType::bridge);
+    geom.requireEdgeLengths();
+    geom.requireDualEdgeLengths();
+    auto prev_dist = co_dijkstra(mesh, geom, edge_data, x, false);
+    for (Face f : mesh.faces()) {
+        if (f == x)
+            continue;
+        Edge e = prev_dist.first[f].edge();
+        assert(!e.isBoundary());
+        edge_data[e] = EdgeType::maximal_co_st;
+    }
+    Halfedge x_he = add_boundary_edge(x, edge_data);
+    if (mesh.hasBoundary() && x_he == Halfedge()) throw std::runtime_error("Called with non-boundary face for mesh with boundary");
+    auto coloop_lengths =
+        edge_coloop_lengths(mesh, prev_dist.second, edge_data);
+    computeMinimalSpanningTree( mesh, edge_data, [&l = coloop_lengths](Edge a, const Edge &b) { return l[a] > l[b]; });
+
+    auto dist_edges = distinctEdges(mesh, edge_data);
+    std::vector<std::vector<Halfedge>> co_loops;
+    for (Edge e : dist_edges) {
+        co_loops.push_back(homotopy_co_loop(prev_dist.first, x, e, x_he));
+    }
+    geom.unrequireDualEdgeLengths();
+
     auto dijkstra = co_dijkstra(*m, *g, edge_data, x, true);
     FaceData<int> prev(*m, 0); for (Face f: m->faces()) {
         Halfedge he = dijkstra.first[f];
@@ -88,13 +139,13 @@ TEST(homologyTest, TestHomotopyBasis)
     pm->addEdgeScalarQuantity("minimal - max_co - bridge",edge_data,polyscope::DataType::CATEGORICAL);
     pm->addEdgeScalarQuantity("edge_lenghts",g->edgeLengths);
     pm->addEdgeScalarQuantity("dual edge lengths",g->dualEdgeLengths);
+    pm->addEdgeScalarQuantity("coloop lengths",coloop_lengths);
     pm->addFaceScalarQuantity("dijkstra distances",dijkstra.second);
     pm->addFaceScalarQuantity("dijkstra prev",prev);
 
     updateTriagulationViz(*m, *g, edge_data);
-    auto h_basis = homotopy_basis(*m,*g,x);
     int basis_i = 0;
-    for (const auto& basis: h_basis) {
+    for (const auto& basis: co_loops) {
         EdgeData<int> b(*m, 0), b_reduced(*m,0);
         auto red_basis = reduce_co_loop(*m,basis);
         for (Halfedge e: basis) { b[e.edge()] = 1;}
