@@ -894,6 +894,55 @@ TEST(EvaluatorTest,evaluateBoundedTorus) {
     polyscope::show();
 }
 
+double discrete_energy(IntrinsicGeometryInterface& T, VertexData<double> U)
+{
+    T.requireCotanLaplacian();
+    // double d=0; for (Face f: T.mesh.faces()) d+=T.faceAreas[f]*grad(T,f,U).norm2();
+    // return d;
+    Eigen::VectorXd x = U.toVector();
+    double d = x.transpose() * (T.cotanLaplacian) * x;
+    T.unrequireCotanLaplacian();
+    return d;
+}
+
+double du_norm_sqr() { return 1.06422; }
+
+double abs_error(IntrinsicGeometryInterface& T, VertexData<double> U)
+{
+    return std::sqrt(du_norm_sqr() - discrete_energy(T,U));
+}
+double rel_error(IntrinsicGeometryInterface& T, VertexData<double> U)
+{
+    return std::sqrt(du_norm_sqr() - discrete_energy(T,U))/std::sqrt(du_norm_sqr());
+}
+
+TEST(EvaluatorTest,evaluateAdaptiveResidual) {
+    CaseFolder cf("tc11");
+    float theta = 0.2;
+    std::filesystem::path fds(__FILE__);
+    fds = fds.parent_path()/ "models" / "L_coarse.stl";
+    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
+
+    AdaptiveTriangulation uniform_a(*parent_m,*parent_g), adaptive_a(*parent_m,*parent_g);
+    ManifoldSurfaceMesh &uniform_m = uniform_a.mesh(), &adaptive_m = adaptive_a.mesh();
+    FaceData<double> res_u(uniform_m,0), res_a(adaptive_m,0);
+    struct Data { std::vector<double> abs_error, rel_error, residual, nTri; };
+    Data data_uniform, data_adaptive;
+    // auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"torus_bounded.obj");
+    VertexData<double> uniform_u, adaptive_u;
+    Evaluator uniform_ev {}; Evaluator adaptive_ev {};
+    Comparator cmp;
+    uniform_ev.reg("absolute error",[&](const EvData& d) { return abs_error(uniform_a.intrinsicTriangulation(),uniform_u);});
+    adaptive_ev.reg("absolute error",[&](const EvData& d) { return abs_error(adaptive_a.intrinsicTriangulation(),adaptive_u);});
+
+    polyscope::init();
+    polyscope::view::ensureViewValid();
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
+    polyscope::view::setWindowSize(1080,1080);
+    polyscope::options::ssaaFactor = 3;
+    polyscope::view::lookAt(glm::vec3{-3., 3., 2.}, glm::vec3{0., 0.5, 0.5});
+}
+
 
 TEST(CleanEvaluatorTest, Clean)
 {
