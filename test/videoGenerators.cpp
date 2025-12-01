@@ -35,7 +35,7 @@ void visualize_w(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom){
     auto& m = atri.mesh();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("mesh", vp,atri.mesh().getFaceVertexList(), polyscopePermutations(atri.mesh()));
     pm->setEdgeColor(glm::vec3(0,0,0));
-    pm->setEdgeWidth(0.3);
+    pm->setEdgeWidth(0.4);
     auto* vsq = pm->addVertexScalarQuantity("vorticity",solver.wc.w);
     vsq->setColorMap("coolwarm");
     vsq->setMapRange({-30,30});
