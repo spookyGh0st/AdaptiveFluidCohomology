@@ -161,7 +161,7 @@ TEST(homologyTest, TestDeRhamCohom)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"grid_hole.stl";
+    fds = fds.parent_path()/ "models" /"torus.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     Face x = m->face(0);
     auto h_basis = homotopy_basis(*m,*g,m->face(0));
@@ -201,7 +201,7 @@ TEST(homologyTest, TestWhitney)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus.obj";
+    fds = fds.parent_path()/ "models" /"torus.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     g->requireHalfedgeVectorsInFace();
     g->requireFaceTangentBasis();

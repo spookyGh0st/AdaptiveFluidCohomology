@@ -4,6 +4,34 @@
 namespace geometrycentral::surface {
 
 // Intrinsic geometry -> 2D UV coordinates scaled into [0,1)x[0,1)
+VertexData<Vector2> xy_plane(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& inputG) {
+    VertexData<Vector2> uv(mesh);
+    Vector2 min = Vector2::infinity();
+    Vector2 max = -Vector2::infinity();
+    for (Vertex v : mesh.vertices()) {
+        Vector3 p = inputG.vertexPositions[v];
+        uv[v] = Vector2(p.x, p.y);
+        min = componentwiseMin(uv[v],min);
+        max = componentwiseMax(uv[v],max);
+    }
+
+    Vector2 scale = max - min;
+    if (scale.x == 0)
+        scale.x = 1;
+    if (scale.y == 0)
+        scale.y = 1;
+
+    // Normalize into [-1,1)x[-1,1)
+    double mscale = std::max(scale.x,scale.y)/2;
+    for (Vertex v : mesh.vertices()) {
+        uv[v].x = (uv[v].x) / mscale;
+        uv[v].y = (uv[v].y) / mscale;
+    }
+
+    return uv;
+}
+
+// Intrinsic geometry -> 2D UV coordinates scaled into [0,1)x[0,1)
 VertexData<Vector2> xy_plane(IntrinsicTriangulation& Tri, VertexPositionGeometry& inputG) {
     auto &mesh = *Tri.intrinsicMesh;
     VertexData<Vector2> uv(mesh);
@@ -81,6 +109,9 @@ void TaylorInitializer::set_vortexPair(double new_v_dist, const Vector2 &center)
     box_max = {center.x + v_dist * 0.5, center.y + v_dist*0.25};
 
     offset = EigenVec2(v_dist/4.f,0) ;
+}
+wc_wrapper TaylorInitializer::wc(ManifoldSurfaceMesh &mesh, VertexPositionGeometry &pg) {
+    return init_taylor(mesh, xy_plane(mesh,pg), v_dist, offset, box_min, box_max);
 }
 
 }
