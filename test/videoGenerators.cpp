@@ -148,19 +148,27 @@ void createVideo(
 
     auto tmp = tmp_dir();
     int i = 0;
+    fs::path manifest_path= tmp / "manifest.txt";
+    std::ofstream manifest(manifest_path);
+
     std::cout  << "Running Simulation in " << tmp.string() << std::endl;
-    fs::path thumbnail;
+    fs::path thumbnail, last_frame;
+    double elapsed_time = 0;
     while(solver.elapsed_time < target_time){
         display_progress(solver.elapsed_time/target_time);
         std::stringstream  ss; ss << "vid" << std::setw(16) << std::setfill('0') << i << ".png";
 
         visualize(solver,geom);
-        polyscope::screenshot(tmp/ss.str());
+        last_frame = tmp/ss.str();
+        polyscope::screenshot(last_frame);
+        manifest << "file '" << last_frame.string() << "'\n"  << "duration " << solver.elapsed_time/speed - elapsed_time/speed << "\n";
 
-        if (i == 0) thumbnail = tmp/ss.str();
+        if (i == 0) thumbnail = last_frame;
 
-        step(solver); i++;
+        elapsed_time = solver.elapsed_time; step(solver); i++;
     }
+    manifest << "file '" << last_frame.string() << "'\n";
+    manifest.close();
 
 
     fs::path video_dir = (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()) / "tex" / "thesis"/"figures"/"videos";;
@@ -168,9 +176,14 @@ void createVideo(
     std::cout  << "Creating video " << tmp.string() << std::endl;
     std::stringstream  ss;
     ss << "cd \"" << tmp.string() << "\" &&";
-    ss << "ffmpeg -framerate " << 1./solver.dt
-       << " -i vid%16d.png -vf \"setpts=" << 1.0 / speed << "*PTS\""
-       << " -c:v libx264 -pix_fmt yuv420p -r 60 -y "
+    ss << "ffmpeg"
+       << " -f concat -safe 0"              // Use the concat demuxer
+       << " -i " << manifest_path.string()  // Input is the manifest file
+       << " -vsync vfr"                     // Ensure variable frame rate is respected
+       << " -c:v libx264"                   // Standard video codec
+       << " -pix_fmt yuv420p"               // Pixel format for wide compatibility
+       << " -r 60"                           // output with 60 fps
+       << " -y "                            // Overwrite output file if it exists
        << video_dir / (name + ".mp4");
     std::cout <<"Executing: '"<< ss.str() <<"'" <<  std::endl;
 
@@ -226,7 +239,7 @@ TEST(VideoTest,adaptiveFC){
     auto [mesh,geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
 
     AdaptiveFluidSolverData d;
-    d.adaptive_space = true; d.adaptive_time = false; d.dt = 0.01;
+    d.adaptive_space = true; d.adaptive_time = true; d.dt = 0.01;
     AdaptiveFluidSolver solver(*mesh,*geom,d);
     solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
     for (int i = 0; i < 8; ++i) {
@@ -252,14 +265,14 @@ double double_shear_layer(double x, double y) {
            - rho * sech2(rho * (y - 0.75));
 }
 
-TEST(VideoTest,staticShearOnTorus) {
+TEST(VideoTest,ShearOnTorusStatic) {
 
     auto [mesh,geom,param] = readParameterizedManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" /"torus.obj");
     VertexData<Vector2> uv(*mesh); for (Vertex v: mesh->vertices()) { uv[v] = (*param)[v.corner()]; }
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::HIGH,DoerflerPresetConf::LOW,0.001,false, false,MARKING_STRATEGY::LONGEST_EDGE,false,false);
-    data_comp_h.doerflerConf.threshold_refine = 2;
-    data_comp_h.doerflerConf.threshold_coarse = 0.5;
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::HIGH,DoerflerPresetConf::LOW,0.0001,false, false,MARKING_STRATEGY::LONGEST_EDGE,false,false);
+    data_comp_h.doerflerConf.threshold_refine = 1;
+    data_comp_h.doerflerConf.threshold_coarse = 0.2;
     AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
 
     for (int i = 0; i < 16; ++i) {
@@ -276,14 +289,14 @@ TEST(VideoTest,staticShearOnTorus) {
     init_polyscope_3d(solver,*geom);
     createVideo(solver,*geom,"shear_static",3,[](AdaptiveFluidSolver& s) {s.step();},visualize_w,0.2);
 }
-TEST(VideoTest,adaptiveShearOnTorus) {
+TEST(VideoTest,ShearOnTorusAdaptive) {
 
     auto [mesh,geom,param] = readParameterizedManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" /"torus.obj");
     VertexData<Vector2> uv(*mesh); for (Vertex v: mesh->vertices()) { uv[v] = (*param)[v.corner()]; }
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::HIGH,DoerflerPresetConf::LOW,0.001,false,true,MARKING_STRATEGY::LONGEST_EDGE,false,false);
-    data_comp_h.doerflerConf.threshold_refine = 2;
-    data_comp_h.doerflerConf.threshold_coarse = 0.5;
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.001,false,true,MARKING_STRATEGY::LONGEST_EDGE,false,false);
+    data_comp_h.doerflerConf.threshold_refine = 1;
+    data_comp_h.doerflerConf.threshold_coarse = 0.2;
     AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
 
     for (int i = 0; i < 16; ++i) {
@@ -323,7 +336,7 @@ TEST(VideoTest, EvaluationS) {
 TEST(VideoTest, EvaluationC) {
     auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, false, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
     AdaptiveFluidSolver solver_adapt_c(*mesh, *geom, data_comp_h);
 
     performAdaptiveRefinement(solver_adapt_c, *mesh, *geom, 8);
@@ -334,7 +347,7 @@ TEST(VideoTest, EvaluationC) {
 TEST(VideoTest, EvaluationI) {
     auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, false, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
     AdaptiveFluidSolverData data_interp_ha = data_comp_h;
     data_interp_ha.interpolate_harmonic_basis = true;
     data_interp_ha.use_interpolated_harmonic_basis = true;
@@ -350,13 +363,54 @@ TEST(VideoTest, EvaluationI) {
 TEST(VideoTest, EvaluationCH) {
     auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, false, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
     AdaptiveFluidSolver solver_adapt_c(*mesh, *geom, data_comp_h);
 
     performAdaptiveRefinement(solver_adapt_c, *mesh, *geom, 8);
 
     init_polyscope_2d_zoom(solver_adapt_c, *geom);
     createVideo(solver_adapt_c, *geom, "evaluation_c-h", 6, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0);
+}
+
+std::pair<MeshP, GeomP> irregular_geometry(){
+    auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
+    return uniform_refine(*mesh,*geom,2,MARKING_STRATEGY::RANDOM);
+}
+
+TEST(VideoTest, Irregular_S){
+    auto[mesh,geom] = irregular_geometry();
+    AdaptiveFluidSolverData staticD(DOPRI5PresetConf::LOW,DoerflerPresetConf::UNIFORM_REFINE,0.001,false,false,MARKING_STRATEGY::RANDOM,false);
+    AdaptiveFluidSolver solver(*mesh,*geom,staticD);
+    performAdaptiveRefinement(solver, *mesh, *geom, 0);
+    init_polyscope_2d(solver, *geom);
+    createVideo(solver, *geom, "cheese_irregular_s", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+}
+
+TEST(VideoTest, Irregular_C){
+    auto[mesh,geom] = irregular_geometry();
+    AdaptiveFluidSolverData data(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true, true,MARKING_STRATEGY::LONGEST_EDGE,false);
+    AdaptiveFluidSolver solver(*mesh,*geom,data);
+    performAdaptiveRefinement(solver, *mesh, *geom, 8);
+    init_polyscope_2d(solver, *geom);
+    createVideo(solver, *geom, "cheese_irregular-c", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+}
+
+TEST(VideoTest, Irregular_I){
+    auto[mesh,geom] = irregular_geometry();
+    AdaptiveFluidSolverData data(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true, true,MARKING_STRATEGY::LONGEST_EDGE,true, true);
+    AdaptiveFluidSolver solver(*mesh,*geom,data);
+    performAdaptiveRefinement(solver, *mesh, *geom, 8);
+    init_polyscope_2d(solver, *geom);
+    createVideo(solver, *geom, "cheese_irregular-i", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+}
+
+TEST(VideoTest, Irregular_CH) {
+    auto[mesh,geom] = irregular_geometry();
+    AdaptiveFluidSolverData data(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true, true,MARKING_STRATEGY::LONGEST_EDGE,false);
+    AdaptiveFluidSolver solver(*mesh,*geom,data);
+    performAdaptiveRefinement(solver, *mesh, *geom, 8);
+    init_polyscope_2d_zoom(solver, *geom);
+    createVideo(solver, *geom, "cheese_irregular-c-h", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0);
 }
 
 

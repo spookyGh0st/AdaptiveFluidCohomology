@@ -593,8 +593,7 @@ TEST(EvaluatorTest,evaluateInitialMarkings) {
 TEST(EvaluatorTest,evaluateBadTriangulation) {
     CaseFolder cf ("tc7");
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
-    std::tie(mesh,geom) = uniform_refine(*mesh,*geom,1,MARKING_STRATEGY::RANDOM);
-    auto [meshO,geomO] = uniform_refine(*mesh,*geom,2,MARKING_STRATEGY::RANDOM);
+    std::tie(mesh,geom) = uniform_refine(*mesh,*geom,2,MARKING_STRATEGY::RANDOM);
     AdaptiveFluidSolverData staticD(DOPRI5PresetConf::LOW,DoerflerPresetConf::UNIFORM_REFINE,0.001,false,false,MARKING_STRATEGY::RANDOM,false);
     AdaptiveFluidSolverData adaptDC = staticD;
     adaptDC.dt = 0.02; adaptDC.strategy = MARKING_STRATEGY::LONGEST_EDGE; adaptDC.adaptive_space =true; adaptDC.adaptive_time=true; adaptDC.doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
@@ -608,12 +607,6 @@ TEST(EvaluatorTest,evaluateBadTriangulation) {
         makeTaylorCase("ASATIH", "Adaptive, interpolated h", *mesh, *geom, adaptDI),
 
     };
-
-    auto* tc1 = dynamic_cast<TaylorVorticesCase*>(cpm.testcases[0].get());
-    int n = 9000;
-    while (tc1->solver->tri.mesh().nFaces()< n) {
-        tc1->solver->adapt();
-    }
 
     init_ps(cpm);
     cpm.visualize(cf.f_screenshots);
