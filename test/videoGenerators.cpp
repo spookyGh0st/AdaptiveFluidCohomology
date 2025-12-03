@@ -58,6 +58,30 @@ void display_progress(double v, int width = 50) {
     if (v == 1.0) std::printf("\n");
 }
 
+void init_polyscope_2d(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom) {
+    polyscope::init();
+    visualize_w(solver,geom);
+    polyscope::view::ensureViewValid();
+    polyscope::view::fov = 30;
+    polyscope::view::projectionMode = polyscope::ProjectionMode::Orthographic;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
+    polyscope::view::setWindowSize(1080,1080);
+    polyscope::options::ssaaFactor = 3;
+    // polyscope::view::lookAt(glm::vec3{-5., 5., 2.}, glm::vec3{0., 0, 0});
+}
+
+void init_polyscope_3d(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom) {
+    polyscope::init();
+    visualize_w(solver,geom);
+    polyscope::view::ensureViewValid();
+    polyscope::view::fov = 30;
+    polyscope::view::projectionMode = polyscope::ProjectionMode::Perspective;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
+    polyscope::view::setWindowSize(1080,1080);
+    polyscope::options::ssaaFactor = 3;
+    polyscope::view::lookAt(glm::vec3{-5., 5., 2.}, glm::vec3{0., 0, 0});
+}
+
 
 
 void createVideo(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom, const std::string& name, double target_time,std::function<void(AdaptiveFluidSolver&)> step){
@@ -126,7 +150,7 @@ TEST(VideoTest,fixedHarmonicCoefficients){
 }
 
 TEST(VideoTest,staticFC){
-    auto [mesh,geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_oriented.stl");
+    auto [mesh,geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
     polyscope::init();
 
     AdaptiveFluidSolverData d;
