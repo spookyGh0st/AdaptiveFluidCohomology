@@ -294,7 +294,7 @@ TEST(VideoTest,ShearOnTorusAdaptive) {
     auto [mesh,geom,param] = readParameterizedManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" /"torus.obj");
     VertexData<Vector2> uv(*mesh); for (Vertex v: mesh->vertices()) { uv[v] = (*param)[v.corner()]; }
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.001,false,true,MARKING_STRATEGY::LONGEST_EDGE,false,false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.001,true,true,MARKING_STRATEGY::LONGEST_EDGE,false,false);
     data_comp_h.doerflerConf.threshold_refine = 1;
     data_comp_h.doerflerConf.threshold_coarse = 0.2;
     AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
@@ -377,13 +377,14 @@ std::pair<MeshP, GeomP> irregular_geometry(){
     return uniform_refine(*mesh,*geom,2,MARKING_STRATEGY::RANDOM);
 }
 
+double irregular_speed = 0.5;
 TEST(VideoTest, Irregular_S){
     auto[mesh,geom] = irregular_geometry();
     AdaptiveFluidSolverData staticD(DOPRI5PresetConf::LOW,DoerflerPresetConf::UNIFORM_REFINE,0.001,false,false,MARKING_STRATEGY::RANDOM,false);
     AdaptiveFluidSolver solver(*mesh,*geom,staticD);
     performAdaptiveRefinement(solver, *mesh, *geom, 0);
     init_polyscope_2d(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular_s", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+    createVideo(solver, *geom, "cheese_irregular-s", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
 }
 
 TEST(VideoTest, Irregular_C){
@@ -392,7 +393,7 @@ TEST(VideoTest, Irregular_C){
     AdaptiveFluidSolver solver(*mesh,*geom,data);
     performAdaptiveRefinement(solver, *mesh, *geom, 8);
     init_polyscope_2d(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-c", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+    createVideo(solver, *geom, "cheese_irregular-c", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
 }
 
 TEST(VideoTest, Irregular_I){
@@ -401,7 +402,16 @@ TEST(VideoTest, Irregular_I){
     AdaptiveFluidSolver solver(*mesh,*geom,data);
     performAdaptiveRefinement(solver, *mesh, *geom, 8);
     init_polyscope_2d(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-i", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+    createVideo(solver, *geom, "cheese_irregular-i", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
+}
+
+TEST(VideoTest, Irregular_SH) {
+    auto[mesh,geom] = irregular_geometry();
+    AdaptiveFluidSolverData staticD(DOPRI5PresetConf::LOW,DoerflerPresetConf::UNIFORM_REFINE,0.001,false,false,MARKING_STRATEGY::RANDOM,false);
+    AdaptiveFluidSolver solver(*mesh,*geom,staticD);
+    performAdaptiveRefinement(solver, *mesh, *geom, 0);
+    init_polyscope_2d_zoom(solver, *geom);
+    createVideo(solver, *geom, "cheese_irregular-s-h", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0,irregular_speed);
 }
 
 TEST(VideoTest, Irregular_CH) {
@@ -410,7 +420,16 @@ TEST(VideoTest, Irregular_CH) {
     AdaptiveFluidSolver solver(*mesh,*geom,data);
     performAdaptiveRefinement(solver, *mesh, *geom, 8);
     init_polyscope_2d_zoom(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-c-h", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0);
+    createVideo(solver, *geom, "cheese_irregular-c-h", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0, irregular_speed);
+}
+
+TEST(VideoTest, Irregular_IH) {
+    auto[mesh,geom] = irregular_geometry();
+    AdaptiveFluidSolverData data(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true, true,MARKING_STRATEGY::LONGEST_EDGE,true, true);
+    AdaptiveFluidSolver solver(*mesh,*geom,data);
+    performAdaptiveRefinement(solver, *mesh, *geom, 8);
+    init_polyscope_2d_zoom(solver, *geom);
+    createVideo(solver, *geom, "cheese_irregular-i-h", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0, irregular_speed);
 }
 
 
