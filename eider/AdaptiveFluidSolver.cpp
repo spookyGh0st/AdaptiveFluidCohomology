@@ -1,5 +1,7 @@
 #include "AdaptiveFluidSolver.h"
 
+#include "util.h"
+
 namespace geometrycentral::surface {
 
 velocity_wrapper AdaptiveFluidSolver::velocity() {
@@ -7,10 +9,25 @@ velocity_wrapper AdaptiveFluidSolver::velocity() {
 }
 
 AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const AdaptiveFluidSolverData& data)
-    : tri(mesh,geom,data.strategy), hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()), S(tri.mesh(),tri.geom()),
-      conf(data.dopri5Conf), doerflerConf(data.doerflerConf), adapt_time(data.adaptive_time), adapte_space(data.adaptive_space), dt(data.dt),
-      wc(VertexData<double>(tri.mesh()),std::vector<double>(hom.homologyB.size(),0)) // empty wc
+    : tri(mesh, geom, data.strategy), hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()), S(tri.mesh(), tri.geom()),
+      conf(data.dopri5Conf), doerflerConf(data.doerflerConf), adapt_time(data.adaptive_time), adapte_space(data.adaptive_space),
+      interpolate_h(data.interpolate_harmonic_basis), dt(data.dt),
+      use_interpolated_h(data.use_interpolated_harmonic_basis),
+      wc(VertexData<double>(tri.mesh()), std::vector<double>(hom.homologyB.size(), 0)) // empty wc
 {
+    if (interpolate_h) {
+        h_interpolated.resize(h.size());
+        for (int i = 0; i < h.size(); ++i) {
+            h_interpolated[i] = h[i];
+            tri.intrinsicTriangulation().edgeSplitCallbackList.push_back([&,i](Edge e, Halfedge he1, Halfedge he2) {
+                Vector2 u = this->h_interpolated[i][he1.prevOrbitFace().twin().face()];
+                if (!u.isFinite()) u = Vector2(1,0);
+                for (Face f: he1.vertex().adjacentFaces()) {
+                    this->h_interpolated[i][f] = u;
+                }
+            });
+        }
+    }
     // On split, lerp w s.t. guess is closer to actual solution.
     tri.intrinsicTriangulation().edgeSplitCallbackList.push_back([&](Edge e, Halfedge he1, Halfedge he2) {
         this->wc.w[he1.vertex()] = 0.5 * this->wc.w[he1.tipVertex()] + 0.5 * this->wc.w[he2.tipVertex()];
@@ -20,11 +37,22 @@ AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeo
 void AdaptiveFluidSolver::adapt() {
     tri.mesh().compress();
 
-    AdaptiveTransfer transfer(tri.intrinsicTriangulation(), wc.w);
+    AdaptiveVertexTransfer vtransfer(tri.intrinsicTriangulation(), wc.w);
+
+    AggregateTransfer transfer = AggregateTransfer();
+    transfer.transfers.push_back(&vtransfer);
+    std::vector<AdaptiveFaceTransfer> htransfers;
+    htransfers.reserve(h.size());
+
+    if (interpolate_h) {
+        for (int i = 0; i < h.size(); ++i) {
+            htransfers.push_back(AdaptiveFaceTransfer(tri.mesh(), tri.geom(), h_interpolated[i], tri.marked_corner));
+            transfer.transfers.push_back(&htransfers[i]);
+        }
+    }
+
 
     VertexData<double> u(tri.mesh(), 0);
-    // TODO: duplicate, but im unsure about indices
-    S.compute(tri.mesh(), tri.geom());
     S.solve(tri.mesh(), tri.geom(), u, wc.w);
     FaceData<double> eta = poisson_residual_error_sqr(tri.mesh(), tri.geom(), u, wc.w);
     std::array<std::vector<Face>, 2> ref_coarse = select_doerfler(tri.mesh(), eta, doerflerConf);
@@ -33,14 +61,21 @@ void AdaptiveFluidSolver::adapt() {
     tri.coarse(ref_coarse[1], &transfer);
 
     // First, transfer the values to the new mesh, this requires noncompressed vertices!
-    wc.w = transfer.transfer();
+    tri.intrinsicTriangulation().refreshQuantities();
+    wc.w = vtransfer.transfer();
+
+    if (interpolate_h) {
+        for (int i = 0; i < h_interpolated.size(); ++i) {
+            h_interpolated[i] = htransfers[i].transfer();
+        }
+    }
 
     // next, compress the mesh and update required quantities
     tri.mesh().compress();
-    tri.intrinsicTriangulation().refreshQuantities();
-
     // on the new mesh, now recompute the rest of the mesh
-    h = hom.harmonicBasis();
+
+    if (use_interpolated_h) h = h_interpolated; else h = hom.harmonicBasis();
+
     S.compute(tri.mesh(), tri.geom());
 }
 
@@ -60,6 +95,6 @@ DOPRI5_sample AdaptiveFluidSolver::step() {
     return dps;
 }
 AdaptiveFluidSolverData AdaptiveFluidSolver::data() const {
-    return AdaptiveFluidSolverData(conf,doerflerConf,dt,adapt_time,adapte_space);
+    return AdaptiveFluidSolverData(conf,doerflerConf,dt,adapt_time,adapte_space,MARKING_STRATEGY::PATTERN,interpolate_h,use_interpolated_h);
 }
 }

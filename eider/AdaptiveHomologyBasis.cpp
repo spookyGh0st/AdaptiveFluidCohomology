@@ -214,7 +214,7 @@ AdaptiveHomologyBasis::AdaptiveHomologyBasis(IntrinsicTriangulation &icit) : mes
 
 Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() {
     pf_guess_L2 = pf_guess;
-    pp_solver.compute(geom);
+    pp_solver.compute(mesh,geom);
     std::vector<FaceData<Vector2>> h(homologyB.size());
     for (std::size_t i = 0; i < homologyB.size(); i++) {
         auto &basis = homologyB[i];
@@ -229,7 +229,7 @@ Harmonic_basis AdaptiveHomologyBasis::harmonicBasis() {
 }
 Harmonic_Data AdaptiveHomologyBasis::fullHarmonicBasis() {
     Harmonic_Data data(homologyB);
-    pp_solver.compute(geom);
+    pp_solver.compute(mesh, geom);
     for (std::size_t i = 0; i < homologyB.size(); i++) {
         auto &basis = homologyB[i];
         data.df[i] = delta_form(mesh, basis);

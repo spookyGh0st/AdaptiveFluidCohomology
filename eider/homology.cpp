@@ -1,5 +1,8 @@
 #include "homology.h"
 #include "homotopy.h"
+#include "util.h"
+#include "geometrycentral/surface/surface_point.h"
+
 #include <algorithm>
 #include <bitset>
 #include <numeric>
@@ -113,9 +116,77 @@ void project_local(Halfedge he, EdgeData<double>& delta_form) {
     }
 }
 
-void PressureProjectionSolver::compute(IntrinsicGeometryInterface &geom) {
+Vector2 Whitney1(IntrinsicGeometryInterface& geom, Halfedge ij, const SurfacePoint& p) {
+    HalfedgeData<Vector2>& halfedgeVectors = geom.halfedgeVectorsInFace;
+
+    Face f = p.face;
+    Halfedge he0 = f.halfedge();
+    Halfedge he1 = he0.next();
+    Halfedge he2 = he1.next();
+
+    Vector2 gradLambda[3];
+    gradLambda[0] = halfedgeVectors[he1].rotate90() / (2. * geom.faceAreas[f]); // gradient for vertex of he0
+    gradLambda[1] = halfedgeVectors[he2].rotate90() / (2. * geom.faceAreas[f]); // gradient for vertex of he1
+    gradLambda[2] = halfedgeVectors[he0].rotate90() / (2. * geom.faceAreas[f]); // gradient for vertex of he2
+
+    Vertex v_i = ij.tailVertex();
+    Vertex v_j = ij.tipVertex();
+
+    Vertex faceVertices[3] = {he0.vertex(), he1.vertex(), he2.vertex()};
+    int idx_i = -1, idx_j = -1;
+    for (int k = 0; k < 3; ++k) {
+        if (faceVertices[k] == v_i) idx_i = k;
+        if (faceVertices[k] == v_j) idx_j = k;
+    }
+    assert(idx_i != -1 && idx_j != -1);
+
+    const Vector3& baryCoords = p.faceCoords;
+    double lambda_i_at_p = baryCoords[idx_i];
+    double lambda_j_at_p = baryCoords[idx_j];
+    Vector2 grad_lambda_i = gradLambda[idx_i];
+    Vector2 grad_lambda_j = gradLambda[idx_j];
+    Vector2 result = lambda_i_at_p * grad_lambda_j - lambda_j_at_p * grad_lambda_i;
+    return result;
+}
+
+SparseMatrix<double> hodgeStar1Galerkin3Point(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, EdgeData<std::size_t> index) {
+    std::array<Vector3,3> Q({{2./3, 1./6, 1./6},{1./6, 2./3, 1./6},{1./6, 1./6, 2./3}});
+    std::array<double,3> weights({1./3, 1./3, 1./3});
+
+    geom.requireHalfedgeVectorsInFace();
+    std::vector<Eigen::Triplet<double>> triplets;
+    triplets.reserve(Q.size()*3*mesh.nFaces());
+
+    for (Face f: mesh.faces()) {
+        for (int q = 0; q < Q.size(); ++q) {
+            auto phi123 = Q[q]; SurfacePoint sp (f,phi123);
+            double w = weights[q];
+
+            std::array<Vector2,3> W_f {};
+            std::array<Edge,3> E_f {};
+            int i = 0;
+
+            for (Halfedge he: f.adjacentHalfedges()) { W_f[i] = Whitney1(geom,he,sp); E_f[i] = he.edge(); i++; }
+
+            for (int i = 0; i < 3; ++i) {
+                for (int j = 0; j < 3; ++j) {
+                    double v = w * geom.faceAreas[f] * dot(W_f[i],W_f[j]);
+                    triplets.emplace_back(index[E_f[i]],index[E_f[j]],v);
+                }
+            }
+
+        }
+    }
+    geom.unrequireHalfedgeVectorsInFace();
+    SparseMatrix<double> hstar(mesh.nEdges(),mesh.nEdges());
+    hstar.setFromTriplets(triplets.begin(),triplets.end()); // sums duplicate
+    return hstar;
+}
+
+void PressureProjectionSolver::compute(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface &geom) {
     geom.required0();
-    A = geom.d0;
+    // A =hodgeStar1Galerkin3Point(mesh,geom,geom.edgeIndices).transpose() *geom.d0 * geom.hodge0Inverse.transpose();
+    A =geom.d0;
     AT = A.transpose();
     solver.compute(AT * A);
     geom.unrequired0();
@@ -130,11 +201,11 @@ PressureProjectionSolver::solve(ManifoldSurfaceMesh &mesh,
 }
 
 void AdaptivePressureProjectionSolver::compute(IntrinsicGeometryInterface &geom) {
-    geom.required0();
-    A = geom.d0;
+    geom.requireDECOperators();
+    A = geom.hodge1.transpose() * geom.d0 * geom.hodge0Inverse.transpose();
     AT = A.transpose();
     solver.compute(AT * A);
-    geom.unrequired0();
+    geom.unrequireDECOperators();
 }
 
 EdgeData<double> AdaptivePressureProjectionSolver::solveWithGuess(ManifoldSurfaceMesh &mesh, const EdgeData<double> &co_loop, EdgeData<double> *guess) {
@@ -277,7 +348,7 @@ orthonormalize(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, cons
 std::vector<FaceData<Vector2>>
 orthonormal_hom_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const std::vector<Singular_Circle> &homology_b) {
     PressureProjectionSolver pp_solver{};
-    pp_solver.compute(geom);
+    pp_solver.compute(mesh,geom);
     std::vector<FaceData<Vector2>> h(homology_b.size());
     for (std::size_t i = 0; i < homology_b.size(); i++) {
         auto &basis = homology_b[i];

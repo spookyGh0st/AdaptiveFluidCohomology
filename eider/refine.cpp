@@ -83,7 +83,7 @@ AdaptiveTriangulation::AdaptiveTriangulation(ManifoldSurfaceMesh& mesh, Intrinsi
     :tri(mesh,geom), idx(*tri.intrinsicMesh), marked_corner(mark_faces(*tri.intrinsicMesh, tri,marking)) {
 }
 
-Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer* transfer) {
+Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer *transfer) {
     assert (he.isInterior());
     assert(marked_corner[he.oppositeCorner()]);
     if (he.twin().isInterior()) { assert(marked_corner[he.twin().oppositeCorner()]); }
@@ -91,10 +91,12 @@ Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer* 
     Halfedge twin_he = he.twin();
     Vertex vi = he.tailVertex(), vj = he.tipVertex();
 
+    Quad q(he,tri);
     he = tri.splitEdge(he, 0.5);
+    Diamond d(he,tri);
 
     // If transfer is supplied, update that
-    if(transfer) { transfer->refineEdge(vi,vj,he.tailVertex()); }
+    if(transfer) { transfer->refineEdge(SplitData(q,d)); }
 
     // ensure indices are kept in order
     assert(twin_he.tipVertex() == he.tailVertex());
@@ -118,7 +120,7 @@ Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer* 
     return he;
 }
 
-void AdaptiveTriangulation::refine(std::vector<Face> faces, AdaptiveTransfer* transfer) {
+void AdaptiveTriangulation::refine(std::vector<Face> faces, AdaptiveTransfer *transfer) {
     FaceData<bool> marked_faces (mesh(),false);
     std::unordered_set<Edge> start_edges;
 
@@ -192,7 +194,7 @@ Halfedge AdaptiveTriangulation::coarse_halfedge(Vertex v) {
     return he.twin().next();
 }
 
-Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveTransfer* transfer) {
+Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveTransfer *transfer) {
     // TODO: Assert left face has smaller idx then right face
     assert(he.isInterior());
     std::size_t l_idx = idx[he.prevOrbitFace().twin().face()];
@@ -207,12 +209,15 @@ Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveTransfer* tr
     Vertex vi = he.prevOrbitFace().twin().next().tipVertex();
     Vertex vj = he.tipVertex();
     Vertex vp = he.tailVertex();
+
+    Diamond d(he,tri);
     he = tri.collapseEdgeTriangular(he);
+    Quad q(he,tri);
     assert(vi == he.tailVertex());
     assert(vj == he.tipVertex());
 
     // Update Inverse coarsening map
-    if(transfer){ transfer->coarseEdge(vi,vj,vp); }
+    if(transfer){ transfer->coarseEdge(SplitData(q,d)); }
 
     // update refinement edges
     for (Halfedge ahe: he.edge().adjacentHalfedges()) { if (ahe.isInterior()) setRefinementEdge(ahe); }
@@ -239,12 +244,12 @@ inline bool vertexMarked(Vertex v, const FaceData<bool>& marked_faces){
     return true;
 }
 
-void AdaptiveTriangulation::coarse(const std::vector<Face> &faces, AdaptiveTransfer* transfer) {
+void AdaptiveTriangulation::coarse(const std::vector<Face> &f, AdaptiveTransfer *transfer) {
     if(transfer) transfer->startCoarse();
 
     // Mark all potential good vertices, i.e. these vertices with only marked faces around it
     FaceData<bool> marked_faces(mesh(),false);
-    for (Face f: faces){ marked_faces[f] = true;}
+    for (Face f: f){ marked_faces[f] = true;}
 
     std::unordered_set<Vertex> good_vertices{};
     for (Vertex v : tri.intrinsicMesh->vertices()) {
@@ -287,10 +292,13 @@ double etaRSqr(Face T, IntrinsicGeometryInterface &geom, const VertexData<double
         f_st += f[v];
     f_st /= 3;
 
-    double lu = 0; // TODO: Is this correct?
-    for (Vertex v : T.adjacentVertices())
-        lu += laplacian(geom, v, u);
-    lu /= 3;
+    double lu = 0;
+    // I have also thought about the discrete laplace beltrami,
+    // but this is meant to be the continuous over the triangle.
+    // As we use afine function it is always 0.
+    // for (Vertex v : T.adjacentVertices())
+    //      lu += laplacian(geom, v, u);
+    // lu /= 3;
 
     double jump_sum = 0;
     for (Edge e : T.adjacentEdges()) {
@@ -379,27 +387,27 @@ DoeflerConf DoerflerPreset(DoerflerPresetConf preset) {
     switch (preset) {
     case DoerflerPresetConf::LOW: // Conservative refinement
         conf.theta_refine     = 0.3;
-        conf.threshold_refine = 1e-4;
+        conf.threshold_refine = 1e-1;
         conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = 1e-6;
+        conf.threshold_coarse = 1e-2;
         break;
     case DoerflerPresetConf::MEDIUM: // Conservative refinement
         conf.theta_refine     = 0.3;
-        conf.threshold_refine = 1e-5;
+        conf.threshold_refine = 2e-2;
         conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = 1e-7;
+        conf.threshold_coarse = 2e-3;
         break;
     case DoerflerPresetConf::HIGH: // Conservative refinement
         conf.theta_refine     = 0.3;
-        conf.threshold_refine = 1e-6;
+        conf.threshold_refine = 1e-2;
         conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = 1e-8;
+        conf.threshold_coarse = 1e-3;
         break;
     case DoerflerPresetConf::VERY_HIGH: // Conservative refinement
         conf.theta_refine     = 0.3;
-        conf.threshold_refine = 1e-8;
+        conf.threshold_refine = 1e-3;
         conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = 1e-10;
+        conf.threshold_coarse = 1e-4;
         break;
     case DoerflerPresetConf::UNIFORM_REFINE:
         conf.theta_refine     = 1.0;   // force refine

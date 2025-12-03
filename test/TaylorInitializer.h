@@ -27,6 +27,7 @@ struct TaylorInitializer {
 
     wc_wrapper wc(IntrinsicTriangulation &intTri, VertexPositionGeometry &pg);
     wc_wrapper wc(ManifoldSurfaceMesh &mesh, VertexData<Vector2> &uv);
+    wc_wrapper wc(ManifoldSurfaceMesh &mesh, VertexPositionGeometry &pg);
 
     void callback();
 };

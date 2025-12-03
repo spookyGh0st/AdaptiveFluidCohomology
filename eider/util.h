@@ -7,11 +7,13 @@
 namespace geometrycentral::surface {
 
 inline double L2Norm(FaceData<Vector2> d, IntrinsicGeometryInterface& geom){
+    if(!d.toVector().allFinite()) return std::numeric_limits<double>::quiet_NaN();
     double s = 0;
     for (Face f: geom.mesh.faces()) { s += d[f].norm2() * geom.faceAreas[f]; }
     return std::sqrt(s);
 }
 inline double L2NormSqr(VertexData<double> d, IntrinsicGeometryInterface& geom){
+    if(!d.toVector().allFinite()) return std::numeric_limits<double>::quiet_NaN();
     double s = 0;
     geom.requireVertexDualAreas();
     for (Vertex v: geom.mesh.vertices()) {
@@ -22,10 +24,12 @@ inline double L2NormSqr(VertexData<double> d, IntrinsicGeometryInterface& geom){
     return s;
 }
 inline double L2Norm(VertexData<double> d, IntrinsicGeometryInterface& geom){
+    if(!d.toVector().allFinite()) return std::numeric_limits<double>::quiet_NaN();
     return std::sqrt(L2NormSqr(d,geom));
 }
 
 inline double integral(VertexData<double> d, IntrinsicGeometryInterface& geom){
+    if(!d.toVector().allFinite()) return std::numeric_limits<double>::quiet_NaN();
     double s = 0;
     for (Face f: geom.mesh.faces()){
         double fs = 0;
