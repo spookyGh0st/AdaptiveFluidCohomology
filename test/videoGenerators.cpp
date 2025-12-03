@@ -65,10 +65,11 @@ void visualize_c_h0(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom){
     for(Halfedge h: solver.hom.homologyB[0] ){
         auto nl = solver.hom.homologyB[0].nextLeft[h];
         if(nl.has_value() && nl.value()) nextleft[h] = 1;
-        if(nl.has_value() && !nl.value()) nextleft[h] = 2;
+        if(nl.has_value() && !nl.value()) nextleft[h] = -1;
     }
 
     auto* vsq = pm->addHalfedgeScalarQuantity("cycle",nextleft);
+    vsq->setColorMap("coolwarm");
     vsq->setEnabled(true);
 
     g_vis.requireFaceTangentBasis();
@@ -77,7 +78,7 @@ void visualize_c_h0(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom){
 
     std::string name = "h0";
     auto* ftq = pm->addFaceTangentVectorQuantity(name,solver.h[0], e1,e2);
-    ftq->setVectorLengthRange(0.5);
+    ftq->setVectorLengthRange(2);
     ftq->setVectorLengthScale(0.02);
     ftq->setEnabled(true);
 }
@@ -322,17 +323,18 @@ TEST(VideoTest, EvaluationS) {
 TEST(VideoTest, EvaluationC) {
     auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, false, true, MARKING_STRATEGY::PATTERN, false, false);
     AdaptiveFluidSolver solver_adapt_c(*mesh, *geom, data_comp_h);
 
     performAdaptiveRefinement(solver_adapt_c, *mesh, *geom, 8);
 
+    init_polyscope_2d(solver_adapt_c, *geom);
     createVideo(solver_adapt_c, *geom, "evaluation_c", 6, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
 }
 TEST(VideoTest, EvaluationI) {
     auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, false, true, MARKING_STRATEGY::PATTERN, false, false);
     AdaptiveFluidSolverData data_interp_ha = data_comp_h;
     data_interp_ha.interpolate_harmonic_basis = true;
     data_interp_ha.use_interpolated_harmonic_basis = true;
@@ -341,13 +343,14 @@ TEST(VideoTest, EvaluationI) {
 
     performAdaptiveRefinement(solver_adapt_i, *mesh, *geom, 8);
 
+    init_polyscope_2d(solver_adapt_i, *geom);
     createVideo(solver_adapt_i, *geom, "evaluation_i", 6, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
 }
 
 TEST(VideoTest, EvaluationCH) {
     auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, false, true, MARKING_STRATEGY::PATTERN, false, false);
     AdaptiveFluidSolver solver_adapt_c(*mesh, *geom, data_comp_h);
 
     performAdaptiveRefinement(solver_adapt_c, *mesh, *geom, 8);
@@ -355,7 +358,6 @@ TEST(VideoTest, EvaluationCH) {
     init_polyscope_2d_zoom(solver_adapt_c, *geom);
     createVideo(solver_adapt_c, *geom, "evaluation_c-h", 6, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0);
 }
-
 
 
 }
