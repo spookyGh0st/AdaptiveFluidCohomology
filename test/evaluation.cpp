@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
+#include "testutil.h"
 
 namespace fs = std::filesystem;
 
@@ -69,12 +70,6 @@ void copyFolder(const fs::path& source, const fs::path& destination) {
 
 namespace geometrycentral::surface{
 
-VertexData<Vector3> intrinsic_geom(IntrinsicTriangulation& Tri, VertexPositionGeometry& inputG){
-    auto& mesh = *Tri.intrinsicMesh;
-    VertexData<Vector3> int_positions(mesh) ;
-    for (Vertex v : mesh.vertices()) { int_positions[v] = Tri.vertexLocations[v].interpolate(inputG.vertexPositions); }
-    return int_positions;
-}
 
 
 class TestCase {
@@ -89,31 +84,6 @@ class TestCase {
     virtual polyscope::SurfaceMesh* visualize(fs::path f_screenshots = fs::path()) = 0;
     virtual ManifoldSurfaceMesh& getMesh() = 0;
 };
-
-using MeshP = std::unique_ptr<ManifoldSurfaceMesh>;
-using GeomP = std::unique_ptr<VertexPositionGeometry>;
-
-std::pair<MeshP, GeomP > uniform_refine(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom, int refine,MARKING_STRATEGY strategy = MARKING_STRATEGY::PATTERN){
-    AdaptiveTriangulation atri(mesh,geom,strategy);
-    for (int i = 0; i < refine; ++i) {
-        std::vector<Face> faces; for (Face f: atri.mesh().faces()) faces.push_back(f);
-        atri.refine(faces);
-    }
-    atri.mesh().compress();
-    atri.intrinsicTriangulation().refreshQuantities();
-    auto nMesh = atri.mesh().copy();
-    auto nGeom = std::make_unique<VertexPositionGeometry>(*nMesh,intrinsic_geom(atri.intrinsicTriangulation(),geom).reinterpretTo(*nMesh));
-    return { std::move(nMesh), std::move(nGeom)};
-}
-std::pair<MeshP, GeomP > delauny_refine(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom, double degree = 25, double h_size = std::numeric_limits<double>::infinity()){
-    IntegerCoordinatesIntrinsicTriangulation atri(mesh,geom);
-    atri.delaunayRefine(degree);
-    atri.intrinsicMesh->compress();
-    atri.refreshQuantities();
-    auto nMesh = atri.intrinsicMesh->copy();
-    auto nGeom = std::make_unique<VertexPositionGeometry>(*nMesh,intrinsic_geom(atri,geom).reinterpretTo(*nMesh));
-    return { std::move(nMesh), std::move(nGeom)};
-}
 
 class TaylorVorticesCase : public TestCase{
   public:
@@ -292,8 +262,7 @@ std::shared_ptr<TaylorVorticesCase> taylorVortices_ASAT(ManifoldSurfaceMesh& mes
 }
 
 std::shared_ptr<TaylorVorticesCase> taylorVortices_OR(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom) {
-    AdaptiveFluidSolverData data(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,0.01,false,false,MARKING_STRATEGY::PATTERN,false);
-    return makeTaylorCase("OR", "Original (Yin et al., 2023)", mesh, geom, data);
+    return makeTaylorCase("OR", "Original (Yin et al., 2023)", mesh, geom, static_solver_data);
 }
 
 

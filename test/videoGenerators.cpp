@@ -7,6 +7,9 @@
 #include <gtest/gtest.h>
 #include <polyscope/polyscope.h>
 #include <polyscope/surface_mesh.h>
+#include "testutil.h"
+#include <thread>
+#include <vector>
 
 
 
@@ -16,7 +19,13 @@ fs::path tmp_dir(){
     auto now = std::chrono::system_clock::now();
     std::time_t t = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
-    ss << std::put_time(std::localtime(&t), "%Y-%m-%dT%H-%M-%S");
+    ss << std::put_time(std::localtime(&t), "%Y-%m-%dT%H-%M-%S-");
+
+    std::random_device dev;
+    std::mt19937 prng(dev());
+    std::uniform_int_distribution<uint64_t> rand(0);
+    ss << std::hex << rand(prng);
+
     fs::path test_case = std::filesystem::temp_directory_path() /  ss.str();
     fs::create_directory(test_case);
     return test_case;
@@ -41,6 +50,38 @@ void visualize_w(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom){
     vsq->setMapRange({-30,30});
     vsq->setEnabled(true);
 }
+
+void visualize_c_h0(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom){
+    AdaptiveTriangulation& atri = solver.tri;
+    auto& m = atri.mesh();
+    auto vp = intrinsic_vertex_positions(atri.intrinsicTriangulation(),geom);
+    auto g_vis =VertexPositionGeometry(m,vp);
+
+    polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("mesh", vp,atri.mesh().getFaceVertexList(), polyscopePermutations(atri.mesh()));
+    pm->setEdgeColor(glm::vec3(0,0,0));
+    pm->setEdgeWidth(0.4);
+
+    HalfedgeData<int> nextleft(m,0);
+    for(Halfedge h: solver.hom.homologyB[0] ){
+        auto nl = solver.hom.homologyB[0].nextLeft[h];
+        if(nl.has_value() && nl.value()) nextleft[h] = 1;
+        if(nl.has_value() && !nl.value()) nextleft[h] = 2;
+    }
+
+    auto* vsq = pm->addHalfedgeScalarQuantity("cycle",nextleft);
+    vsq->setEnabled(true);
+
+    g_vis.requireFaceTangentBasis();
+    FaceData<Vector3> e1(m),e2(m);
+    for (Face f: m.faces()) { e1[f] = g_vis.faceTangentBasis[f][0], e2[f] = g_vis.faceTangentBasis[f][1];  }
+
+    std::string name = "h0";
+    auto* ftq = pm->addFaceTangentVectorQuantity(name,solver.h[0], e1,e2);
+    ftq->setVectorLengthRange(0.5);
+    ftq->setVectorLengthScale(0.02);
+    ftq->setEnabled(true);
+}
+
 void display_progress(double v, int width = 50) {
     v = std::max(0.0, std::min(1.0, v));
     int filled = int(v * width);
@@ -59,7 +100,7 @@ void display_progress(double v, int width = 50) {
 }
 
 void init_polyscope_2d(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom) {
-    polyscope::init();
+    if(!polyscope::isInitialized()) polyscope::init();
     visualize_w(solver,geom);
     polyscope::view::ensureViewValid();
     polyscope::view::fov = 30;
@@ -69,9 +110,20 @@ void init_polyscope_2d(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom
     polyscope::options::ssaaFactor = 3;
     // polyscope::view::lookAt(glm::vec3{-5., 5., 2.}, glm::vec3{0., 0, 0});
 }
+void init_polyscope_2d_zoom(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom) {
+    if(!polyscope::isInitialized()) polyscope::init();
+    visualize_w(solver,geom);
+    polyscope::view::ensureViewValid();
+    polyscope::view::fov = 10;
+    polyscope::view::projectionMode = polyscope::ProjectionMode::Orthographic;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
+    polyscope::view::setWindowSize(1080,1080);
+    polyscope::options::ssaaFactor = 3;
+    // polyscope::view::lookAt(glm::vec3{-5., 5., 2.}, glm::vec3{0., 0, 0});
+}
 
 void init_polyscope_3d(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom) {
-    polyscope::init();
+    if(!polyscope::isInitialized()) polyscope::init();
     visualize_w(solver,geom);
     polyscope::view::ensureViewValid();
     polyscope::view::fov = 30;
@@ -84,15 +136,14 @@ void init_polyscope_3d(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom
 
 
 
-void createVideo(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom, const std::string& name, double target_time,std::function<void(AdaptiveFluidSolver&)> step){
-    visualize_w(solver,geom);
-    polyscope::view::ensureViewValid();
-    polyscope::view::fov = 30;
-    polyscope::view::projectionMode = polyscope::ProjectionMode::Perspective;
-    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
-    polyscope::view::setWindowSize(1080,1080);
-    polyscope::options::ssaaFactor = 3;
-    polyscope::view::lookAt(glm::vec3{-5., 5., 2.}, glm::vec3{0., 0, 0});
+void createVideo(
+    AdaptiveFluidSolver& solver, VertexPositionGeometry& geom,
+    const std::string& name, double target_time,
+    std::function<void(AdaptiveFluidSolver&)> step,
+    std::function<void(AdaptiveFluidSolver&, VertexPositionGeometry&)> visualize,
+    double speed = 1
+){
+    polyscope::removeAllStructures();
 
     auto tmp = tmp_dir();
     int i = 0;
@@ -100,14 +151,14 @@ void createVideo(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom, cons
     fs::path thumbnail;
     while(solver.elapsed_time < target_time){
         display_progress(solver.elapsed_time/target_time);
-        std::stringstream  ss;
-        ss << "vid" << std::setw(16) << std::setfill('0') << i << ".png";
-        polyscope::screenshot(tmp/ss.str());
-        if (i == 0) thumbnail = tmp/ss.str();
-        step(solver);
-        i++;
-        visualize_w(solver,geom);
+        std::stringstream  ss; ss << "vid" << std::setw(16) << std::setfill('0') << i << ".png";
 
+        visualize(solver,geom);
+        polyscope::screenshot(tmp/ss.str());
+
+        if (i == 0) thumbnail = tmp/ss.str();
+
+        step(solver); i++;
     }
 
 
@@ -116,9 +167,15 @@ void createVideo(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom, cons
     std::cout  << "Creating video " << tmp.string() << std::endl;
     std::stringstream  ss;
     ss << "cd \"" << tmp.string() << "\" &&";
-    ss << "ffmpeg -framerate " << 1./solver.dt << " -i vid%16d.png -c:v libx264 -pix_fmt yuv420p -r 60 -y "<< video_dir / (name +".mp4");
+    ss << "ffmpeg -framerate " << 1./solver.dt
+       << " -i vid%16d.png -vf \"setpts=" << 1.0 / speed << "*PTS\""
+       << " -c:v libx264 -pix_fmt yuv420p -r 60 -y "
+       << video_dir / (name + ".mp4");
     std::cout <<"Executing: '"<< ss.str() <<"'" <<  std::endl;
-    std::system(ss.str().c_str());
+
+    if (int return_code = std::system(ss.str().c_str()); return_code != 0) {
+        throw std::runtime_error("External command failed with return code " + std::to_string(return_code) + ". Command was: '" + ss.str() + "'");
+    }
     fs::copy_file(thumbnail, video_dir/ (name+".png"),fs::copy_options::overwrite_existing);
 
     std::cout << "Removing " << tmp << std::endl;
@@ -127,31 +184,30 @@ void createVideo(AdaptiveFluidSolver& solver, VertexPositionGeometry& geom, cons
 
 TEST(VideoTest,Grid){
     auto [mesh,geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "grid_fine.stl");
-    polyscope::init();
 
     AdaptiveFluidSolverData d;
     d.adaptive_space = false; d.adaptive_time = false; d.dt = 0.01;
     AdaptiveFluidSolver solver(*mesh,*geom,d);
     solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
 
-    createVideo(solver,*geom,"grid",8,[](AdaptiveFluidSolver& s) {s.step(); std::fill(s.wc.c.begin(), s.wc.c.end(), 0);});
+    init_polyscope_2d(solver,*geom);
+    createVideo(solver,*geom,"grid",8,[](AdaptiveFluidSolver& s) {s.step(); std::fill(s.wc.c.begin(), s.wc.c.end(), 0);}, visualize_w);
 }
 
 TEST(VideoTest,fixedHarmonicCoefficients){
     auto [mesh,geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_oriented.stl");
-    polyscope::init();
 
     AdaptiveFluidSolverData d;
     d.adaptive_space = false; d.adaptive_time = false; d.dt = 0.01;
     AdaptiveFluidSolver solver(*mesh,*geom,d);
     solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
 
-    createVideo(solver,*geom,"constant_harm_coefficients",8,[](AdaptiveFluidSolver& s) {s.step(); std::fill(s.wc.c.begin(), s.wc.c.end(), 0);});
+    init_polyscope_2d(solver,*geom);
+    createVideo(solver,*geom,"constant_harm_coefficients",8,[](AdaptiveFluidSolver& s) {s.step(); std::fill(s.wc.c.begin(), s.wc.c.end(), 0);}, visualize_w);
 }
 
 TEST(VideoTest,staticFC){
     auto [mesh,geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
-    polyscope::init();
 
     AdaptiveFluidSolverData d;
     d.adaptive_space = false; d.adaptive_time = false; d.dt = 0.01;
@@ -162,11 +218,11 @@ TEST(VideoTest,staticFC){
         solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
     }
 
-    createVideo(solver,*geom,"static",8,[](AdaptiveFluidSolver& s) {s.step();});
+    init_polyscope_2d(solver,*geom);
+    createVideo(solver,*geom,"static",8,[](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
 }
 TEST(VideoTest,adaptiveFC){
     auto [mesh,geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
-    polyscope::init();
 
     AdaptiveFluidSolverData d;
     d.adaptive_space = true; d.adaptive_time = false; d.dt = 0.01;
@@ -177,7 +233,8 @@ TEST(VideoTest,adaptiveFC){
         solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
     }
 
-    createVideo(solver,*geom,"adaptive",8,[](AdaptiveFluidSolver& s) {s.step();});
+    init_polyscope_2d(solver,*geom);
+    createVideo(solver,*geom,"adaptive",8,[](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
 }
 
 
@@ -215,8 +272,8 @@ TEST(VideoTest,staticShearOnTorus) {
         auto vec = solver.tri.intrinsicTriangulation().vertexLocations[v].interpolate(uv);
         solver.wc.w[v] = double_shear_layer(vec.x, vec.y);
     }
-    polyscope::init();
-    createVideo(solver,*geom,"shear_static",3,[](AdaptiveFluidSolver& s) {s.step();});
+    init_polyscope_3d(solver,*geom);
+    createVideo(solver,*geom,"shear_static",3,[](AdaptiveFluidSolver& s) {s.step();},visualize_w,0.2);
 }
 TEST(VideoTest,adaptiveShearOnTorus) {
 
@@ -239,9 +296,66 @@ TEST(VideoTest,adaptiveShearOnTorus) {
         auto vec = solver.tri.intrinsicTriangulation().vertexLocations[v].interpolate(uv);
         solver.wc.w[v] = double_shear_layer(vec.x, vec.y);
     }
-    polyscope::init();
-    createVideo(solver,*geom,"shear_adaptive",3,[](AdaptiveFluidSolver& s) {s.step();});
+    init_polyscope_3d(solver,*geom);
+    createVideo(solver,*geom,"shear_adaptive",3,[](AdaptiveFluidSolver& s) {s.step();},visualize_w, 0.2);
 }
+
+void performAdaptiveRefinement(AdaptiveFluidSolver& solver, ManifoldSurfaceMesh& mesh, VertexPositionGeometry& geom, int iterations) {
+    solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(), geom).w;
+    for (int i = 0; i < iterations; ++i) {
+        solver.adapt();
+        solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(), geom).w;
+    }
+}
+
+TEST(VideoTest, EvaluationS) {
+    auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
+    auto [meshO, geomO] = uniform_refine(*mesh, *geom, 4);
+
+    AdaptiveFluidSolver solver_static(*meshO, *geomO, static_solver_data);
+    solver_static.wc.w = TaylorInitializer().wc(solver_static.tri.intrinsicTriangulation(), *geomO).w;
+
+    init_polyscope_2d(solver_static, *geomO);
+
+    createVideo(solver_static, *geomO, "evaluation_s", 6, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+}
+TEST(VideoTest, EvaluationC) {
+    auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
+
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolver solver_adapt_c(*mesh, *geom, data_comp_h);
+
+    performAdaptiveRefinement(solver_adapt_c, *mesh, *geom, 8);
+
+    createVideo(solver_adapt_c, *geom, "evaluation_c", 6, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+}
+TEST(VideoTest, EvaluationI) {
+    auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
+
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolverData data_interp_ha = data_comp_h;
+    data_interp_ha.interpolate_harmonic_basis = true;
+    data_interp_ha.use_interpolated_harmonic_basis = true;
+
+    AdaptiveFluidSolver solver_adapt_i(*mesh, *geom, data_interp_ha);
+
+    performAdaptiveRefinement(solver_adapt_i, *mesh, *geom, 8);
+
+    createVideo(solver_adapt_i, *geom, "evaluation_i", 6, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w);
+}
+
+TEST(VideoTest, EvaluationCH) {
+    auto [mesh, geom] = readManifoldSurfaceMesh(std::filesystem::path(__FILE__).parent_path() / "models" / "cheese_min.stl");
+
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW, DoerflerPresetConf::LOW, 0.01, true, true, MARKING_STRATEGY::PATTERN, false, false);
+    AdaptiveFluidSolver solver_adapt_c(*mesh, *geom, data_comp_h);
+
+    performAdaptiveRefinement(solver_adapt_c, *mesh, *geom, 8);
+
+    init_polyscope_2d_zoom(solver_adapt_c, *geom);
+    createVideo(solver_adapt_c, *geom, "evaluation_c-h", 6, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0);
+}
+
 
 
 }
