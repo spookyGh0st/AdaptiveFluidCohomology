@@ -8,6 +8,22 @@
 #include <geometrycentral/surface/surface_mesh.h>
 
 namespace geometrycentral::surface {
+
+std::string eigenInfoToString(const Eigen::ComputationInfo& info) {
+    switch (info) {
+    case Eigen::Success:
+        return "Success";
+    case Eigen::NumericalIssue:
+        return "NumericalIssue: The provided data did not satisfy the prerequisites of the solver. For example, the matrix may be singular or not positive-definite for a Cholesky factorization.";
+    case Eigen::NoConvergence:
+        return "NoConvergence: The iterative solver did not converge to a solution within the given number of iterations.";
+    case Eigen::InvalidInput:
+        return "InvalidInput: The inputs (e.g., matrix, vector sizes) are invalid.";
+    default:
+        return "UnknownError: An unknown error occurred.";
+    }
+}
+
 void StreamFunctionSolver::compute(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
     boundaryVertices.clear();
     interiorVertices.clear();
@@ -189,8 +205,12 @@ void StreamFunctionSolver::compute_zero_mean(SurfaceMesh &mesh, IntrinsicGeometr
     A_zero_mean.setFromTriplets(triplets.begin(), triplets.end());
 
     solver.compute(A_zero_mean);
-    if (solver.info() != Eigen::Success) {
-        throw std::runtime_error("Augmented system factorization failed in compute_zero_mean().");
+    if (solver.info() == Eigen::Success){
+        use_fallback = false;
+    } else {
+        std::cout << "\n" <<eigenInfoToString(solver.info()) << "\nUsing Fallback solver" << std::endl ;
+        use_fallback = true;
+        fallback_solver.compute(A_zero_mean);
     }
 
     geom.unrequireCotanLaplacian();
@@ -213,9 +233,14 @@ void StreamFunctionSolver::solve_zero_mean(SurfaceMesh &mesh, VertexData<double>
     rhs_aug.head(n) = rhs;
     rhs_aug[n] = 0.0;
 
-    Eigen::VectorXd solution = solver.solve(rhs_aug);
-    if (solver.info() != Eigen::Success) {
-        throw std::runtime_error("Solving zero-mean system failed.");
+
+    Eigen::VectorXd solution;
+    if (use_fallback) {
+        solution = fallback_solver.solve(rhs_aug);
+        if (fallback_solver.info() != Eigen::Success) throw std::runtime_error(eigenInfoToString(fallback_solver.info()));
+    }else{
+        solution = solver.solve(rhs_aug);
+        if (solver.info() != Eigen::Success) throw std::runtime_error(eigenInfoToString(solver.info()));
     }
 
     for (Vertex v : mesh.vertices()) {

@@ -2,6 +2,7 @@
 
 #include <geometrycentral/surface/intrinsic_geometry_interface.h>
 #include <geometrycentral/surface/surface_mesh.h>
+#include <Eigen/IterativeLinearSolvers>
 
 namespace geometrycentral::surface {
 void solve_poisson_dirichlet_zero_mean(SurfaceMesh &mesh, IntrinsicGeometryInterface &geom, VertexData<double> &f, const VertexData<double> &g);
@@ -9,6 +10,9 @@ void solve_poisson_dirichlet_zero_mean(SurfaceMesh &mesh, IntrinsicGeometryInter
 /// Solves -Δu = f in Ω, u = 0 in ∂Ω
 struct StreamFunctionSolver {
     Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> solver;
+    Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower|Eigen::Upper, Eigen::DiagonalPreconditioner<double>> fallback_solver;
+
+    bool use_fallback = false;
 
     // For bounded mesh
     Eigen::SparseMatrix<double> M_II, L_IB;
