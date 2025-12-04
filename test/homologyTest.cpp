@@ -96,7 +96,7 @@ TEST(homologyTest, TestHomotopyBasis)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"cylinder-min.stl";
+    fds = fds.parent_path()/ "models" /"cylinder.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     ManifoldSurfaceMesh& mesh = *m;
     VertexPositionGeometry& geom = *g;
@@ -161,10 +161,10 @@ TEST(homologyTest, TestDeRhamCohom)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus.stl";
+    fds = fds.parent_path()/ "models" /"cylinder.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     Face x = m->face(0);
-    auto h_basis = homotopy_basis(*m,*g,m->face(0));
+    auto h_basis = greedy_homotopy_basis(*m,*g, arbitrary_base_face(*m));
 
     polyscope::init();
     polyscope::SurfaceMesh* pm = polyscope::registerSurfaceMesh("M", g->vertexPositions,m->getFaceVertexList(), polyscopePermutations(*m));
@@ -201,7 +201,7 @@ TEST(homologyTest, TestWhitney)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"torus.stl";
+    fds = fds.parent_path()/ "models" /"cylinder.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     g->requireHalfedgeVectorsInFace();
     g->requireFaceTangentBasis();
@@ -224,7 +224,7 @@ TEST(homologyTest, Intrinsic)
 {
     using namespace geometrycentral::surface;
     std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" /"grid_hole.stl";
+    fds = fds.parent_path()/ "models" /"halftorus.stl";
     auto [m,g] = readManifoldSurfaceMesh(fds.string());
     IntegerCoordinatesIntrinsicTriangulation ig (*m,*g);
     ig.flipToDelaunay();

@@ -271,8 +271,8 @@ TEST(VideoTest,ShearOnTorusStatic) {
     VertexData<Vector2> uv(*mesh); for (Vertex v: mesh->vertices()) { uv[v] = (*param)[v.corner()]; }
 
     AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::HIGH,DoerflerPresetConf::LOW,0.0001,false, false,MARKING_STRATEGY::LONGEST_EDGE,false,false);
-    data_comp_h.doerflerConf.threshold_refine = 1;
-    data_comp_h.doerflerConf.threshold_coarse = 0.2;
+    data_comp_h.doerflerConf.threshold_refine = 2;
+    data_comp_h.doerflerConf.threshold_coarse = 0.5;
     AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
 
     for (int i = 0; i < 16; ++i) {
@@ -295,8 +295,8 @@ TEST(VideoTest,ShearOnTorusAdaptive) {
     VertexData<Vector2> uv(*mesh); for (Vertex v: mesh->vertices()) { uv[v] = (*param)[v.corner()]; }
 
     AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.001,true,true,MARKING_STRATEGY::LONGEST_EDGE,false,false);
-    data_comp_h.doerflerConf.threshold_refine = 1;
-    data_comp_h.doerflerConf.threshold_coarse = 0.2;
+    data_comp_h.doerflerConf.threshold_refine = 2;
+    data_comp_h.doerflerConf.threshold_coarse = 0.5;
     AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
 
     for (int i = 0; i < 16; ++i) {
