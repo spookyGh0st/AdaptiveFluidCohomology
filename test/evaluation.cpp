@@ -23,7 +23,13 @@ fs::path run_folder(std::filesystem::path results_f) {
     auto now = std::chrono::system_clock::now();
     std::time_t t = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
-    ss << std::put_time(std::localtime(&t), "%Y-%m-%dT%H-%M-%S");
+    ss << std::put_time(std::localtime(&t), "%Y-%m-%dT%H-%M-%S-");
+
+    std::random_device dev;
+    std::mt19937 prng(dev());
+    std::uniform_int_distribution<uint64_t> rand(0);
+    ss << std::hex << rand(prng);
+
     fs::path test_case = results_f / ("run_" + ss.str());
     fs::create_directory(test_case);
     return test_case;
@@ -71,6 +77,13 @@ void copyFolder(const fs::path& source, const fs::path& destination) {
 namespace geometrycentral::surface{
 
 
+double smallest_edge_length(IntrinsicGeometryInterface& geom){
+    double min = std::numeric_limits<double>::max();
+    for(Edge e: geom.mesh.edges()){
+        if (geom.edgeLengths[e] < min) min = geom.edgeLengths[e];
+    }
+    return min;
+}
 
 class TestCase {
   public:
@@ -84,6 +97,20 @@ class TestCase {
     virtual polyscope::SurfaceMesh* visualize(fs::path f_screenshots = fs::path()) = 0;
     virtual ManifoldSurfaceMesh& getMesh() = 0;
 };
+
+void polyscope_view_field(){
+    polyscope::view::lookAt(glm::vec3(0,0,1),glm::vec3(0,0,0),glm::vec3(0,1,0));
+    polyscope::view::fov = 30;
+    polyscope::view::projectionMode = polyscope::ProjectionMode::Orthographic;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
+}
+
+void polyscope_view_hole(){
+    polyscope::view::lookAt(glm::vec3(-0.25,-0.1,1),glm::vec3(-0.25,-0.1,0),glm::vec3(0,1,0));
+    polyscope::view::fov = 5;
+    polyscope::view::projectionMode = polyscope::ProjectionMode::Orthographic;
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
+}
 
 class TaylorVorticesCase : public TestCase{
   public:
@@ -153,6 +180,7 @@ class TaylorVorticesCase : public TestCase{
         }
     }
 
+
     polyscope::SurfaceMesh* visualize(fs::path f_screenshots) override{
         AdaptiveTriangulation& atri = solver->tri;
         auto vp = intrinsic_geom(atri.intrinsicTriangulation(),*geom);
@@ -167,13 +195,19 @@ class TaylorVorticesCase : public TestCase{
         vsq->setMapRange({-30,30})->setEnabled(true);
         colormap = { vsq->getColorMap(), vsq->getMapRange() };
         if(!f_screenshots.empty()){
+            polyscope_view_field();
             polyscope::screenshot(f_screenshots/"vorticity.png",true);
 
             g.requireFaceTangentBasis();
             FaceData<Vector3> e1(m),e2(m);
             for (Face f: m.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
 
-            auto* ftvq = pm->addFaceTangentVectorQuantity("u",solver->velocity().u, e1,e2)->setEnabled(true);
+            polyscope_view_hole();
+            auto* ftvq = pm->addFaceTangentVectorQuantity("u",solver->velocity().u, e1,e2);
+            ftvq->setVectorColor(glm::vec3(121./255, 80./255, 242./255));
+            ftvq->setEnabled(true);
+            ftvq->setVectorLengthRange(3);
+            ftvq->setVectorLengthScale(0.02);
             polyscope::screenshot(f_screenshots/"u.png",true);
             ftvq->setEnabled(false);
 
@@ -181,25 +215,27 @@ class TaylorVorticesCase : public TestCase{
             int i = 0;
             auto fullh = solver->hom.fullHarmonicBasis();
             for (auto& h:solver->h) {
+                HalfedgeData<int> nextleft(m,0);
+                for(Halfedge h: solver->hom.homologyB[i] ){
+                    auto nl = solver->hom.homologyB[i].nextLeft[h];
+                    if(nl.has_value() && nl.value()) nextleft[h] = 1;
+                    if(nl.has_value() && !nl.value()) nextleft[h] = -1;
+                }
+
+                auto* esq = pm->addHalfedgeScalarQuantity("cycle",nextleft);
+                esq->setColorMap("coolwarm");
+                esq->setEnabled(true);
+
                 std::string name = "h_{"+std::to_string(i) + "}";
                 auto* ftq = pm->addFaceTangentVectorQuantity("h"+std::to_string(i),h, e1,e2);
+                ftq->setVectorColor(glm::vec3(253.0/255, 126./255, 20./255));
                 ftq->setEnabled(true);
-                ftq->setVectorLengthRange(2);
-                ftq->setVectorLengthScale(0.04);
+                ftq->setVectorLengthRange(3);
+                ftq->setVectorLengthScale(0.02);
                 polyscope::screenshot(f_screenshots/(name+".png"),true);
                 ftq->setEnabled(false);
-
-                name = "h-df_"+std::to_string(i);
-                auto* esq = pm->addEdgeScalarQuantity(name,fullh.df[i]);
-                esq->setEnabled(true);
-                polyscope::screenshot(f_screenshots/(name+".png"),true);
                 esq->setEnabled(false);
 
-                name = "h-proj_df_"+std::to_string(i);
-                esq = pm->addEdgeScalarQuantity(name,fullh.proj_df[i]);
-                esq->setEnabled(true);
-                polyscope::screenshot(f_screenshots/(name+".png"),true);
-                esq->setEnabled(false);
 
                 i++;
 
@@ -230,7 +266,7 @@ class TaylorVorticesCase : public TestCase{
 void refineAndReset(TaylorVorticesCase& aCase, GeomP& geom) {
     //aCase.eval_a = Evaluator();
     //aCase.registerAll(aCase.eval_a, aCase.solver->h.size());
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 32; ++i) {
         aCase.solver->adapt();
         aCase.solver->wc.w = TaylorInitializer().wc(aCase.solver->tri.intrinsicTriangulation(),*geom).w;
     }
@@ -387,36 +423,12 @@ TEST(EvaluatorTest, Evaluate)
     cpm.runUntil(1.5); cpm.visualize(cf.f_screenshots);
     cpm.runUntil(3.0); cpm.visualize(cf.f_screenshots);
     cpm.runUntil(4.5); cpm.visualize(cf.f_screenshots);
-     cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
 
     cpm.write(cf.fev);
     copyFolder(cf.fev,cf.flatest);
     cpm.visualize();
-    polyscope::show();
-}
-
-TEST(EvaluatorTest, EvaluateLongTerm)
-{
-    CaseFolder cf("tc8");
-    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
-
-    Comparator cpm;
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::LOW,0.01,false,true,MARKING_STRATEGY::PATTERN,false,false);
-    AdaptiveFluidSolverData data_interp_ha= data_comp_h; data_interp_ha.interpolate_harmonic_basis = true; data_interp_ha.use_interpolated_harmonic_basis =true;
-    auto tc1 = makeTaylorCase("AR", "Adaptive, recomputed h (AR)", *mesh, *geom, data_comp_h);
-    auto tc2 = makeTaylorCase("AI", "Adaptive, interpolated h (AI)", *mesh, *geom, data_interp_ha);
-    ExportProperty p = EXPORT_int_w | EXPORT_C| EXPORT_velocity | EXPORT_Vort_Y;
-    tc1->eval_t.y.clear(); registerProperties(tc1->eval_t,p,tc1->solver->h.size());
-    tc2->eval_t.y.clear(); registerProperties(tc2->eval_t,p,tc2->solver->h.size());
-    cpm.testcases = { taylorVortices_OR(*mesh, *geom), tc1,tc2  }; // TODO: Uniform Refine Original
-    init_ps(cpm);
-
-    cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(10); cpm.visualize(cf.f_screenshots);
-
-    cpm.write(cf.fev);
-    copyFolder(cf.fev,cf.flatest);
-    cpm.visualize();
+    polyscope_view_hole();
     polyscope::show();
 }
 
@@ -450,20 +462,28 @@ TEST(EvaluatorTest, EvaluateDiffDopri)
 {
     CaseFolder cf ("tc2");
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
-    auto [meshO, geomO] = uniform_refine(*mesh,*geom,4);
+    auto [meshO, geomO] = uniform_refine(*mesh,*geom,5);
     Comparator cpm;
-    cpm.testcases = {
-        taylorVortices_OR(*meshO, *geomO),
-        makeTaylorCase("low", "Low Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false)),
-        makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::MEDIUM,DoerflerPresetConf::MEDIUM,0.001,true,true,MARKING_STRATEGY::PATTERN,false,false)),
-    };
+    auto orig = taylorVortices_OR(*meshO, *geomO);
+    auto low  = makeTaylorCase("low", "Low Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::LOW,DoerflerPresetConf::VERY_LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false));
+    auto high = makeTaylorCase("vhigh", "Very High Precision", *mesh, *geom, AdaptiveFluidSolverData(DOPRI5PresetConf::HIGH,DoerflerPresetConf::LOW,0.001,true,true,MARKING_STRATEGY::PATTERN,false,false));
+    orig->solver->dt = 0.001;
+    cpm.testcases = { orig,low,high };
+
+    std::cout << smallest_edge_length(orig->solver->tri.geom()) << std::endl;
+    std::cout << smallest_edge_length(low->solver->tri.geom()) << std::endl;
+    std::cout << smallest_edge_length(high->solver->tri.geom()) << std::endl;
 
     init_ps(cpm);
     cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(1);
-    cpm.runUntil(2);
-    cpm.runUntil(3); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+
+    double target_t = 6.00;
+    cpm.runUntil(1./2* target_t); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(2./2 * target_t); cpm.visualize(cf.f_screenshots);
+
+    std::cout << smallest_edge_length(orig->solver->tri.geom()) << std::endl;
+    std::cout << smallest_edge_length(low->solver->tri.geom()) << std::endl;
+    std::cout << smallest_edge_length(high->solver->tri.geom()) << std::endl;
 
     cpm.write(cf.fev);
     copyFolder(cf.fev,cf.flatest);
@@ -610,10 +630,11 @@ TEST(EvaluatorTest,evaluateBadTriangulation) {
 
     init_ps(cpm);
     cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(1./4* 3); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(2./4 * 3); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(3./4 * 3); cpm.visualize(cf.f_screenshots);
-    cpm.runUntil(4./4 * 3); cpm.visualize(cf.f_screenshots);
+    double target_t = 4.00;
+    cpm.runUntil(1./4* target_t); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(2./4 * target_t); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3./4 * target_t); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(4./4 * target_t); cpm.visualize(cf.f_screenshots);
 
     cpm.write(cf.fev);
     copyFolder(cf.fev,cf.flatest);
@@ -865,7 +886,7 @@ TEST(CleanEvaluatorTest, Clean)
     for (const auto& entry : fs::directory_iterator(folder)) {
         if (entry.is_directory()) {
             const std::string name = entry.path().filename().string();
-            if (name.rfind("run_", 0) == 0) {  // name starts with "run_"
+            if (name.rfind("run_2025", 0) == 0) {  // name starts with "run_"
                 try {
                     fs::remove_all(entry.path());
                     std::cout << "Removed folder: " << entry.path() << std::endl;

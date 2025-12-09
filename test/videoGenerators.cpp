@@ -384,7 +384,7 @@ TEST(VideoTest, Irregular_S){
     AdaptiveFluidSolver solver(*mesh,*geom,staticD);
     performAdaptiveRefinement(solver, *mesh, *geom, 0);
     init_polyscope_2d(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-s", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
+    createVideo(solver, *geom, "cheese_irregular-s", 4, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
 }
 
 TEST(VideoTest, Irregular_C){
@@ -393,7 +393,7 @@ TEST(VideoTest, Irregular_C){
     AdaptiveFluidSolver solver(*mesh,*geom,data);
     performAdaptiveRefinement(solver, *mesh, *geom, 8);
     init_polyscope_2d(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-c", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
+    createVideo(solver, *geom, "cheese_irregular-c", 4, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
 }
 
 TEST(VideoTest, Irregular_I){
@@ -402,7 +402,7 @@ TEST(VideoTest, Irregular_I){
     AdaptiveFluidSolver solver(*mesh,*geom,data);
     performAdaptiveRefinement(solver, *mesh, *geom, 8);
     init_polyscope_2d(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-i", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
+    createVideo(solver, *geom, "cheese_irregular-i", 4, [](AdaptiveFluidSolver& s) {s.step();}, visualize_w,irregular_speed);
 }
 
 TEST(VideoTest, Irregular_SH) {
@@ -411,7 +411,7 @@ TEST(VideoTest, Irregular_SH) {
     AdaptiveFluidSolver solver(*mesh,*geom,staticD);
     performAdaptiveRefinement(solver, *mesh, *geom, 0);
     init_polyscope_2d_zoom(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-s-h", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0,irregular_speed);
+    createVideo(solver, *geom, "cheese_irregular-s-h", 4, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0,irregular_speed);
 }
 
 TEST(VideoTest, Irregular_CH) {
@@ -420,7 +420,7 @@ TEST(VideoTest, Irregular_CH) {
     AdaptiveFluidSolver solver(*mesh,*geom,data);
     performAdaptiveRefinement(solver, *mesh, *geom, 8);
     init_polyscope_2d_zoom(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-c-h", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0, irregular_speed);
+    createVideo(solver, *geom, "cheese_irregular-c-h", 4, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0, irregular_speed);
 }
 
 TEST(VideoTest, Irregular_IH) {
@@ -429,7 +429,7 @@ TEST(VideoTest, Irregular_IH) {
     AdaptiveFluidSolver solver(*mesh,*geom,data);
     performAdaptiveRefinement(solver, *mesh, *geom, 8);
     init_polyscope_2d_zoom(solver, *geom);
-    createVideo(solver, *geom, "cheese_irregular-i-h", 3, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0, irregular_speed);
+    createVideo(solver, *geom, "cheese_irregular-i-h", 4, [](AdaptiveFluidSolver& s) {s.step();}, visualize_c_h0, irregular_speed);
 }
 
 

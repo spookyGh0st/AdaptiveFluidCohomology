@@ -385,6 +385,12 @@ std::array<std::vector<Face>,2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceD
 DoeflerConf DoerflerPreset(DoerflerPresetConf preset) {
     DoeflerConf conf;
     switch (preset) {
+    case DoerflerPresetConf::VERY_LOW: // Conservative refinement
+        conf.theta_refine     = 0.3;
+        conf.threshold_refine = (1e-1) * 4;
+        conf.theta_coarse     = 0.3;
+        conf.threshold_coarse = (1e-2)*4;
+        break;
     case DoerflerPresetConf::LOW: // Conservative refinement
         conf.theta_refine     = 0.3;
         conf.threshold_refine = 1e-1;
@@ -393,9 +399,9 @@ DoeflerConf DoerflerPreset(DoerflerPresetConf preset) {
         break;
     case DoerflerPresetConf::MEDIUM: // Conservative refinement
         conf.theta_refine     = 0.3;
-        conf.threshold_refine = 2e-2;
+        conf.threshold_refine = (1e-1)*0.2;
         conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = 2e-3;
+        conf.threshold_coarse = (2e-2)*0.2;
         break;
     case DoerflerPresetConf::HIGH: // Conservative refinement
         conf.theta_refine     = 0.3;
