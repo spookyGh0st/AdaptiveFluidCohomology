@@ -156,11 +156,11 @@ class TaylorVorticesCase : public TestCase{
         return data;
     }
 
-    TaylorVorticesCase(std::string name, std::string label, MeshP&& pmesh, GeomP&& pgeom, AdaptiveFluidSolverData data, bool fix_c = false)
+    TaylorVorticesCase(std::string name, std::string label, MeshP &&pmesh, GeomP &&pgeom, AdaptiveFluidSolverData data, bool fix_c = false, TaylorInitializer taylor = TaylorInitializer())
         : TestCase(name,label), mesh(std::move(pmesh)), geom(std::move(pgeom)), solver(std::make_unique<AdaptiveFluidSolver>(*mesh,*geom,data)),
           dopri5Conf(data.dopri5Conf), doerflerConf(data.doerflerConf), fix_c(fix_c)
     {
-        solver->wc.w = TaylorInitializer().wc(solver->tri.intrinsicTriangulation(),*geom).w;
+        solver->wc.w = taylor.wc(solver->tri.intrinsicTriangulation(),*geom).w;
         registerAll(eval_t, solver->h.size());
         registerAll(eval_a, solver->h.size());
         dp5s = DOPRI5_sample(solver->wc,solver->dt,solver->dt,0);
@@ -263,19 +263,20 @@ class TaylorVorticesCase : public TestCase{
 };
 
 
-void refineAndReset(TaylorVorticesCase& aCase, GeomP& geom) {
+void refineAndReset(TaylorVorticesCase& aCase, GeomP& geom, TaylorInitializer taylor) {
     //aCase.eval_a = Evaluator();
     //aCase.registerAll(aCase.eval_a, aCase.solver->h.size());
     for (int i = 0; i < 32; ++i) {
         aCase.solver->adapt();
-        aCase.solver->wc.w = TaylorInitializer().wc(aCase.solver->tri.intrinsicTriangulation(),*geom).w;
+        aCase.solver->wc.w = taylor.wc(aCase.solver->tri.intrinsicTriangulation(),*geom).w;
     }
-    aCase.solver->wc.w = TaylorInitializer().wc(aCase.solver->tri.intrinsicTriangulation(), *geom).w;
+    aCase.solver->wc.w = taylor.wc(aCase.solver->tri.intrinsicTriangulation(), *geom).w;
 }
 std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
     std::string name, std::string label,
     ManifoldSurfaceMesh& pmesh, VertexPositionGeometry& pgeom,
-    AdaptiveFluidSolverData d, bool fix_c = false
+    AdaptiveFluidSolverData d, bool fix_c = false,
+    TaylorInitializer taylor = TaylorInitializer()
     )
 {
 
@@ -284,9 +285,9 @@ std::shared_ptr<TaylorVorticesCase> makeTaylorCase(
     GeomP  geom= std::make_unique<VertexPositionGeometry>(*mesh,pgeom.vertexPositions.reinterpretTo(*mesh));
     // init data
 
-    auto aCase = std::make_shared<TaylorVorticesCase>( name, label, std::move(mesh), std::move(geom), d, fix_c);
+    auto aCase = std::make_shared<TaylorVorticesCase>( name, label, std::move(mesh), std::move(geom), d, fix_c,taylor);
 
-    if (d.adaptive_space) { refineAndReset(*aCase, aCase->geom); }
+    if (d.adaptive_space) { refineAndReset(*aCase, aCase->geom,taylor); }
 
     return aCase;
 }
@@ -418,6 +419,41 @@ TEST(EvaluatorTest, Evaluate)
     };
     init_ps(cpm);
 
+
+    cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(1.5); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3.0); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(4.5); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(6); cpm.visualize(cf.f_screenshots);
+
+    cpm.write(cf.fev);
+    copyFolder(cf.fev,cf.flatest);
+    cpm.visualize();
+    polyscope_view_hole();
+    polyscope::show();
+}
+
+TEST(EvaluatorTest, EvaluateHighGenus)
+{
+    CaseFolder cf("tc13");
+
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_16_holes.stl");
+    auto [meshO, geomO] = uniform_refine(*mesh,*geom,4);
+    // auto [meshO,geomO] = readManifoldSurfaceMesh(cf.fmodels/"cheese_oriented.stl");
+
+    Comparator cpm;
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolverData data_interp_ha= data_comp_h; data_interp_ha.interpolate_harmonic_basis = true; data_interp_ha.use_interpolated_harmonic_basis =true;
+    TaylorInitializer taylor = TaylorInitializer();
+    taylor.set_vortexPair(0.25, toGC(taylor.center));
+    cpm.testcases = {
+        makeTaylorCase("OR", "Original (Yin et al., 2023)", *meshO, *geomO, static_solver_data,false,taylor),
+        makeTaylorCase("AR", "Adaptive, recomputed h (AR)", *mesh, *geom, data_comp_h,false,taylor),
+        // makeTaylorCase("AI", "Adaptive, interpolated h (AI)", *mesh, *geom, data_interp_ha),
+    };
+    init_ps(cpm);
+
+    polyscope::show();
 
     cpm.visualize(cf.f_screenshots);
     cpm.runUntil(1.5); cpm.visualize(cf.f_screenshots);
@@ -886,7 +922,7 @@ TEST(CleanEvaluatorTest, Clean)
     for (const auto& entry : fs::directory_iterator(folder)) {
         if (entry.is_directory()) {
             const std::string name = entry.path().filename().string();
-            if (name.rfind("run_2025", 0) == 0) {  // name starts with "run_"
+            if (name.rfind("run_2026", 0) == 0) {  // name starts with "run_"
                 try {
                     fs::remove_all(entry.path());
                     std::cout << "Removed folder: " << entry.path() << std::endl;
