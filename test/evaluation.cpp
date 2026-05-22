@@ -202,7 +202,7 @@ class TaylorVorticesCase : public TestCase{
             FaceData<Vector3> e1(m),e2(m);
             for (Face f: m.faces()) { e1[f] = g.faceTangentBasis[f][0], e2[f] = g.faceTangentBasis[f][1];  }
 
-            polyscope_view_hole();
+            // polyscope_view_hole();
             auto* ftvq = pm->addFaceTangentVectorQuantity("u",solver->velocity().u, e1,e2);
             ftvq->setVectorColor(glm::vec3(121./255, 80./255, 242./255));
             ftvq->setEnabled(true);
@@ -583,18 +583,22 @@ TEST(EvaluatorTest, EvaluateAdapt)
     cpm.visualize();
     polyscope::show();
 }
-TEST(EvaluatorTest, EvaluatePerformance1)
+TEST(EvaluatorTest, PerformanceRecomputed)
 {
     CaseFolder cf("tc8");
 
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.001,false,true,MARKING_STRATEGY::PATTERN,false,false);
     AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
-    solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
-    while (solver.elapsed_time < 1) {
+    TaylorInitializer taylor = TaylorInitializer();
+    taylor.set_vortexPair(0.25, toGC(taylor.center));
+    solver.wc.w = taylor.wc(solver.tri.intrinsicTriangulation(),*geom).w;
+    auto s =Stopwatch();
+    while (solver.elapsed_time < 3) {
         solver.step();
     }
+    std::cout << "Elapsed " <<s.elapsed() << std::endl;
 }
 TEST(EvaluatorTest, EvaluatePerformance2)
 {
@@ -602,12 +606,30 @@ TEST(EvaluatorTest, EvaluatePerformance2)
 
     auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_min.stl");
 
-    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,true,true,MARKING_STRATEGY::PATTERN,true,true);
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.01,false,true,MARKING_STRATEGY::PATTERN,true,true);
     AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
-    solver.wc.w = TaylorInitializer().wc(solver.tri.intrinsicTriangulation(),*geom).w;
-    while (solver.elapsed_time < 1) {
+    TaylorInitializer taylor = TaylorInitializer();
+    taylor.set_vortexPair(0.25, toGC(taylor.center));
+    solver.wc.w = taylor.wc(solver.tri.intrinsicTriangulation(),*geom).w;
+    while (solver.elapsed_time < 3) {
         solver.step();
     }
+}
+
+TEST(EvaluatorTest, PerformanceRecomputed16Holes)
+{
+    CaseFolder cf("tc8");
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_16_holes.stl");
+    AdaptiveFluidSolverData data_comp_h(DOPRI5PresetConf::LOW,DoerflerPresetConf::LOW,0.001,false,true,MARKING_STRATEGY::PATTERN,false,false);
+    AdaptiveFluidSolver solver(*mesh,*geom, data_comp_h);
+    TaylorInitializer taylor = TaylorInitializer();
+    taylor.set_vortexPair(0.25, toGC(taylor.center));
+    solver.wc.w = taylor.wc(solver.tri.intrinsicTriangulation(),*geom).w;
+    auto s =Stopwatch();
+    while (solver.elapsed_time < 3) {
+        solver.step();
+    }
+    std::cout << "Elapsed " <<s.elapsed() << std::endl;
 }
 
 

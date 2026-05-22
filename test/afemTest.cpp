@@ -345,15 +345,17 @@ struct AdaptiveFluidVisualization {
 
         AdaptiveFluidSolverData data = solver? solver->data() : AdaptiveFluidSolverData();
         solver = std::make_unique<AdaptiveFluidSolver>(*pMesh,*pGeom,data);
-        solver->wc.w = TaylorInitializer().wc(solver->tri.intrinsicTriangulation(),*pGeom).w;
+        solver->wc.w = taylor.wc(solver->tri.intrinsicTriangulation(),*pGeom).w;
         for (int i = 0; i < start_refine; ++i) {
             solver->adapt();
+            solver->wc.w = taylor.wc(solver->tri.intrinsicTriangulation(),*pGeom).w;
         }
-        solver->wc.w = TaylorInitializer().wc(solver->tri.intrinsicTriangulation(),*pGeom).w;
         plotter = std::make_unique<AdaptiveFluidPlotter>(*solver);
     }
 
     AdaptiveFluidVisualization(std::string mesh = "") :selecter(mesh,pMesh,pGeom) {
+        taylor.set_vortexPair(0.25, toGC(taylor.center));
+        start_refine = 16;
         if(pMesh != nullptr) load();
     }
 
@@ -484,7 +486,7 @@ struct AdaptiveFluidVisualization {
 
 TEST(afemTest, AdaptiveFluidCohomology)
 {
-    AdaptiveFluidVisualization visA("cheese_min.stl");
+    AdaptiveFluidVisualization visA("cheese_16_holes.stl");
     visA.name = "Normal";
     AdaptiveFluidVisualization visB;
     visB.name = "Refined";
