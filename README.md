@@ -16,8 +16,8 @@ The code itself is of scientific nature and not production ready.
 ## Build
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=DebugWithRelease
-cmake --build build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build --parallel 8 
 ```
 
 ## Run
@@ -33,7 +33,7 @@ Perhaps of most interesting are the following tests:
 
 A specific test can be run similar to  
 ```shell
-./build/test/eider-test --gtest_filter=InteractiveTestName.*
+./build/test/eider-test --gtest_filter=AdaptiveFluidCohomology.Main
 ```
 
 TODO: First refactor, rename files,

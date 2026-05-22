@@ -484,7 +484,7 @@ struct AdaptiveFluidVisualization {
     }
 };
 
-TEST(afemTest, AdaptiveFluidCohomology)
+TEST(AdaptiveFluidCohomology, Main)
 {
     AdaptiveFluidVisualization visA("cheese_16_holes.stl");
     visA.name = "Normal";
@@ -505,89 +505,3 @@ TEST(afemTest, AdaptiveFluidCohomology)
     polyscope::show();
 }
 
-TEST(afemTest, testPathConsistency){
-    std::filesystem::path fds(__FILE__);
-    fds = fds.parent_path()/ "models" / "disk.stl";
-    auto [parent_m,parent_g] = readManifoldSurfaceMesh(fds.string());
-
-    AdaptiveTriangulation atri(*parent_m,*parent_g);
-    auto& icit = atri.intrinsicTriangulation();
-    ManifoldSurfaceMesh& m = atri.mesh();
-    IntrinsicGeometryInterface& g = atri.geom();
-
-    auto homotopy_b= greedy_homotopy_basis(m,g, arbitrary_base_face(m));
-    auto homologyBasis = singular_homology_basis(m,homotopy_b);
-
-    auto& h = homologyBasis;
-    for (int h_idx = 0; h_idx < h.size(); ++h_idx) {
-        icit.edgeSplitCallbackList.emplace_back([&,h_idx](Edge e, Halfedge he1, Halfedge he2) {
-          onSplit(e, he1, he2, h[h_idx].nextLeft); });
-    }
-    for (int h_idx = 0; h_idx < h.size(); ++h_idx) {
-        icit.edgeCollapseCallbackList.push_back([&,h_idx](Halfedge he) {
-          onCollapse(he, h[h_idx].nextLeft); });
-    }
-
-    bool first = true;
-    auto vis = [& ](){
-      m.compress();
-      VertexData<Vector3> int_positions(m) ;
-      for (Vertex v : m.vertices()) {
-          int_positions[v] = icit.vertexLocations[v].interpolate(parent_g->vertexPositions);
-      }
-
-
-
-      polyscope::SurfaceMesh* pm_A = polyscope::registerSurfaceMesh("original", parent_g->vertexPositions,parent_m->getFaceVertexList());
-      polyscope::SurfaceMesh* pm_B = polyscope::registerSurfaceMesh("Intrinsic", int_positions,m.getFaceVertexList());
-      pm_B->setAllPermutations(polyscopePermutations(m));
-      pm_A->addFaceScalarQuantity("index",parent_m->getFaceIndices());
-      pm_B->addFaceScalarQuantity("index",m.getFaceIndices());
-      pm_B->addEdgeScalarQuantity("edgeCoords",icit.normalCoordinates.edgeCoords);
-      pm_B->addHalfedgeScalarQuantity("roundabouts",icit.normalCoordinates.roundabouts);
-      pm_B->addVertexScalarQuantity("roundabouts degree",icit.normalCoordinates.roundaboutDegrees);
-      pm_B->addEdgeScalarQuantity("lenghts",icit.edgeLengths);
-      pm_A->setEdgeWidth(1);
-      pm_B->setEdgeWidth(1);
-      if(first){
-          pm_A->translate(glm::vec3(-1,0,0));
-          pm_B->translate(glm::vec3( 1,0,0)); first = false;
-      }
-      HalfedgeData<int> d(m,0);
-      for (int i = 0; i < homologyBasis.size(); ++i) {
-          for (Halfedge e: m.halfedges()){
-              if(homologyBasis[i].nextLeft[e].has_value()) {
-                  if (*homologyBasis[i].nextLeft[e]) d[e] = i*2+1; else d[e] = i*2+2;
-                  if (!e.isInterior()) d[e.twin()] = i*2+3;
-              }
-          }
-      }
-      pm_B->addHalfedgeScalarQuantity("Hom", d);
-    };
-
-
-    polyscope::init();
-    std::vector<Face> faces {  };
-    for (Face f: m.faces()) faces.push_back(f);
-    vis();
-
-    polyscope::state::userCallback = [&]()
-    {
-      if (ImGui::Button("Refine"))
-      {
-          std::vector<Face> faces {  };
-          for (Face f: m.faces()) faces.push_back(f);
-          atri.refine(faces);
-          vis();
-      }
-      if (ImGui::Button("Coarse")) {
-          std::vector<Face> faces {  };
-          for (Face f: m.faces()) faces.push_back(f);
-          atri.coarse(faces);
-          vis();
-      }
-        ImGui::ShowDemoWindow();
-    };
-
-    polyscope::show();
-}
