@@ -4,15 +4,15 @@
 namespace geometrycentral::surface {
 
 // Intrinsic geometry -> 2D UV coordinates scaled into [0,1)x[0,1)
-VertexData<Vector2> xy_plane(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& inputG) {
+VertexData<Vector2> xy_plane(ManifoldSurfaceMesh &mesh, VertexPositionGeometry &inputG) {
     VertexData<Vector2> uv(mesh);
     Vector2 min = Vector2::infinity();
     Vector2 max = -Vector2::infinity();
     for (Vertex v : mesh.vertices()) {
         Vector3 p = inputG.vertexPositions[v];
         uv[v] = Vector2(p.x, p.y);
-        min = componentwiseMin(uv[v],min);
-        max = componentwiseMax(uv[v],max);
+        min = componentwiseMin(uv[v], min);
+        max = componentwiseMax(uv[v], max);
     }
 
     Vector2 scale = max - min;
@@ -22,7 +22,7 @@ VertexData<Vector2> xy_plane(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& 
         scale.y = 1;
 
     // Normalize into [-1,1)x[-1,1)
-    double mscale = std::max(scale.x,scale.y)/2;
+    double mscale = std::max(scale.x, scale.y) / 2;
     for (Vertex v : mesh.vertices()) {
         uv[v].x = (uv[v].x) / mscale;
         uv[v].y = (uv[v].y) / mscale;
@@ -32,18 +32,17 @@ VertexData<Vector2> xy_plane(ManifoldSurfaceMesh& mesh, VertexPositionGeometry& 
 }
 
 // Intrinsic geometry -> 2D UV coordinates scaled into [0,1)x[0,1)
-VertexData<Vector2> xy_plane(IntrinsicTriangulation& Tri, VertexPositionGeometry& inputG) {
+VertexData<Vector2> xy_plane(IntrinsicTriangulation &Tri, VertexPositionGeometry &inputG) {
     auto &mesh = *Tri.intrinsicMesh;
     VertexData<Vector2> uv(mesh);
-
 
     Vector2 min = Vector2::infinity();
     Vector2 max = -Vector2::infinity();
     for (Vertex v : mesh.vertices()) {
         Vector3 p = Tri.vertexLocations[v].interpolate(inputG.vertexPositions);
         uv[v] = Vector2(p.x, p.y);
-        min = componentwiseMin(uv[v],min);
-        max = componentwiseMax(uv[v],max);
+        min = componentwiseMin(uv[v], min);
+        max = componentwiseMax(uv[v], max);
     }
 
     Vector2 scale = max - min;
@@ -53,7 +52,7 @@ VertexData<Vector2> xy_plane(IntrinsicTriangulation& Tri, VertexPositionGeometry
         scale.y = 1;
 
     // Normalize into [-1,1)x[-1,1)
-    double mscale = std::max(scale.x,scale.y)/2;
+    double mscale = std::max(scale.x, scale.y) / 2;
     for (Vertex v : mesh.vertices()) {
         uv[v].x = (uv[v].x) / mscale;
         uv[v].y = (uv[v].y) / mscale;
@@ -68,7 +67,7 @@ wc_wrapper init_taylor(SurfaceMesh &mesh, VertexData<Vector2> geo, double vortic
     double A = 1.0;
 
     for (Vertex v : mesh.vertices()) {
-        EigenVec2 pos(geo[v].x,geo[v].y);
+        EigenVec2 pos(geo[v].x, geo[v].y);
         // Bounding box check
         if (pos.x() < box_min.x() || pos.x() > box_max.x() ||
             pos.y() < box_min.y() || pos.y() > box_max.y()) {
@@ -96,7 +95,7 @@ void TaylorInitializer::callback() {
     }
 }
 wc_wrapper TaylorInitializer::wc(IntrinsicTriangulation &intTri, VertexPositionGeometry &pg) {
-    return init_taylor(*intTri.intrinsicMesh, xy_plane(intTri,pg), v_dist, offset, box_min, box_max);
+    return init_taylor(*intTri.intrinsicMesh, xy_plane(intTri, pg), v_dist, offset, box_min, box_max);
 }
 wc_wrapper TaylorInitializer::wc(ManifoldSurfaceMesh &mesh, VertexData<Vector2> &uv) {
     return init_taylor(mesh, uv, v_dist, offset, box_min, box_max);
@@ -105,13 +104,13 @@ wc_wrapper TaylorInitializer::wc(ManifoldSurfaceMesh &mesh, VertexData<Vector2> 
 void TaylorInitializer::set_vortexPair(double new_v_dist, const Vector2 &center) {
     v_dist = new_v_dist;
     // Region: 1 wavelength wide in x, 2 wavelengths tall in y
-    box_min = {center.x - v_dist * 0.5, center.y - v_dist*0.25};
-    box_max = {center.x + v_dist * 0.5, center.y + v_dist*0.25};
+    box_min = {center.x - v_dist * 0.5, center.y - v_dist * 0.25};
+    box_max = {center.x + v_dist * 0.5, center.y + v_dist * 0.25};
 
-    offset = EigenVec2(v_dist/4.f,0) ;
+    offset = EigenVec2(v_dist / 4.f, 0);
 }
 wc_wrapper TaylorInitializer::wc(ManifoldSurfaceMesh &mesh, VertexPositionGeometry &pg) {
-    return init_taylor(mesh, xy_plane(mesh,pg), v_dist, offset, box_min, box_max);
+    return init_taylor(mesh, xy_plane(mesh, pg), v_dist, offset, box_min, box_max);
 }
 
-}
+} // namespace geometrycentral::surface

@@ -2,8 +2,8 @@
 
 #include <geometrycentral/surface/intrinsic_geometry_interface.h>
 #include <geometrycentral/surface/manifold_surface_mesh.h>
-#include <vector>
 #include <optional>
+#include <vector>
 
 namespace geometrycentral::surface {
 struct Singular_Circle {

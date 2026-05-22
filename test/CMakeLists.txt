@@ -20,8 +20,8 @@ include(GoogleTest)
 gtest_discover_tests(eider-test)
 
 
-if(MSVC)
+if (MSVC)
     target_compile_options(eider PRIVATE /W4)
-else()
+else ()
     target_compile_options(eider PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+endif ()

@@ -30,8 +30,7 @@ wc_wrapper evalRHS(
     const wc_wrapper &wc,
     const std::vector<FaceData<Vector2>> &h,
     const StreamFunctionSolver &S,
-    std::vector<FaceData<double>>* face_dc = nullptr
-);
+    std::vector<FaceData<double>> *face_dc = nullptr);
 
 wc_wrapper RK4Step(
     ManifoldSurfaceMesh &mesh,
@@ -59,8 +58,11 @@ struct DOPRI5_conf {
     double facmin = 0.1;
 };
 
-
-enum class DOPRI5PresetConf{ VERY_LOW, LOW, MEDIUM, HIGH, VERY_HIGH };
+enum class DOPRI5PresetConf { VERY_LOW,
+                              LOW,
+                              MEDIUM,
+                              HIGH,
+                              VERY_HIGH };
 DOPRI5_conf DOPRI5Preset(DOPRI5PresetConf preset);
 
 struct DOPRI5_sample {

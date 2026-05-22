@@ -8,7 +8,7 @@ velocity_wrapper AdaptiveFluidSolver::velocity() {
     return ::geometrycentral::surface::velocity(tri.mesh(), tri.geom(), wc, h, S);
 }
 
-AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, const AdaptiveFluidSolverData& data)
+AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const AdaptiveFluidSolverData &data)
     : tri(mesh, geom, data.strategy), hom(tri.intrinsicTriangulation()), h(hom.harmonicBasis()), S(tri.mesh(), tri.geom()),
       conf(data.dopri5Conf), doerflerConf(data.doerflerConf), adapt_time(data.adaptive_time), adapte_space(data.adaptive_space),
       interpolate_h(data.interpolate_harmonic_basis), dt(data.dt),
@@ -19,10 +19,11 @@ AdaptiveFluidSolver::AdaptiveFluidSolver(ManifoldSurfaceMesh& mesh, IntrinsicGeo
         h_interpolated.resize(h.size());
         for (int i = 0; i < h.size(); ++i) {
             h_interpolated[i] = h[i];
-            tri.intrinsicTriangulation().edgeSplitCallbackList.push_back([&,i](Edge e, Halfedge he1, Halfedge he2) {
+            tri.intrinsicTriangulation().edgeSplitCallbackList.push_back([&, i](Edge e, Halfedge he1, Halfedge he2) {
                 Vector2 u = this->h_interpolated[i][he1.prevOrbitFace().twin().face()];
-                if (!u.isFinite()) u = Vector2(1,0);
-                for (Face f: he1.vertex().adjacentFaces()) {
+                if (!u.isFinite())
+                    u = Vector2(1, 0);
+                for (Face f : he1.vertex().adjacentFaces()) {
                     this->h_interpolated[i][f] = u;
                 }
             });
@@ -51,7 +52,6 @@ void AdaptiveFluidSolver::adapt() {
         }
     }
 
-
     VertexData<double> u(tri.mesh(), 0);
     S.solve(tri.mesh(), tri.geom(), u, wc.w);
     FaceData<double> eta = poisson_residual_error_sqr(tri.mesh(), tri.geom(), u, wc.w);
@@ -74,27 +74,33 @@ void AdaptiveFluidSolver::adapt() {
     tri.mesh().compress();
     // on the new mesh, now recompute the rest of the mesh
 
-    if (use_interpolated_h) h = h_interpolated; else h = hom.harmonicBasis();
+    if (use_interpolated_h)
+        h = h_interpolated;
+    else
+        h = hom.harmonicBasis();
 
     S.compute(tri.mesh(), tri.geom());
 }
 
 DOPRI5_sample AdaptiveFluidSolver::step() {
-    if(adapte_space) adapt();
+    if (adapte_space)
+        adapt();
 
     DOPRI5_sample dps;
-    if (adapt_time){
+    if (adapt_time) {
         dps = adaptive_step(tri.mesh(), tri.geom(), h, wc, dt, S, conf);
         wc = dps.wc;
         dt = dps.t_future;
-    }else {
-        wc = RK4Step(tri.mesh(),tri.geom(),h,wc,dt,S);
-        dps.wc = wc; dps.t_past = dt; dps.t_future = dt;
+    } else {
+        wc = RK4Step(tri.mesh(), tri.geom(), h, wc, dt, S);
+        dps.wc = wc;
+        dps.t_past = dt;
+        dps.t_future = dt;
     }
     elapsed_time += dps.t_past;
     return dps;
 }
 AdaptiveFluidSolverData AdaptiveFluidSolver::data() const {
-    return AdaptiveFluidSolverData(conf,doerflerConf,dt,adapt_time,adapte_space,MARKING_STRATEGY::PATTERN,interpolate_h,use_interpolated_h);
+    return AdaptiveFluidSolverData(conf, doerflerConf, dt, adapt_time, adapte_space, MARKING_STRATEGY::PATTERN, interpolate_h, use_interpolated_h);
 }
-}
+} // namespace geometrycentral::surface

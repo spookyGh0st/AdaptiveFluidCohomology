@@ -1,21 +1,24 @@
 #include "Evaluator.h"
 
 template <typename T>
-void exportCSV( std::ostream& out, const std::string& headerName, const std::vector<T>& baseColumn, const std::vector<EvVector>& evectors)
-{
+void exportCSV(std::ostream &out, const std::string &headerName, const std::vector<T> &baseColumn, const std::vector<EvVector> &evectors) {
     out << headerName;
-    for (auto const& ev : evectors) out << ",\"" << ev.name<< "\"";
+    for (auto const &ev : evectors)
+        out << ",\"" << ev.name << "\"";
     out << "\n";
 
     size_t rows = baseColumn.size();
-    for (auto const& ev : evectors) rows = std::max(rows, ev.data.size());
+    for (auto const &ev : evectors)
+        rows = std::max(rows, ev.data.size());
 
     for (size_t i = 0; i < rows; ++i) {
-        if (i < baseColumn.size()) out << baseColumn[i];
+        if (i < baseColumn.size())
+            out << baseColumn[i];
         out << "";
-        for (auto const& ev : evectors) {
+        for (auto const &ev : evectors) {
             out << ",";
-            if (i < ev.data.size()) out << ev.data[i];
+            if (i < ev.data.size())
+                out << ev.data[i];
         }
         out << "\n";
     }
@@ -36,9 +39,9 @@ void to_csv(const DoeflerConf &conf, const std::filesystem::path &filename) {
 
     // Refine row
     file << "$\\theta_r$," << std::fixed << std::setprecision(3) << conf.theta_refine << std::endl;
-    file << "$\\epsilon_r$," << std::scientific << std::setprecision(1) << conf.threshold_refine << std::endl;  // scientific for threshold
+    file << "$\\epsilon_r$," << std::scientific << std::setprecision(1) << conf.threshold_refine << std::endl; // scientific for threshold
     file << "$\\theta_c$," << std::fixed << std::setprecision(3) << conf.theta_coarse << std::endl;
-    file << "$\\epsilon_c$," << std::scientific << std::setprecision(1) << conf.threshold_coarse << std::endl;  // scientific for threshold
+    file << "$\\epsilon_c$," << std::scientific << std::setprecision(1) << conf.threshold_coarse << std::endl; // scientific for threshold
 
     file.close();
 }
@@ -109,7 +112,6 @@ void registerProperties(Evaluator &ev, ExportProperty p, int h_size) {
     if (p & EXPORT_velocity)
         ev.reg(R"($\|u\|_2$)", [](EvData d) { return L2Norm(d.vel.u, d.geom); });
 
-
     if (p & EXPORT_nF)
         ev.reg(R"($\#F$)", [](EvData d) { return d.mesh.nFaces(); });
 
@@ -119,34 +121,39 @@ void registerProperties(Evaluator &ev, ExportProperty p, int h_size) {
     if (p & EXPORT_DHC_HI) {
         for (int i = 0; i < h_size; ++i)
             ev.reg(R"($\| h_IDX()" + std::to_string(i) + R"() - \widehat{h}_IDX($)" + std::to_string(i) + R"()  \|_2)",
-                   [i](EvData d) { return L2Norm(d.h[i] - d.h_interpol[i],d.geom); });
+                   [i](EvData d) { return L2Norm(d.h[i] - d.h_interpol[i], d.geom); });
     }
 
     if (p & EXPORT_Vort_Y) {
-            ev.reg("vorticity center",
-                   [](EvData d) {
-                       Vertex high_v; double max = std::numeric_limits<double>::lowest();
-                       for (Vertex v: d.mesh.vertices()) { if (d.wc.w[v] > max) {high_v = v; max = d.wc.w[v];} }
-                       return d.vertexPosition[high_v].y;
-                   });
+        ev.reg("vorticity center",
+               [](EvData d) {
+                   Vertex high_v;
+                   double max = std::numeric_limits<double>::lowest();
+                   for (Vertex v : d.mesh.vertices()) {
+                       if (d.wc.w[v] > max) {
+                           high_v = v;
+                           max = d.wc.w[v];
+                       }
+                   }
+                   return d.vertexPosition[high_v].y;
+               });
     }
 }
 
 ExportProperty defaultTimeProperties() {
-    ExportProperty flags = (
-        EXPORT_DT |
-        // EXPORT_ATTEMPTS |
-        EXPORT_velocity |
-        EXPORT_int_psi |
-        EXPORT_int_w |
-        EXPORT_int_dwdt |
-        EXPORT_WTST |
-        EXPORT_RESIDUAL |
-        EXPORT_C |
-        EXPORT_dCdW
-        // EXPORT_nF |
-        // EXPORT_nV |
-        // EXPORT_DHC_HI
+    ExportProperty flags = (EXPORT_DT |
+                            // EXPORT_ATTEMPTS |
+                            EXPORT_velocity |
+                            EXPORT_int_psi |
+                            EXPORT_int_w |
+                            EXPORT_int_dwdt |
+                            EXPORT_WTST |
+                            EXPORT_RESIDUAL |
+                            EXPORT_C |
+                            EXPORT_dCdW
+                            // EXPORT_nF |
+                            // EXPORT_nV |
+                            // EXPORT_DHC_HI
     );
     return flags;
 }

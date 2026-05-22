@@ -1,12 +1,12 @@
 #include "refine.h"
 
-#include <unordered_set>
 #include "util.h"
+#include <unordered_set>
 
 namespace geometrycentral::surface {
 
-CornerData<bool> mark_longest_edge(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom) {
-    CornerData<bool> marked_corner(mesh,false);
+CornerData<bool> mark_longest_edge(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom) {
+    CornerData<bool> marked_corner(mesh, false);
     geom.requireEdgeLengths();
     for (Face f : mesh.faces()) {
         double maxEl = std::numeric_limits<double>::lowest();
@@ -23,40 +23,45 @@ CornerData<bool> mark_longest_edge(ManifoldSurfaceMesh& mesh, IntrinsicGeometryI
     return marked_corner;
 }
 
-CornerData<bool> mark_pattern(ManifoldSurfaceMesh& mesh) {
-    CornerData<bool> marked_corner(mesh,false);
+CornerData<bool> mark_pattern(ManifoldSurfaceMesh &mesh) {
+    CornerData<bool> marked_corner(mesh, false);
     std::vector<Halfedge> se;
     auto isMarked = [&](Face f) {for (Corner c: f.adjacentCorners()) { if (marked_corner[c]) return true; } return false; };
-    for (Edge e: mesh.edges()) {
+    for (Edge e : mesh.edges()) {
         if (!e.isBoundary()) {
-            se.push_back(e.halfedge()); break;
+            se.push_back(e.halfedge());
+            break;
         }
     }
     while (!se.empty()) {
-        Halfedge e = se.back(); se.pop_back();
+        Halfedge e = se.back();
+        se.pop_back();
         std::vector<Halfedge> border;
-        for (Halfedge he: e.edge().adjacentHalfedges()) {
-            if (!he.isInterior()) continue;
-            if (isMarked(he.face())) continue;
+        for (Halfedge he : e.edge().adjacentHalfedges()) {
+            if (!he.isInterior())
+                continue;
+            if (isMarked(he.face()))
+                continue;
             marked_corner[he.next().next().corner()] = true;
             if (he.next().twin().isInterior())
                 border.push_back(he.next().twin().prevOrbitFace());
             if (he.next().next().twin().isInterior())
                 border.push_back(he.next().next().twin().next());
         }
-        for (Halfedge he:border) {
-            if (isMarked(he.face())) continue;
+        for (Halfedge he : border) {
+            if (isMarked(he.face()))
+                continue;
             se.push_back(he);
         }
     }
     return marked_corner;
 }
 
-CornerData<bool> mark_random(ManifoldSurfaceMesh& mesh) {
-    CornerData<bool> marked_corner(mesh,false);
+CornerData<bool> mark_random(ManifoldSurfaceMesh &mesh) {
+    CornerData<bool> marked_corner(mesh, false);
     std::mt19937 gen(22);
     std::uniform_int_distribution<int> dist(0, 3);
-    for (Face f: mesh.faces()) {
+    for (Face f : mesh.faces()) {
         Halfedge he = f.halfedge();
         for (int i = 0; i < dist(gen); ++i) {
             he = he.next();
@@ -66,54 +71,61 @@ CornerData<bool> mark_random(ManifoldSurfaceMesh& mesh) {
     return marked_corner;
 }
 
-CornerData<bool> mark_faces(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, MARKING_STRATEGY marking) {
+CornerData<bool> mark_faces(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, MARKING_STRATEGY marking) {
     switch (marking) {
     case MARKING_STRATEGY::LONGEST_EDGE:
-        return mark_longest_edge(mesh,geom);
+        return mark_longest_edge(mesh, geom);
     case MARKING_STRATEGY::PATTERN:
         return mark_pattern(mesh);
     case MARKING_STRATEGY::RANDOM:
         return mark_random(mesh);
-    default: ;
+    default:;
         throw std::runtime_error("Not Implemented");
     }
 }
 
-AdaptiveTriangulation::AdaptiveTriangulation(ManifoldSurfaceMesh& mesh, IntrinsicGeometryInterface& geom, MARKING_STRATEGY marking)
-    :tri(mesh,geom), idx(*tri.intrinsicMesh), marked_corner(mark_faces(*tri.intrinsicMesh, tri,marking)) {
+AdaptiveTriangulation::AdaptiveTriangulation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, MARKING_STRATEGY marking)
+    : tri(mesh, geom), idx(*tri.intrinsicMesh), marked_corner(mark_faces(*tri.intrinsicMesh, tri, marking)) {
 }
 
 Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer *transfer) {
-    assert (he.isInterior());
+    assert(he.isInterior());
     assert(marked_corner[he.oppositeCorner()]);
-    if (he.twin().isInterior()) { assert(marked_corner[he.twin().oppositeCorner()]); }
+    if (he.twin().isInterior()) {
+        assert(marked_corner[he.twin().oppositeCorner()]);
+    }
 
     Halfedge twin_he = he.twin();
     Vertex vi = he.tailVertex(), vj = he.tipVertex();
 
-    Quad q(he,tri);
+    Quad q(he, tri);
     he = tri.splitEdge(he, 0.5);
-    Diamond d(he,tri);
+    Diamond d(he, tri);
 
     // If transfer is supplied, update that
-    if(transfer) { transfer->refineEdge(SplitData(q,d)); }
+    if (transfer) {
+        transfer->refineEdge(SplitData(q, d));
+    }
 
     // ensure indices are kept in order
     assert(twin_he.tipVertex() == he.tailVertex());
-    assert(he.tipVertex() == vj );
+    assert(he.tipVertex() == vj);
     if (he.isInterior()) {
         Face fl = he.prevOrbitFace().twin().face(), fr = he.face();
-        if (idx[fl] > idx[fr]) std::swap(idx[fl],idx[fr]);
+        if (idx[fl] > idx[fr])
+            std::swap(idx[fl], idx[fr]);
     }
-    assert(twin_he.tailVertex() == vj );
+    assert(twin_he.tailVertex() == vj);
     if (twin_he.isInterior()) {
         Face fl = twin_he.face(), fr = twin_he.next().twin().face();
-         if (idx[fl] > idx[fr]) std::swap(idx[fl],idx[fr]);
+        if (idx[fl] > idx[fr])
+            std::swap(idx[fl], idx[fr]);
     }
 
     // Update refinement edges
     for (Halfedge he_o : he.vertex().outgoingHalfedges()) {
-        if (!he_o.isInterior()) continue;
+        if (!he_o.isInterior())
+            continue;
         setRefinementEdge(he_o.next());
     }
 
@@ -121,12 +133,13 @@ Halfedge AdaptiveTriangulation::vertex_bisection(Halfedge he, AdaptiveTransfer *
 }
 
 void AdaptiveTriangulation::refine(std::vector<Face> faces, AdaptiveTransfer *transfer) {
-    FaceData<bool> marked_faces (mesh(),false);
+    FaceData<bool> marked_faces(mesh(), false);
     std::unordered_set<Edge> start_edges;
 
-    start_edges.reserve(faces.size()*2);
+    start_edges.reserve(faces.size() * 2);
 
-    if(transfer) transfer->startRefine();
+    if (transfer)
+        transfer->startRefine();
 
     while (!faces.empty()) {
         Face f = faces.back();
@@ -145,12 +158,13 @@ void AdaptiveTriangulation::refine(std::vector<Face> faces, AdaptiveTransfer *tr
         Edge e = *start_edges.begin();
         start_edges.erase(start_edges.begin());
 
-        if(e.halfedge().isInterior()) marked_faces[e.halfedge().face()] = false;
-        if(e.halfedge().twin().isInterior()) marked_faces[e.halfedge().twin().face()] = false;
+        if (e.halfedge().isInterior())
+            marked_faces[e.halfedge().face()] = false;
+        if (e.halfedge().twin().isInterior())
+            marked_faces[e.halfedge().twin().face()] = false;
 
         Halfedge split_he = e.halfedge().isInterior() ? e.halfedge() : e.halfedge().twin();
-        Vertex new_v = vertex_bisection(split_he,transfer).vertex();
-
+        Vertex new_v = vertex_bisection(split_he, transfer).vertex();
 
         // Check if we can now refine one of the neighbours, i.e.
         // if the primal edge of one of the neighbours is one
@@ -170,7 +184,8 @@ void AdaptiveTriangulation::refine(std::vector<Face> faces, AdaptiveTransfer *tr
     }
     assert(!marked_faces.raw().any()); // If this is the case, then we didn't process all faces!
 
-    if(transfer) transfer->endRefine();
+    if (transfer)
+        transfer->endRefine();
     tri.refreshQuantities();
 }
 
@@ -180,7 +195,8 @@ Halfedge AdaptiveTriangulation::coarse_halfedge(Vertex v) {
     std::size_t min_idx = std::numeric_limits<std::size_t>::max();
     Halfedge he;
     for (Halfedge ohe : v.outgoingHalfedges()) {
-        if (!ohe.isInterior()) continue;
+        if (!ohe.isInterior())
+            continue;
         std::size_t f_idx = idx[ohe.face()];
         if (f_idx < min_idx) {
             min_idx = f_idx;
@@ -198,11 +214,12 @@ Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveTransfer *tr
     // TODO: Assert left face has smaller idx then right face
     assert(he.isInterior());
     std::size_t l_idx = idx[he.prevOrbitFace().twin().face()];
-    std::size_t r_idx = he.twin().isInterior()? idx[he.twin().face()] : -1;
+    std::size_t r_idx = he.twin().isInterior() ? idx[he.twin().face()] : -1;
 
     // Assert all adjacent faces have the refinement edges opposite to this vertex
-    for (Halfedge ohe: he.vertex().outgoingHalfedges()) {
-        if (!ohe.isInterior()) continue;
+    for (Halfedge ohe : he.vertex().outgoingHalfedges()) {
+        if (!ohe.isInterior())
+            continue;
         assert(getRefinementEdge(ohe.face()) == ohe.next());
     }
 
@@ -210,17 +227,22 @@ Halfedge AdaptiveTriangulation::vertex_biunion(Halfedge he, AdaptiveTransfer *tr
     Vertex vj = he.tipVertex();
     Vertex vp = he.tailVertex();
 
-    Diamond d(he,tri);
+    Diamond d(he, tri);
     he = tri.collapseEdgeTriangular(he);
-    Quad q(he,tri);
+    Quad q(he, tri);
     assert(vi == he.tailVertex());
     assert(vj == he.tipVertex());
 
     // Update Inverse coarsening map
-    if(transfer){ transfer->coarseEdge(SplitData(q,d)); }
+    if (transfer) {
+        transfer->coarseEdge(SplitData(q, d));
+    }
 
     // update refinement edges
-    for (Halfedge ahe: he.edge().adjacentHalfedges()) { if (ahe.isInterior()) setRefinementEdge(ahe); }
+    for (Halfedge ahe : he.edge().adjacentHalfedges()) {
+        if (ahe.isInterior())
+            setRefinementEdge(ahe);
+    }
 
     // update index;
     idx[he.face()] = l_idx;
@@ -239,21 +261,26 @@ inline bool vertex_is_good(IntrinsicTriangulation &T, Vertex v) {
     return (v.isBoundary() && v.faceDegree() == 2) || (!v.isBoundary() && v.faceDegree() == 4);
 }
 
-inline bool vertexMarked(Vertex v, const FaceData<bool>& marked_faces){
-    for(Face f:v.adjacentFaces()) if (!marked_faces[f]) return false;
+inline bool vertexMarked(Vertex v, const FaceData<bool> &marked_faces) {
+    for (Face f : v.adjacentFaces())
+        if (!marked_faces[f])
+            return false;
     return true;
 }
 
 void AdaptiveTriangulation::coarse(const std::vector<Face> &f, AdaptiveTransfer *transfer) {
-    if(transfer) transfer->startCoarse();
+    if (transfer)
+        transfer->startCoarse();
 
     // Mark all potential good vertices, i.e. these vertices with only marked faces around it
-    FaceData<bool> marked_faces(mesh(),false);
-    for (Face f: f){ marked_faces[f] = true;}
+    FaceData<bool> marked_faces(mesh(), false);
+    for (Face f : f) {
+        marked_faces[f] = true;
+    }
 
     std::unordered_set<Vertex> good_vertices{};
     for (Vertex v : tri.intrinsicMesh->vertices()) {
-        if (vertex_is_good(tri, v) && vertexMarked(v,marked_faces))
+        if (vertex_is_good(tri, v) && vertexMarked(v, marked_faces))
             good_vertices.insert(v);
     }
 
@@ -263,26 +290,27 @@ void AdaptiveTriangulation::coarse(const std::vector<Face> &f, AdaptiveTransfer 
         good_vertices.erase(v);
 
         Halfedge he = coarse_halfedge(v);
-        he = vertex_biunion(he,transfer);
+        he = vertex_biunion(he, transfer);
         assert(he != Halfedge());
 
         std::array<Vertex, 2> adjacent_v;
         adjacent_v[0] = he.next().tipVertex();
-        if (he.twin().isInterior()){
+        if (he.twin().isInterior()) {
             adjacent_v[1] = he.twin().next().tipVertex();
-
         }
 
         for (Vertex nv : adjacent_v) {
-            if (vertex_is_good(tri, nv) && vertexMarked(nv,marked_faces))
+            if (vertex_is_good(tri, nv) && vertexMarked(nv, marked_faces))
                 good_vertices.insert(nv);
         }
 
         // unmark adjacent faces
-        for(Halfedge he: he.edge().adjacentHalfedges())
-            if(he.isInterior()) marked_faces[he.face()] = false;
+        for (Halfedge he : he.edge().adjacentHalfedges())
+            if (he.isInterior())
+                marked_faces[he.face()] = false;
     }
-    if (transfer) transfer->endCoarse();
+    if (transfer)
+        transfer->endCoarse();
     tri.refreshQuantities();
 }
 
@@ -310,22 +338,23 @@ double etaRSqr(Face T, IntrinsicGeometryInterface &geom, const VertexData<double
             auto n_e = geom.halfedgeVectorsInFace[he].rotateCW(PI / 2).normalize();
             j += dot(grad(geom, he.face(), u), n_e);
         }
-        jump_sum += h_e * j*j *l_e;
+        jump_sum += h_e * j * j * l_e;
     }
     jump_sum *= 1. / 2.;
-    return h_t * h_t * (std::pow(f_st + lu, 2) ) + jump_sum;
+    return h_t * h_t * (std::pow(f_st + lu, 2)) + jump_sum;
 }
 
 void AdaptiveTriangulation::setRefinementEdge(Halfedge he) {
-    for (Halfedge fhe: he.face().adjacentHalfedges())
+    for (Halfedge fhe : he.face().adjacentHalfedges())
         marked_corner[fhe.corner()] = false;
     marked_corner[he.oppositeCorner()] = true;
 }
 
 Halfedge AdaptiveTriangulation::getRefinementEdge(Face f) {
     Halfedge he;
-    for (Halfedge fhe: f.adjacentHalfedges())
-        if (marked_corner[fhe.oppositeCorner()]) he= fhe;
+    for (Halfedge fhe : f.adjacentHalfedges())
+        if (marked_corner[fhe.oppositeCorner()])
+            he = fhe;
     return he;
 }
 
@@ -341,14 +370,20 @@ FaceData<double> poisson_residual_error_sqr(ManifoldSurfaceMesh &mesh, Intrinsic
     return eta;
 }
 
-std::array<std::vector<Face>,2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, const DoeflerConf& conf) {
+std::array<std::vector<Face>, 2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, const DoeflerConf &conf) {
     if (conf.theta_refine == 1) {
-        std::vector<Face> faces; faces.reserve(mesh.nFaces());
-        for (Face f:mesh.faces()) faces.push_back(f); return {faces,{}};
+        std::vector<Face> faces;
+        faces.reserve(mesh.nFaces());
+        for (Face f : mesh.faces())
+            faces.push_back(f);
+        return {faces, {}};
     }
     if (conf.theta_coarse == 1) {
-        std::vector<Face> faces; faces.reserve(mesh.nFaces());
-        for (Face f:mesh.faces()) faces.push_back(f); return std::array<std::vector<Face>,2>({ {}, faces });
+        std::vector<Face> faces;
+        faces.reserve(mesh.nFaces());
+        for (Face f : mesh.faces())
+            faces.push_back(f);
+        return std::array<std::vector<Face>, 2>({{}, faces});
     }
     if (mesh.nFaces() == 0)
         return {};
@@ -369,84 +404,87 @@ std::array<std::vector<Face>,2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceD
     for (int i = faces.size() - 1; i >= 0; --i) {
         if (residual[faces[i]] > conf.threshold_refine && accum_res <= conf.theta_refine * total_res)
             mark_refine.push_back(faces[i]);
-        else break;
+        else
+            break;
         accum_res += residual[faces[i]];
     }
     accum_res = 0;
     for (int i = 0; i < faces.size(); ++i) {
-        if (residual[faces[i]]< conf.threshold_coarse && accum_res <= conf.theta_coarse*total_res)
+        if (residual[faces[i]] < conf.threshold_coarse && accum_res <= conf.theta_coarse * total_res)
             mark_coarse.push_back(faces[i]);
-        else break;
+        else
+            break;
         accum_res += residual[faces[i]];
     }
-    return { mark_refine, mark_coarse };
+    return {mark_refine, mark_coarse};
 }
 
 DoeflerConf DoerflerPreset(DoerflerPresetConf preset) {
     DoeflerConf conf;
     switch (preset) {
     case DoerflerPresetConf::VERY_LOW: // Conservative refinement
-        conf.theta_refine     = 0.3;
+        conf.theta_refine = 0.3;
         conf.threshold_refine = (1e-1) * 4;
-        conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = (1e-2)*4;
+        conf.theta_coarse = 0.3;
+        conf.threshold_coarse = (1e-2) * 4;
         break;
     case DoerflerPresetConf::LOW: // Conservative refinement
-        conf.theta_refine     = 0.3;
+        conf.theta_refine = 0.3;
         conf.threshold_refine = 1e-1;
-        conf.theta_coarse     = 0.3;
+        conf.theta_coarse = 0.3;
         conf.threshold_coarse = 1e-2;
         break;
     case DoerflerPresetConf::MEDIUM: // Conservative refinement
-        conf.theta_refine     = 0.3;
-        conf.threshold_refine = (1e-1)*0.2;
-        conf.theta_coarse     = 0.3;
-        conf.threshold_coarse = (2e-2)*0.2;
+        conf.theta_refine = 0.3;
+        conf.threshold_refine = (1e-1) * 0.2;
+        conf.theta_coarse = 0.3;
+        conf.threshold_coarse = (2e-2) * 0.2;
         break;
     case DoerflerPresetConf::HIGH: // Conservative refinement
-        conf.theta_refine     = 0.3;
+        conf.theta_refine = 0.3;
         conf.threshold_refine = 1e-2;
-        conf.theta_coarse     = 0.3;
+        conf.theta_coarse = 0.3;
         conf.threshold_coarse = 1e-3;
         break;
     case DoerflerPresetConf::VERY_HIGH: // Conservative refinement
-        conf.theta_refine     = 0.3;
+        conf.theta_refine = 0.3;
         conf.threshold_refine = 1e-3;
-        conf.theta_coarse     = 0.3;
+        conf.theta_coarse = 0.3;
         conf.threshold_coarse = 1e-4;
         break;
     case DoerflerPresetConf::UNIFORM_REFINE:
-        conf.theta_refine     = 1.0;   // force refine
-        conf.threshold_refine = 0.0;   // no threshold
-        conf.theta_coarse     = 0.0;   // disable coarsening
-        conf.threshold_coarse = 0.0;   // disable coarsening
+        conf.theta_refine = 1.0;     // force refine
+        conf.threshold_refine = 0.0; // no threshold
+        conf.theta_coarse = 0.0;     // disable coarsening
+        conf.threshold_coarse = 0.0; // disable coarsening
         break;
     case DoerflerPresetConf::UNIFORM_COARSE:
-        conf.theta_refine     = 0.0;   // disable refining
-        conf.threshold_refine = 1e9;   // effectively prevent refining
-        conf.theta_coarse     = 1.0;   // force coarsening
-        conf.threshold_coarse = 1e9;   // no threshold
+        conf.theta_refine = 0.0;     // disable refining
+        conf.threshold_refine = 1e9; // effectively prevent refining
+        conf.theta_coarse = 1.0;     // force coarsening
+        conf.threshold_coarse = 1e9; // no threshold
         break;
     }
     return conf;
 }
 
-IncrementingIndex::IncrementingIndex(ManifoldSurfaceMesh &mesh) : idx(mesh,invalidIdx) {}
+IncrementingIndex::IncrementingIndex(ManifoldSurfaceMesh &mesh) : idx(mesh, invalidIdx) {}
 
 std::size_t &IncrementingIndex::operator[](Face f) {
-    if (idx[f] == invalidIdx) idx[f] = current++;
+    if (idx[f] == invalidIdx)
+        idx[f] = current++;
     return idx[f];
 }
 
 void IncrementingIndex::compress() {
     std::vector<Face> faces;
     faces.reserve(idx.getMesh()->nVertices());
-    for(Face f: idx.getMesh()->faces()){
+    for (Face f : idx.getMesh()->faces()) {
         faces.push_back(f);
     }
-    std::ranges::sort(faces,[&](Face f1, Face f2) { return this->operator[](f1) < this->operator[](f2); } );
+    std::ranges::sort(faces, [&](Face f1, Face f2) { return this->operator[](f1) < this->operator[](f2); });
     for (int i = 0; i < faces.size(); ++i) {
         idx[faces[i]] = i;
     }
 }
-}
+} // namespace geometrycentral::surface

@@ -48,7 +48,7 @@ velocity_wrapper velocity(
             u[face] += wc.c[i] * h[i][face];
 
     geom.unrequireHalfedgeVectorsInFace();
-    return {f, u };
+    return {f, u};
 }
 
 wc_wrapper evalRHS(
@@ -57,9 +57,7 @@ wc_wrapper evalRHS(
     const wc_wrapper &wc,
     const std::vector<FaceData<Vector2>> &h,
     const StreamFunctionSolver &S,
-    std::vector<FaceData<double>>* face_dc
-    )
-{
+    std::vector<FaceData<double>> *face_dc) {
     geom.requireFaceAreas();
     geom.requireHalfedgeVectorsInFace();
     auto u = velocity(mesh, geom, wc, h, S);
@@ -74,10 +72,11 @@ wc_wrapper evalRHS(
         dw[v] = -derive(v, u.u, geom, wc.w);
     }
     std::vector<double> dc(wc.c.size(), 0);
-    for (std::size_t i = 0; i < wc.c.size(); i++){
-        for (Face f : mesh.faces()){
+    for (std::size_t i = 0; i < wc.c.size(); i++) {
+        for (Face f : mesh.faces()) {
             auto dcf = dot(l[f], h[i][f]) * geom.faceAreas[f];
-            if(face_dc) face_dc->at(i)[f] = dcf;
+            if (face_dc)
+                face_dc->at(i)[f] = dcf;
             dc[i] += dcf;
         }
     }
@@ -126,7 +125,7 @@ wc_wrapper RK6_2(const std::array<double, 7> &b, const wc_wrapper &y0, double h,
 }
 
 // TODO: Rewrite, think  about this!
-double error(ManifoldSurfaceMesh &mesh,IntrinsicGeometryInterface& geom, const wc_wrapper &y0, wc_wrapper &y1, wc_wrapper &y_hat, const double &Atol_i, const double &Rtol_i) {
+double error(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, const wc_wrapper &y0, wc_wrapper &y1, wc_wrapper &y_hat, const double &Atol_i, const double &Rtol_i) {
     double err_w = 0, err_c = 0;
     double sum = 0;
     {
@@ -146,8 +145,8 @@ double error(ManifoldSurfaceMesh &mesh,IntrinsicGeometryInterface& geom, const w
     double n = (mesh.nVertices() + y0.c.size());
     return std::sqrt(sum / n);
 
-    err_c = std::sqrt(err_c/y0.c.size());
-    return err_w  + err_c;
+    err_c = std::sqrt(err_c / y0.c.size());
+    return err_w + err_c;
 }
 
 inline double compute_h_new(double h, double err, double q, double facmin, double facmax) {
@@ -176,7 +175,7 @@ std::array<wc_wrapper, 2> DOPRI5(const wc_wrapper &y0, double h, const F_type &F
 
 DOPRI5_sample DOPRI5_step(
     ManifoldSurfaceMesh &mesh,
-    IntrinsicGeometryInterface& geom,
+    IntrinsicGeometryInterface &geom,
     const wc_wrapper &y0,
     double h,
     const F_type &F,
@@ -209,7 +208,7 @@ DOPRI5_sample adaptive_step(
     const StreamFunctionSolver &S,
     const DOPRI5_conf &conf) {
     F_type F = [&mesh, &geom, &h, &S](const wc_wrapper &wc) -> wc_wrapper { return evalRHS(mesh, geom, wc, h, S); };
-    return DOPRI5_step(mesh,geom, x, dt, F, conf);
+    return DOPRI5_step(mesh, geom, x, dt, F, conf);
 }
 DOPRI5_conf DOPRI5Preset(DOPRI5PresetConf preset) {
     DOPRI5_conf conf;

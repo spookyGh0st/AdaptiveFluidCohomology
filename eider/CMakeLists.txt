@@ -11,8 +11,8 @@ target_include_directories(eider INTERFACE
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-if(MSVC)
-        target_compile_options(eider PRIVATE /W4)
-else()
-        target_compile_options(eider PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+if (MSVC)
+    target_compile_options(eider PRIVATE /W4)
+else ()
+    target_compile_options(eider PRIVATE -Wall -Wextra -Wpedantic)
+endif ()

@@ -6,9 +6,12 @@ Singular_Circle::Singular_Circle(ManifoldSurfaceMesh &mesh, const std::vector<Ha
         Halfedge he = circle[i];
         Halfedge nhe = circle[(i + 1) % circle.size()];
         // if we are at the boundary, we set this to an arbitrary value
-        if (!he.isInterior()) { nextLeft[he] = true; continue; }
+        if (!he.isInterior()) {
+            nextLeft[he] = true;
+            continue;
+        }
         // otherwise to either left or false
-        if (he.next().twin() == nhe){
+        if (he.next().twin() == nhe) {
             nextLeft[he] = false;
         } else {
             assert(he.next().next().twin() == nhe);
@@ -25,9 +28,10 @@ Halfedge Singular_Circle_Iterator::operator*() const {
 Singular_Circle_Iterator &Singular_Circle_Iterator::operator++() {
     auto nl = circle.nextLeft[current];
     assert(nl.has_value());
-    if(!current.isInterior()) current = start;
+    if (!current.isInterior())
+        current = start;
     else {
-        if(*nl)
+        if (*nl)
             current = current.next().next().twin();
         else
             current = current.next().twin();
@@ -42,11 +46,11 @@ bool Singular_Circle_Iterator::operator!=(
     started = true;
     return true;
 }
-Halfedge startHe(const Singular_Circle & circle) {
-    const auto& m = circle.nextLeft.getMesh();
-    if(m->hasBoundary()){
-        for (const auto& b: m->boundaryLoops()) {
-            for (Halfedge he : b.adjacentHalfedges()){
+Halfedge startHe(const Singular_Circle &circle) {
+    const auto &m = circle.nextLeft.getMesh();
+    if (m->hasBoundary()) {
+        for (const auto &b : m->boundaryLoops()) {
+            for (Halfedge he : b.adjacentHalfedges()) {
                 assert(he.twin().isInterior());
                 if (circle.nextLeft[he.twin()].has_value())
                     return he.twin();
@@ -55,8 +59,9 @@ Halfedge startHe(const Singular_Circle & circle) {
     }
 
     Halfedge start_e;
-    for(Halfedge he: circle.nextLeft.getMesh()->halfedges()){
-        if (circle.nextLeft[he].has_value()) return he;
+    for (Halfedge he : circle.nextLeft.getMesh()->halfedges()) {
+        if (circle.nextLeft[he].has_value())
+            return he;
     }
     throw std::runtime_error("This should never be reached");
 }

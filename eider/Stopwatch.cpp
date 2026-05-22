@@ -1,7 +1,8 @@
 #include "Stopwatch.h"
 Stopwatch::Stopwatch() : start_time(std::chrono::high_resolution_clock::now()), running(true) {}
 std::chrono::duration<double> Stopwatch::stop() {
-    if (!running) return elapsed_ms;
+    if (!running)
+        return elapsed_ms;
     auto end_time = std::chrono::high_resolution_clock::now();
     elapsed_ms = std::chrono::duration<double>(end_time - start_time);
     running = false;

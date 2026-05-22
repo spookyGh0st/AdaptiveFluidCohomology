@@ -28,7 +28,7 @@ enum class MARKING_STRATEGY {
 
 class AdaptiveTriangulation {
   public:
-    AdaptiveTriangulation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface& geom, MARKING_STRATEGY = MARKING_STRATEGY::LONGEST_EDGE);
+    AdaptiveTriangulation(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, MARKING_STRATEGY = MARKING_STRATEGY::LONGEST_EDGE);
     // bisect the given halfedge ij into ipj. returns pj.
     Halfedge vertex_bisection(Halfedge he, AdaptiveTransfer *transfer = nullptr);
     void refine(std::vector<Face> faces, AdaptiveTransfer *transfer = nullptr);
@@ -47,9 +47,11 @@ class AdaptiveTriangulation {
     IntegerCoordinatesIntrinsicTriangulation &intrinsicTriangulation() { return tri; }
 
     Halfedge getRefinementEdge(Face f);
+
   private:
     IntegerCoordinatesIntrinsicTriangulation tri;
     void setRefinementEdge(Halfedge he);
+
   public:
     IncrementingIndex idx;
     CornerData<bool> marked_corner;
@@ -88,13 +90,19 @@ FaceData<double> poisson_residual_error_sqr(
  *                  i.e. only elements with lower residual are coarsed
  */
 struct DoeflerConf {
-    double theta_coarse = 0.1;                                              ///< θ_coarse: fraction of residual for coarsening
-    double theta_refine = 0.1;                                              ///< θ_refine: fraction of residual for refinement
-    double threshold_refine = 0.000001;                                     ///< refinement cutoff
-    double threshold_coarse = 0.000001;           ///< coarsening cutoff
+    double theta_coarse = 0.1;          ///< θ_coarse: fraction of residual for coarsening
+    double theta_refine = 0.1;          ///< θ_refine: fraction of residual for refinement
+    double threshold_refine = 0.000001; ///< refinement cutoff
+    double threshold_coarse = 0.000001; ///< coarsening cutoff
 };
 
-enum class DoerflerPresetConf{ VERY_LOW, LOW, MEDIUM, HIGH,VERY_HIGH, UNIFORM_REFINE, UNIFORM_COARSE };
+enum class DoerflerPresetConf { VERY_LOW,
+                                LOW,
+                                MEDIUM,
+                                HIGH,
+                                VERY_HIGH,
+                                UNIFORM_REFINE,
+                                UNIFORM_COARSE };
 DoeflerConf DoerflerPreset(DoerflerPresetConf preset);
 
 /**
@@ -113,7 +121,6 @@ DoeflerConf DoerflerPreset(DoerflerPresetConf preset);
  *
  * @return { refine_faces, coarse_faces } as an array of two vectors of faces
  */
-std::array<std::vector<Face>, 2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, const DoeflerConf& conf);
+std::array<std::vector<Face>, 2> select_doerfler(ManifoldSurfaceMesh &mesh, FaceData<double> residual, const DoeflerConf &conf);
 
-}
-
+} // namespace geometrycentral::surface

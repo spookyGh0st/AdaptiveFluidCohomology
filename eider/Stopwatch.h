@@ -17,5 +17,3 @@ class Stopwatch {
     std::chrono::duration<double> elapsed_ms{0.0};
     bool running{false};
 };
-
-

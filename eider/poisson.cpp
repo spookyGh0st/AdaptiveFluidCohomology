@@ -9,7 +9,7 @@
 
 namespace geometrycentral::surface {
 
-std::string eigenInfoToString(const Eigen::ComputationInfo& info) {
+std::string eigenInfoToString(const Eigen::ComputationInfo &info) {
     switch (info) {
     case Eigen::Success:
         return "Success";
@@ -205,10 +205,11 @@ void StreamFunctionSolver::compute_zero_mean(SurfaceMesh &mesh, IntrinsicGeometr
     A_zero_mean.setFromTriplets(triplets.begin(), triplets.end());
 
     solver.compute(A_zero_mean);
-    if (solver.info() == Eigen::Success){
+    if (solver.info() == Eigen::Success) {
         use_fallback = false;
     } else {
-        std::cout << "\n" <<eigenInfoToString(solver.info()) << "\nUsing Fallback solver" << std::endl ;
+        std::cout << "\n"
+                  << eigenInfoToString(solver.info()) << "\nUsing Fallback solver" << std::endl;
         use_fallback = true;
         fallback_solver.compute(A_zero_mean);
     }
@@ -233,14 +234,15 @@ void StreamFunctionSolver::solve_zero_mean(SurfaceMesh &mesh, VertexData<double>
     rhs_aug.head(n) = rhs;
     rhs_aug[n] = 0.0;
 
-
     Eigen::VectorXd solution;
     if (use_fallback) {
         solution = fallback_solver.solve(rhs_aug);
-        if (fallback_solver.info() != Eigen::Success) throw std::runtime_error(eigenInfoToString(fallback_solver.info()));
-    }else{
+        if (fallback_solver.info() != Eigen::Success)
+            throw std::runtime_error(eigenInfoToString(fallback_solver.info()));
+    } else {
         solution = solver.solve(rhs_aug);
-        if (solver.info() != Eigen::Success) throw std::runtime_error(eigenInfoToString(solver.info()));
+        if (solver.info() != Eigen::Success)
+            throw std::runtime_error(eigenInfoToString(solver.info()));
     }
 
     for (Vertex v : mesh.vertices()) {

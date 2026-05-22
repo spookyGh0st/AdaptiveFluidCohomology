@@ -1,7 +1,7 @@
 #pragma once
 
-#include <geometrycentral/surface/intrinsic_triangulation.h>
 #include "homology.h"
+#include <geometrycentral/surface/intrinsic_triangulation.h>
 
 namespace geometrycentral::surface {
 
@@ -15,21 +15,21 @@ struct Harmonic_Data {
     std::vector<EdgeData<double>> proj_df;
     Harmonic_basis h_unorth;
     Harmonic_basis h_orth;
-    Harmonic_Data (Homology_basis hom) : hom(hom), df(hom.size()),proj_df(hom.size()),h_unorth(hom.size()),h_orth(hom.size()){ }
+    Harmonic_Data(Homology_basis hom) : hom(hom), df(hom.size()), proj_df(hom.size()), h_unorth(hom.size()), h_orth(hom.size()) {}
 };
 
-class AdaptiveHomologyBasis{
-    ManifoldSurfaceMesh& mesh;
-    IntrinsicGeometryInterface& geom;
+class AdaptiveHomologyBasis {
+    ManifoldSurfaceMesh &mesh;
+    IntrinsicGeometryInterface &geom;
 
   public:
     PressureProjectionSolver pp_solver;
     std::vector<EdgeData<double>> pf_guess;
     std::vector<EdgeData<double>> pf_guess_L2;
     Homology_basis homologyB;
-    explicit AdaptiveHomologyBasis(IntrinsicTriangulation& icit);
+    explicit AdaptiveHomologyBasis(IntrinsicTriangulation &icit);
     [[nodiscard]] Harmonic_basis harmonicBasis();
     [[nodiscard]] Harmonic_Data fullHarmonicBasis();
 };
 
-}
+} // namespace geometrycentral::surface

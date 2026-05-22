@@ -5,15 +5,14 @@
 
 namespace geometrycentral::surface {
 enum EdgeType { minimal_st,
-    maximal_co_st,
-    bridge };
+                maximal_co_st,
+                bridge };
 
 // compare functions for the spanning tree and co spanning tree
 using sp_cmp = std::function<bool(Edge, Edge)>;
 
 // if m has boundary, return boundary face, else, some random face
-Face arbitrary_base_face(ManifoldSurfaceMesh& mesh);
-
+Face arbitrary_base_face(ManifoldSurfaceMesh &mesh);
 
 // TODO: extend to relative homology
 // --- Primal Graph MST Computation ---
@@ -39,4 +38,4 @@ std::vector<Homotopy_cycle> homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicG
 
 std::vector<Homotopy_cycle> greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, Face x);
 std::vector<Homotopy_cycle> minimal_greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom);
-}
+} // namespace geometrycentral::surface

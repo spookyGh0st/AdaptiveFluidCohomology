@@ -2,8 +2,8 @@
 
 #include "truthy_iterator.h"
 
-#include <geometrycentral/numerical/linear_solvers.h>
 #include <cassert>
+#include <geometrycentral/numerical/linear_solvers.h>
 
 namespace geometrycentral::surface {
 
@@ -12,32 +12,35 @@ namespace geometrycentral::surface {
  ************************************************************/
 
 template <typename E>
-MeshData<E,std::size_t> getElementIndices(ManifoldSurfaceMesh& mesh);
+MeshData<E, std::size_t> getElementIndices(ManifoldSurfaceMesh &mesh);
 
-template <> inline MeshData<Vertex,std::size_t> getElementIndices<Vertex>(ManifoldSurfaceMesh& mesh) {
-    return  mesh.getVertexIndices();
+template <>
+inline MeshData<Vertex, std::size_t> getElementIndices<Vertex>(ManifoldSurfaceMesh &mesh) {
+    return mesh.getVertexIndices();
 }
-template <> inline MeshData<Face,std::size_t> getElementIndices<Face>(ManifoldSurfaceMesh& mesh) {
-    return  mesh.getFaceIndices();
+template <>
+inline MeshData<Face, std::size_t> getElementIndices<Face>(ManifoldSurfaceMesh &mesh) {
+    return mesh.getFaceIndices();
 }
 
-template <typename E> std::size_t nElements(SurfaceMesh& mesh);
-template <> inline std::size_t nElements<Vertex>(SurfaceMesh& mesh) {
-    return  mesh.nVertices();
+template <typename E>
+std::size_t nElements(SurfaceMesh &mesh);
+template <>
+inline std::size_t nElements<Vertex>(SurfaceMesh &mesh) {
+    return mesh.nVertices();
 }
-template <> inline std::size_t nElements<Face>(SurfaceMesh& mesh) {
-    return  mesh.nFaces();
+template <>
+inline std::size_t nElements<Face>(SurfaceMesh &mesh) {
+    return mesh.nFaces();
 }
 
 template <typename E, typename T>
-AdaptiveTransferL2<E,T>::AdaptiveTransferL2(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom)
+AdaptiveTransferL2<E, T>::AdaptiveTransferL2(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom)
     : mesh(mesh), geom(geom),
-      base_Idx(getElementIndices<E>(mesh)), nB(nElements<E>(mesh))
-{
-    triplets_B.reserve(nB*2);
-    triplets_C.reserve(nB*2);
+      base_Idx(getElementIndices<E>(mesh)), nB(nElements<E>(mesh)) {
+    triplets_B.reserve(nB * 2);
+    triplets_C.reserve(nB * 2);
 }
-
 
 VertexData<double> AdaptiveVertexTransfer::transfer() const {
     assert(P_B.rows() == nR && P_B.cols() == nB);
@@ -45,24 +48,21 @@ VertexData<double> AdaptiveVertexTransfer::transfer() const {
     assert(P_C.rows() == nR && P_C.cols() == nC);
     assert(GLMM.cols() == nR);
     assert(GLMM.rows() == nR);
-    auto solver = TransferSolver(P_C,P_B,GLMM);
-    Vector<double> vec_fC = solver.solveWithGuess(vecfB,f_B.toVector(coarse_idx));
-    return VertexData<double>(mesh,vec_fC,coarse_idx);
+    auto solver = TransferSolver(P_C, P_B, GLMM);
+    Vector<double> vec_fC = solver.solveWithGuess(vecfB, f_B.toVector(coarse_idx));
+    return VertexData<double>(mesh, vec_fC, coarse_idx);
 }
 
-
-template class AdaptiveTransferL2<Vertex,double>;
-template class AdaptiveTransferL2<Face,Vector2>;
-
-
+template class AdaptiveTransferL2<Vertex, double>;
+template class AdaptiveTransferL2<Face, Vector2>;
 
 /************************************************************
  *                    Data Wrappers
  ************************************************************/
 
-Side::Side(Halfedge pj, const IntrinsicGeometryInterface& geom)
+Side::Side(Halfedge pj, const IntrinsicGeometryInterface &geom)
     : tris({pj.prevOrbitFace().twin().face(), pj.face()}),
-      vec_orth({geom.halfedgeVector(pj.prevOrbitFace().twin()), geom.halfedgeVector(pj.prevOrbitFace())}) { }
+      vec_orth({geom.halfedgeVector(pj.prevOrbitFace().twin()), geom.halfedgeVector(pj.prevOrbitFace())}) {}
 
 Diamond::Diamond(Halfedge pj, const IntrinsicGeometryInterface &geom) {
     assert(pj.isInterior());
@@ -75,19 +75,19 @@ Diamond::Diamond(Halfedge pj, const IntrinsicGeometryInterface &geom) {
         sides[1] = Side(pj.twin().next().twin().next(), geom);
 }
 
-inline Vector2 orth_vec_n(Halfedge ij, const IntrinsicGeometryInterface& geom) {
+inline Vector2 orth_vec_n(Halfedge ij, const IntrinsicGeometryInterface &geom) {
     return (geom.halfedgeVector(ij) * 0.5 - (geom.halfedgeVector(ij) + geom.halfedgeVector(ij.next()))).normalize();
 }
 
 Quad::Quad(Halfedge ij, const IntrinsicGeometryInterface &geom) {
-    v_kp[0] = orth_vec_n(ij,geom);
+    v_kp[0] = orth_vec_n(ij, geom);
     vi = ij.tailVertex();
     vj = ij.tipVertex();
     tris[0] = ij.face();
 
     if (ij.twin().isInterior()) {
         tris[1] = ij.twin().face();
-        v_kp[1] = orth_vec_n(ij.twin(),geom);
+        v_kp[1] = orth_vec_n(ij.twin(), geom);
     }
 }
 
@@ -96,17 +96,17 @@ Quad::Quad(Halfedge ij, const IntrinsicGeometryInterface &geom) {
  ************************************************************/
 // TODO: change to mesh, geom
 AdaptiveVertexTransfer::AdaptiveVertexTransfer(IntrinsicTriangulation &tri, VertexData<double> &f_B)
-    : AdaptiveTransferL2(*tri.intrinsicMesh, tri), f_B(f_B), vecfB(f_B.toVector(base_Idx)) { }
+    : AdaptiveTransferL2(*tri.intrinsicMesh, tri), f_B(f_B), vecfB(f_B.toVector(base_Idx)) {}
 
 void AdaptiveVertexTransfer::startRefine() {
-    for (Vertex v: mesh.vertices()) {
-        triplets_B.emplace_back(v,v,1);
+    for (Vertex v : mesh.vertices()) {
+        triplets_B.emplace_back(v, v, 1);
     }
 }
 
-void AdaptiveVertexTransfer::refineEdge(const SplitData& d) {
-    triplets_B.emplace_back(d.diamond.vp,d.diamond.vi,0.5);
-    triplets_B.emplace_back(d.diamond.vp,d.diamond.vj,0.5);
+void AdaptiveVertexTransfer::refineEdge(const SplitData &d) {
+    triplets_B.emplace_back(d.diamond.vp, d.diamond.vi, 0.5);
+    triplets_B.emplace_back(d.diamond.vp, d.diamond.vj, 0.5);
 }
 
 void AdaptiveVertexTransfer::endRefine() {
@@ -114,14 +114,14 @@ void AdaptiveVertexTransfer::endRefine() {
     geom.refreshQuantities();
     refined_idx = getElementIndices<Vertex>(mesh);
 
-    std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
+    std::vector<Eigen::Triplet<double, Eigen::Index>> triplets;
     triplets.reserve(triplets_B.size());
-    for (const AdaptiveTriplet<Vertex,double>& at: triplets_B) {
-        triplets.emplace_back(at.toEigen(refined_idx,base_Idx));
+    for (const AdaptiveTriplet<Vertex, double> &at : triplets_B) {
+        triplets.emplace_back(at.toEigen(refined_idx, base_Idx));
     }
     triplets_B.clear(); // clear elements
-    P_B = SparseMatrix<double>(nR,nB);
-    P_B.setFromTriplets(triplets.begin(),triplets.end());
+    P_B = SparseMatrix<double>(nR, nB);
+    P_B.setFromTriplets(triplets.begin(), triplets.end());
 
     geom.requireVertexGalerkinMassMatrix();
     GLMM = geom.vertexGalerkinMassMatrix;
@@ -131,7 +131,7 @@ void AdaptiveVertexTransfer::endRefine() {
 }
 
 void AdaptiveVertexTransfer::startCoarse() {
-    if(nR != 0){
+    if (nR != 0) {
         // Assert we did not change any elements since end of refinement
         assert(refined_idx.raw() == mesh.getVertexIndices().raw());
         assert(nR == mesh.nVertices());
@@ -141,94 +141,100 @@ void AdaptiveVertexTransfer::startCoarse() {
     }
 }
 
-void AdaptiveVertexTransfer::coarseEdge(const SplitData& d) {
-    triplets_C.emplace_back(d.diamond.vp,d.diamond.vi,0.5);
-    triplets_C.emplace_back(d.diamond.vp,d.diamond.vj,0.5);
+void AdaptiveVertexTransfer::coarseEdge(const SplitData &d) {
+    triplets_C.emplace_back(d.diamond.vp, d.diamond.vi, 0.5);
+    triplets_C.emplace_back(d.diamond.vp, d.diamond.vj, 0.5);
 }
 
 void AdaptiveVertexTransfer::endCoarse() {
-    for (Vertex v: mesh.vertices()) {
-        triplets_C.emplace_back(v,v,1);
+    for (Vertex v : mesh.vertices()) {
+        triplets_C.emplace_back(v, v, 1);
     }
 
     coarse_idx = getElementIndices<Vertex>(mesh);
     nC = nElements<Vertex>(mesh);
 
-    std::vector<Eigen::Triplet<double,Eigen::Index>> triplets;
+    std::vector<Eigen::Triplet<double, Eigen::Index>> triplets;
     triplets.reserve(triplets_C.size());
-    for (const AdaptiveTriplet<Vertex,double>& at: triplets_C) {
-        triplets.emplace_back(at.toEigen(refined_idx,coarse_idx));
+    for (const AdaptiveTriplet<Vertex, double> &at : triplets_C) {
+        triplets.emplace_back(at.toEigen(refined_idx, coarse_idx));
     }
     triplets_C.clear(); // clear elements
-    P_C = SparseMatrix<double>(nR,nC);
-    P_C.setFromTriplets(triplets.begin(),triplets.end());
+    P_C = SparseMatrix<double>(nR, nC);
+    P_C.setFromTriplets(triplets.begin(), triplets.end());
 }
 
 /************************************************************
  *                    Adaptive Face Transfer
  ************************************************************/
-template <typename E> MeshData<E,std::complex<double>> toComplex(MeshData<E,Vector2> d){
-    MeshData<E,std::complex<double>> result(*d.getMesh());
-    for (E e : iterateElements<E>(d.getMesh())) { result[e] = d[e]; }
+template <typename E>
+MeshData<E, std::complex<double>> toComplex(MeshData<E, Vector2> d) {
+    MeshData<E, std::complex<double>> result(*d.getMesh());
+    for (E e : iterateElements<E>(d.getMesh())) {
+        result[e] = d[e];
+    }
     return result;
 }
-template <typename E> MeshData<E,Vector2> toVector(MeshData<E,std::complex<double>> d){
-    MeshData<E,Vector2> result(*d.getMesh());
-    for (E e : iterateElements<E>(d.getMesh())) { result[e] = Vector2::fromComplex(d[e]); }
+template <typename E>
+MeshData<E, Vector2> toVector(MeshData<E, std::complex<double>> d) {
+    MeshData<E, Vector2> result(*d.getMesh());
+    for (E e : iterateElements<E>(d.getMesh())) {
+        result[e] = Vector2::fromComplex(d[e]);
+    }
     return result;
 }
-template <typename E> Eigen::VectorXcd toVectorC(MeshData<E,Vector2> d, MeshData<E,std::size_t> indexer){
+template <typename E>
+Eigen::VectorXcd toVectorC(MeshData<E, Vector2> d, MeshData<E, std::size_t> indexer) {
     using complex_t = std::complex<double>;
     Eigen::VectorXcd result(nElements<E>(*d.getMesh()));
     for (E e : iterateElements<E>(d.getMesh())) {
         if (indexer[e] != std::numeric_limits<size_t>::max()) {
-            result(indexer[e]) = complex_t(d[e].x,d[e].y);
+            result(indexer[e]) = complex_t(d[e].x, d[e].y);
         }
     }
     return result;
 }
 
-
-
-
 AdaptiveFaceTransfer::AdaptiveFaceTransfer(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, FaceData<Vector2> &f_B, CornerData<bool> &marked_corners)
     : AdaptiveTransferL2<Face, complex_t>(mesh, geom),
-      f_B(f_B), f_B_complex(toComplex(f_B)), vecfB(f_B_complex.toVector(base_Idx))
-{
+      f_B(f_B), f_B_complex(toComplex(f_B)), vecfB(f_B_complex.toVector(base_Idx)) {
 }
 
-
-void AdaptiveFaceTransfer::refineSide(const Face& t, const Side& s, Vector2 v_kp){
+void AdaptiveFaceTransfer::refineSide(const Face &t, const Side &s, Vector2 v_kp) {
     Face f1 = s.tris[0], f2 = s.tris[1];
     Vector2 e1 = s.vec_orth[0].normalize(), e2 = s.vec_orth[1].normalize();
-    Vector2 r1 = e1/(-v_kp), r2 = e2/v_kp;
+    Vector2 r1 = e1 / (-v_kp), r2 = e2 / v_kp;
     r1 = r_refine[t].second * r1;
     r2 = r_refine[t].second * r2;
-    r_refine[f1] = std::make_pair(r_refine[t].first,r1);
-    r_refine[f2] = std::make_pair(r_refine[t].first,r2);
+    r_refine[f1] = std::make_pair(r_refine[t].first, r1);
+    r_refine[f2] = std::make_pair(r_refine[t].first, r2);
 }
 
-void AdaptiveFaceTransfer::refineEdge(const SplitData& d) {
-    refineSide(d.q.tris[0].value(),d.diamond.sides[0].value(),d.q.v_kp[0]);
-    if(d.q.tris[1].has_value()){ refineSide(d.q.tris[1].value(),d.diamond.sides[1].value(),d.q.v_kp[1]); }
+void AdaptiveFaceTransfer::refineEdge(const SplitData &d) {
+    refineSide(d.q.tris[0].value(), d.diamond.sides[0].value(), d.q.v_kp[0]);
+    if (d.q.tris[1].has_value()) {
+        refineSide(d.q.tris[1].value(), d.diamond.sides[1].value(), d.q.v_kp[1]);
+    }
 }
 
-void AdaptiveFaceTransfer::coarseSide(const Face& t, const Side& s, Vector2 v_kp){
+void AdaptiveFaceTransfer::coarseSide(const Face &t, const Side &s, Vector2 v_kp) {
     Face f1 = s.tris[0], f2 = s.tris[1];
     Vector2 e1 = s.vec_orth[0].normalize(), e2 = s.vec_orth[1].normalize();
-    Vector2 r1 = e1/(-v_kp), r2 = e2/v_kp;
-    r_coarse.push_back({std::make_tuple(f1,t,r1), std::make_tuple(f2,t,r2)});
+    Vector2 r1 = e1 / (-v_kp), r2 = e2 / v_kp;
+    r_coarse.push_back({std::make_tuple(f1, t, r1), std::make_tuple(f2, t, r2)});
 }
 
-void AdaptiveFaceTransfer::coarseEdge(const SplitData& d) {
-    coarseSide(d.q.tris[0].value(),d.diamond.sides[0].value(),d.q.v_kp[0]);
-    if(d.q.tris[1].has_value()){ coarseSide(d.q.tris[1].value(),d.diamond.sides[1].value(),d.q.v_kp[1]); }
+void AdaptiveFaceTransfer::coarseEdge(const SplitData &d) {
+    coarseSide(d.q.tris[0].value(), d.diamond.sides[0].value(), d.q.v_kp[0]);
+    if (d.q.tris[1].has_value()) {
+        coarseSide(d.q.tris[1].value(), d.diamond.sides[1].value(), d.q.v_kp[1]);
+    }
 }
 
 void AdaptiveFaceTransfer::startRefine() {
-    for (Face f: mesh.faces()) {
-        triplets_B.emplace_back(f,f,complex_t(1,0));
-        r_refine[f] = std::make_pair(f, Vector2(1,0));
+    for (Face f : mesh.faces()) {
+        triplets_B.emplace_back(f, f, complex_t(1, 0));
+        r_refine[f] = std::make_pair(f, Vector2(1, 0));
     }
 }
 void AdaptiveFaceTransfer::endRefine() {
@@ -236,31 +242,29 @@ void AdaptiveFaceTransfer::endRefine() {
     geom.refreshQuantities();
     refined_idx = getElementIndices<Face>(mesh);
 
-    std::vector<Eigen::Triplet<complex_t,Eigen::Index>> triplets;
+    std::vector<Eigen::Triplet<complex_t, Eigen::Index>> triplets;
     triplets.reserve(triplets_B.size());
     triplets_B.clear();
-    for (auto& l: r_refine) {
-        triplets_B.emplace_back(l.first,l.second.first,l.second.second);
+    for (auto &l : r_refine) {
+        triplets_B.emplace_back(l.first, l.second.first, l.second.second);
     }
-    for (const AdaptiveTriplet<Face,complex_t>& at: triplets_B) {
-        triplets.emplace_back(at.toEigen(refined_idx,base_Idx));
+    for (const AdaptiveTriplet<Face, complex_t> &at : triplets_B) {
+        triplets.emplace_back(at.toEigen(refined_idx, base_Idx));
     }
     triplets_B.clear(); // clear elements
-    P_B = SparseMatrix<complex_t>(nR,nB);
+    P_B = SparseMatrix<complex_t>(nR, nB);
 
-    P_B.setFromTriplets(triplets.begin(),triplets.end(),[]( const complex_t& a, const complex_t& b) {
+    P_B.setFromTriplets(triplets.begin(), triplets.end(), [](const complex_t &a, const complex_t &b) {
         return a * b;
     });
     // P_B.setFromTriplets(triplets.begin(),triplets.end(),[]( const complex_t& a, const complex_t& b) { return b; });
 
-
     GLMM = M_CS_Lumped();
     assert(GLMM.rows() == nR);
     assert(GLMM.cols() == nR);
-
 }
 void AdaptiveFaceTransfer::startCoarse() {
-    if(nR != 0){
+    if (nR != 0) {
         assert(nR == mesh.nFaces());
     } else {
         refined_idx = mesh.getFaceIndices();
@@ -269,36 +273,36 @@ void AdaptiveFaceTransfer::startCoarse() {
 }
 
 void AdaptiveFaceTransfer::endCoarse() {
-    std::unordered_map<Face,std::pair<Face,Vector2>> r_coarse_accum;
-    for (Face f: mesh.faces()) {
-        r_coarse_accum[f] = {f, Vector2(1,0)};
+    std::unordered_map<Face, std::pair<Face, Vector2>> r_coarse_accum;
+    for (Face f : mesh.faces()) {
+        r_coarse_accum[f] = {f, Vector2(1, 0)};
     }
     for (int i = r_coarse.size() - 1; i >= 0; --i) {
-        auto [f1,t1,r1] = r_coarse[i][0]; auto [f2,t2,r2] = r_coarse[i][1];
+        auto [f1, t1, r1] = r_coarse[i][0];
+        auto [f2, t2, r2] = r_coarse[i][1];
         assert(t1 == t2);
         r1 = r_coarse_accum[t1].second * r1;
         r2 = r_coarse_accum[t2].second * r2;
-        r_coarse_accum[f1] = std::make_pair(t1,r1);
-        r_coarse_accum[f2] = std::make_pair(t2,r2);
+        r_coarse_accum[f1] = std::make_pair(t1, r1);
+        r_coarse_accum[f2] = std::make_pair(t2, r2);
     }
 
     triplets_C.clear();
-    for (auto& l: r_coarse_accum) {
-        triplets_C.emplace_back(l.first,l.second.first,l.second.second);
+    for (auto &l : r_coarse_accum) {
+        triplets_C.emplace_back(l.first, l.second.first, l.second.second);
     }
-
 
     coarse_idx = getElementIndices<Face>(mesh);
     nC = nElements<Face>(mesh);
 
-    std::vector<Eigen::Triplet<complex_t,Eigen::Index>> triplets;
+    std::vector<Eigen::Triplet<complex_t, Eigen::Index>> triplets;
     triplets.reserve(triplets_C.size());
-    for (const AdaptiveTriplet<Face,complex_t>& at: triplets_C) {
-        triplets.emplace_back(at.toEigen(refined_idx,coarse_idx));
+    for (const AdaptiveTriplet<Face, complex_t> &at : triplets_C) {
+        triplets.emplace_back(at.toEigen(refined_idx, coarse_idx));
     }
     triplets_C.clear(); // clear elements
-    P_C = SparseMatrix<complex_t>(nR,nC);
-    P_C.setFromTriplets(triplets.begin(),triplets.end(),[]( const complex_t& a, const complex_t& b) { return a * b; });
+    P_C = SparseMatrix<complex_t>(nR, nC);
+    P_C.setFromTriplets(triplets.begin(), triplets.end(), [](const complex_t &a, const complex_t &b) { return a * b; });
 }
 
 FaceData<Vector2> AdaptiveFaceTransfer::transfer() const {
@@ -307,9 +311,9 @@ FaceData<Vector2> AdaptiveFaceTransfer::transfer() const {
     assert(P_C.rows() == nR && P_C.cols() == nC);
     assert(GLMM.cols() == nR);
     assert(GLMM.rows() == nR);
-    auto solver = TransferSolver(P_C,P_B,GLMM);
-    Vector<complex_t> vec_fC = solver.solveWithGuess(vecfB,f_B_complex.toVector(coarse_idx));
-    FaceData<complex_t> fC_complex(mesh,vec_fC,coarse_idx);
+    auto solver = TransferSolver(P_C, P_B, GLMM);
+    Vector<complex_t> vec_fC = solver.solveWithGuess(vecfB, f_B_complex.toVector(coarse_idx));
+    FaceData<complex_t> fC_complex(mesh, vec_fC, coarse_idx);
     return toVector(fC_complex);
 }
 
@@ -326,28 +330,33 @@ SparseMatrix<AdaptiveFaceTransfer::complex_t> AdaptiveFaceTransfer::M_CS_Lumped(
 }
 
 void AggregateTransfer::startRefine() {
-    for (const auto& a: transfers) a->startRefine();
+    for (const auto &a : transfers)
+        a->startRefine();
 }
 
 void AggregateTransfer::endRefine() {
-    for (const auto& a: transfers) a->endRefine();
+    for (const auto &a : transfers)
+        a->endRefine();
 }
 
 void AggregateTransfer::startCoarse() {
-    for (const auto& a: transfers) a->startCoarse();
+    for (const auto &a : transfers)
+        a->startCoarse();
 }
 
 void AggregateTransfer::endCoarse() {
-    for (const auto& a: transfers) a->endCoarse();
+    for (const auto &a : transfers)
+        a->endCoarse();
 }
 
 void AggregateTransfer::refineEdge(const SplitData &d) {
-    for (const auto& a: transfers) a->refineEdge(d);
+    for (const auto &a : transfers)
+        a->refineEdge(d);
 }
 
 void AggregateTransfer::coarseEdge(const SplitData &d) {
-    for (const auto& a: transfers) a->coarseEdge(d);
+    for (const auto &a : transfers)
+        a->coarseEdge(d);
 }
 
-
-}
+} // namespace geometrycentral::surface

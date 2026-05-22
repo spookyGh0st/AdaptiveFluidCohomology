@@ -47,12 +47,12 @@ class DSU {
 
 Face arbitrary_base_face(ManifoldSurfaceMesh &mesh) {
     if (mesh.hasBoundary()) {
-        for (BoundaryLoop b: mesh.boundaryLoops()) {
+        for (BoundaryLoop b : mesh.boundaryLoops()) {
             assert(b.halfedge().twin().isInterior());
             return b.halfedge().twin().face();
         }
     }
-    for (Face f: mesh.faces()) {
+    for (Face f : mesh.faces()) {
         return f;
     }
     throw std::runtime_error("Huh, does the mesh not have faces");
@@ -272,7 +272,7 @@ co_dijkstra(ManifoldSurfaceMesh &mesh, IntrinsicGeometryInterface &geom, EdgeDat
             // TODO: If using dijkstra for optimal, use
             if (he.edge().isBoundary())
                 continue;
-            if (skip_co &&  edgeData[he.edge()] != EdgeType::maximal_co_st)
+            if (skip_co && edgeData[he.edge()] != EdgeType::maximal_co_st)
                 continue;
             Face v = he.twin().face();
             double alt = u.first + geom.dualEdgeLengths[he.edge()];
@@ -358,7 +358,7 @@ Homotopy_cycle homotopy_co_loop(FaceData<Halfedge> &prev, Face x, Edge bridge, H
 
 // TODO: move to down
 Homotopy_cycle reduce_co_loop(ManifoldSurfaceMesh &mesh,
-                                     const std::vector<Halfedge> &co_loop) {
+                              const std::vector<Halfedge> &co_loop) {
     // this is in O(n), could be improved to be in size of co_loop
     std::vector<Halfedge> reduced{};
     reduced.reserve(co_loop.size());
@@ -402,8 +402,8 @@ std::vector<Homotopy_cycle> homotopy_basis(ManifoldSurfaceMesh &mesh, IntrinsicG
     geom.requireEdgeLengths();
     geom.requireDualEdgeLengths();
 
-    Halfedge b_halfedge = computePrimalEdgesOfDualMaxST( mesh, edge_data, [&l = geom.dualEdgeLengths](Edge a, Edge b) { return l[a] < l[b]; });
-    computeMinimalSpanningTree( mesh, edge_data, [&l = geom.edgeLengths](Edge a, const Edge &b) { return l[a] > l[b]; });
+    Halfedge b_halfedge = computePrimalEdgesOfDualMaxST(mesh, edge_data, [&l = geom.dualEdgeLengths](Edge a, Edge b) { return l[a] < l[b]; });
+    computeMinimalSpanningTree(mesh, edge_data, [&l = geom.edgeLengths](Edge a, const Edge &b) { return l[a] > l[b]; });
     geom.unrequireEdgeLengths();
     geom.unrequireDualEdgeLengths();
 
@@ -430,10 +430,11 @@ std::vector<Homotopy_cycle> greedy_homotopy_basis(ManifoldSurfaceMesh &mesh, Int
         edge_data[e] = EdgeType::maximal_co_st;
     }
     Halfedge x_he = add_boundary_edge(x, edge_data);
-    if (mesh.hasBoundary() && x_he == Halfedge()) throw std::runtime_error("Called with non-boundary face for mesh with boundary");
+    if (mesh.hasBoundary() && x_he == Halfedge())
+        throw std::runtime_error("Called with non-boundary face for mesh with boundary");
     auto coloop_lengths =
         edge_coloop_lengths(mesh, prev_dist.second, edge_data);
-    computeMinimalSpanningTree( mesh, edge_data, [&l = coloop_lengths](Edge a, const Edge &b) { return l[a] > l[b]; });
+    computeMinimalSpanningTree(mesh, edge_data, [&l = coloop_lengths](Edge a, const Edge &b) { return l[a] > l[b]; });
 
     auto dist_edges = distinctEdges(mesh, edge_data);
     std::vector<std::vector<Halfedge>> co_loops;
@@ -468,7 +469,6 @@ std::vector<Homotopy_cycle> minimal_greedy_homotopy_basis(ManifoldSurfaceMesh &m
     }
     return basis;
 }
-
 
 inline static constexpr std::size_t n_bits = 64;
 EdgeData<std::bitset<n_bits>>
@@ -514,4 +514,4 @@ void co_cut_locus() {
     4. Return Φ
     */
 }
-}
+} // namespace geometrycentral::surface

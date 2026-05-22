@@ -6,41 +6,46 @@
 
 namespace geometrycentral::surface {
 
-inline double L2Norm(FaceData<Vector2> d, IntrinsicGeometryInterface& geom){
-    if(!d.toVector().allFinite()) return std::numeric_limits<double>::quiet_NaN();
+inline double L2Norm(FaceData<Vector2> d, IntrinsicGeometryInterface &geom) {
+    if (!d.toVector().allFinite())
+        return std::numeric_limits<double>::quiet_NaN();
     double s = 0;
-    for (Face f: geom.mesh.faces()) { s += d[f].norm2() * geom.faceAreas[f]; }
+    for (Face f : geom.mesh.faces()) {
+        s += d[f].norm2() * geom.faceAreas[f];
+    }
     return std::sqrt(s);
 }
-inline double L2NormSqr(VertexData<double> d, IntrinsicGeometryInterface& geom){
-    if(!d.toVector().allFinite()) return std::numeric_limits<double>::quiet_NaN();
+inline double L2NormSqr(VertexData<double> d, IntrinsicGeometryInterface &geom) {
+    if (!d.toVector().allFinite())
+        return std::numeric_limits<double>::quiet_NaN();
     double s = 0;
     geom.requireVertexDualAreas();
-    for (Vertex v: geom.mesh.vertices()) {
-        double area = geom.vertexDualAreas[v];  // dual area around vertex
+    for (Vertex v : geom.mesh.vertices()) {
+        double area = geom.vertexDualAreas[v]; // dual area around vertex
         s += d[v] * d[v] * area;
     }
     geom.unrequireVertexDualAreas();
     return s;
 }
-inline double L2Norm(VertexData<double> d, IntrinsicGeometryInterface& geom){
-    if(!d.toVector().allFinite()) return std::numeric_limits<double>::quiet_NaN();
-    return std::sqrt(L2NormSqr(d,geom));
+inline double L2Norm(VertexData<double> d, IntrinsicGeometryInterface &geom) {
+    if (!d.toVector().allFinite())
+        return std::numeric_limits<double>::quiet_NaN();
+    return std::sqrt(L2NormSqr(d, geom));
 }
 
-inline double integral(VertexData<double> d, IntrinsicGeometryInterface& geom){
-    if(!d.toVector().allFinite()) return std::numeric_limits<double>::quiet_NaN();
+inline double integral(VertexData<double> d, IntrinsicGeometryInterface &geom) {
+    if (!d.toVector().allFinite())
+        return std::numeric_limits<double>::quiet_NaN();
     double s = 0;
-    for (Face f: geom.mesh.faces()){
+    for (Face f : geom.mesh.faces()) {
         double fs = 0;
-        for(Vertex v: f.adjacentVertices()){
+        for (Vertex v : f.adjacentVertices()) {
             fs += d[v];
         }
-        s += fs/3*geom.faceAreas[f];
+        s += fs / 3 * geom.faceAreas[f];
     }
     return s;
 }
-
 
 /**
  * Compute the gradient of a scalar function f over a triangle face by
@@ -114,7 +119,6 @@ inline double laplacian(IntrinsicGeometryInterface &geom, Vertex v, const Vertex
     }
     return sum;
 }
-
 
 inline double derive(Vertex p, FaceData<Vector2> &u, IntrinsicGeometryInterface &geom, const VertexData<double> &f) {
     double a = 0, s = 0;
