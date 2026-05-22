@@ -449,7 +449,7 @@ TEST(EvaluatorTest, EvaluateHighGenus)
     cpm.testcases = {
         makeTaylorCase("OR", "Original (Yin et al., 2023)", *meshO, *geomO, static_solver_data,false,taylor),
         makeTaylorCase("AR", "Adaptive, recomputed h (AR)", *mesh, *geom, data_comp_h,false,taylor),
-        // makeTaylorCase("AI", "Adaptive, interpolated h (AI)", *mesh, *geom, data_interp_ha),
+        makeTaylorCase("AI", "Adaptive, interpolated h (AI)", *mesh, *geom, data_interp_ha, false,taylor),
     };
     init_ps(cpm);
 
@@ -689,6 +689,42 @@ TEST(EvaluatorTest,evaluateBadTriangulation) {
     init_ps(cpm);
     cpm.visualize(cf.f_screenshots);
     double target_t = 4.00;
+    cpm.runUntil(1./4* target_t); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(2./4 * target_t); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(3./4 * target_t); cpm.visualize(cf.f_screenshots);
+    cpm.runUntil(4./4 * target_t); cpm.visualize(cf.f_screenshots);
+
+    cpm.write(cf.fev);
+    copyFolder(cf.fev,cf.flatest);
+    cpm.visualize();
+    polyscope::show();
+
+}
+
+TEST(EvaluatorTest,evaluateBadTriangulationHighGenus) {
+    CaseFolder cf ("tc14");
+    auto [mesh,geom] = readManifoldSurfaceMesh(cf.fmodels /"cheese_16_holes.stl");
+    std::tie(mesh,geom) = uniform_refine(*mesh,*geom,2,MARKING_STRATEGY::RANDOM);
+    AdaptiveFluidSolverData staticD(DOPRI5PresetConf::LOW,DoerflerPresetConf::UNIFORM_REFINE,0.001,false,false,MARKING_STRATEGY::RANDOM,false);
+    AdaptiveFluidSolverData adaptDC = staticD;
+    adaptDC.dt = 0.02; adaptDC.strategy = MARKING_STRATEGY::LONGEST_EDGE; adaptDC.adaptive_space =true; adaptDC.adaptive_time=true; adaptDC.doerflerConf = DoerflerPreset(DoerflerPresetConf::LOW);
+    AdaptiveFluidSolverData adaptDI = adaptDC;
+    adaptDI.interpolate_harmonic_basis =true; adaptDI.use_interpolated_harmonic_basis = true;
+
+    TaylorInitializer taylor = TaylorInitializer();
+    taylor.set_vortexPair(0.25, toGC(taylor.center));
+
+    Comparator cpm;
+    cpm.testcases = {
+        makeTaylorCase("OR","Original (Yin et al., 2023)", *mesh, *geom, staticD,false,taylor),
+        makeTaylorCase("ASAT", "Adaptive, recomputed h", *mesh, *geom, adaptDC,false,taylor),
+        makeTaylorCase("ASATIH", "Adaptive, interpolated h", *mesh, *geom, adaptDI,false,taylor),
+
+    };
+
+    init_ps(cpm);
+    cpm.visualize(cf.f_screenshots);
+    double target_t = 3.00;
     cpm.runUntil(1./4* target_t); cpm.visualize(cf.f_screenshots);
     cpm.runUntil(2./4 * target_t); cpm.visualize(cf.f_screenshots);
     cpm.runUntil(3./4 * target_t); cpm.visualize(cf.f_screenshots);
