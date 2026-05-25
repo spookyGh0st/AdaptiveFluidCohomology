@@ -85,7 +85,7 @@ When the mesh is refined or coarsened, all simulation data must be transferred.
 ## Building
 
 The project uses submodules for dependencies and lfs for results and videos.
-Use the following commands to clone it (replace with https url if needed)
+Use the following commands to clone it:
 
 ```
 git lfs install
