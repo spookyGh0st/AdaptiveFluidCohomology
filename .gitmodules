@@ -1,0 +1,19 @@
+[submodule "src/external/geometry-central"]
+	path = external/geometry-central
+	url = https://github.com/spookyGh0st/geometry-central.git
+[submodule "src/external/polyscope"]
+	path = external/polyscope
+	url = git@github.com:spookyGh0st/polyscope.git
+[submodule "src/external/oneTBB"]
+	path = external/oneTBB
+	url = git@github.com:uxlfoundation/oneTBB.git
+[submodule "src/external/implot"]
+	path = external/implot
+	url = git@github.com:epezent/implot.git
+[submodule "src/external/FlameGraph"]
+	path = external/FlameGraph
+	url = https://github.com/brendangregg/FlameGraph.git
+[submodule "src/external/gtest-parallel"]
+	path = external/gtest-parallel
+	url = git@github.com:google/gtest-parallel.git
+
