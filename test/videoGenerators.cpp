@@ -184,7 +184,7 @@ void createVideo(
     manifest << "file '" << last_frame.string() << "'\n";
     manifest.close();
 
-    fs::path video_dir = (std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()) / "tex" / "thesis" / "figures" / "videos";
+    fs::path video_dir = (std::filesystem::path(__FILE__).parent_path().parent_path()) / "videos";
     ;
 
     std::cout << "Creating video " << tmp.string() << std::endl;

@@ -15,29 +15,28 @@ add_subdirectory(external)
 add_subdirectory(eider)
 add_subdirectory(test)
 
+add_custom_target(generate_evaluation
+        # The COMMAND to execute. We use absolute paths to be safe.
+        COMMAND
+        ${CMAKE_SOURCE_DIR}/external/gtest-parallel/gtest-parallel
+        $<TARGET_FILE:eider-test> "--gtest_filter=EvaluatorTest.*"
+        DEPENDS eider-test
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Generating Evaluations by running Evaluator Test suite..."
+
+        # VERBATIM is good practice to ensure arguments with special
+        # characters are passed correctly.
+        VERBATIM
+)
+
 add_custom_target(generate_videos
         # The COMMAND to execute. We use absolute paths to be safe.
         COMMAND
         ${CMAKE_SOURCE_DIR}/external/gtest-parallel/gtest-parallel
-        $<TARGET_FILE:eider-test>
-        "--gtest_filter=VideoTest.Evaluation*"
-
-        # CRITICAL: This ensures 'eider-test' is built and up-to-date
-        # before this target is run.
-        DEPENDS
-        eider-test
-
-        # The original command was run from the project root.
-        # We'll set the working directory to match that behavior.
-        WORKING_DIRECTORY
-        ${CMAKE_SOURCE_DIR}
-
-        # A helpful message to display during the build.
-        COMMENT
-        "Generating videos by running VideoTest suite..."
-
-        # VERBATIM is good practice to ensure arguments with special
-        # characters are passed correctly.
+        $<TARGET_FILE:eider-test> "--gtest_filter=VideoTest.*"
+        DEPENDS eider-test
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Generating videos by running VideoTest suite..."
         VERBATIM
 )
 

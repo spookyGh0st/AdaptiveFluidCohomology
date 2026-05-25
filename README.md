@@ -19,7 +19,7 @@ The code is organized into several key components that correspond to the major t
 
 ## Core Concepts and Implementation
 
-### 1. Homology and Harmonic Bases (Chapter: Homology Theory)
+### 1. Homology and Harmonic Bases
 
 The fluid solver requires a basis of harmonic 1-forms, which are derived from the topology of the mesh.
 The library implements the full pipeline described in the paper to compute these forms.
@@ -36,15 +36,16 @@ The library implements the full pipeline described in the paper to compute these
         *   `whitney_interpolation()` converts the resulting harmonic 1-form (on edges) into a piecewise-constant vector field on faces (`FaceData<Vector2>`).
         *   `orthonormalize()` uses a modified Gram-Schmidt process to produce an orthonormal basis.
 
-### 2. The Fluid Solver (Chapter: Fluid dynamics)
+### 2. Fluid Solver
 
-*   **Theory**: The core of the solver involves two steps: reconstructing the velocity from the vorticity and harmonic components, and then evolving the vorticity and harmonic coefficients over time. These correspond to `alg:velocity` and `alg:evalRHS` in the paper.
+*   **Theory**: The core of the solver involves two steps: reconstructing the velocity from the vorticity and harmonic components, and then evolving the vorticity and harmonic coefficients over time. 
+* These correspond to `alg:velocity` and `alg:evalRHS` in the paper.
 
 *   **Implementation**: The logic resides in `cfd.h/.cpp`.
     *   **Velocity Reconstruction**: The `velocity()` function implements `alg:velocity`. It first solves the Poisson equation `−Δψ = ω` using the `StreamFunctionSolver` (from `poisson.h/.cpp`), then computes the velocity `u = ∇ψ + ∑cᵢhᵢ`.
     *   **Time Evolution**: The `evalRHS()` function implements `alg:evalRHS`. It computes the time derivatives `dω/dt` and `dcᵢ/dt` using the discrete operators for the directional derivative (`derive()`) and the Lamb vector (`Lamb()`), which are defined in `util.h`.
 
-### 3. Adaptive Mesh and Time Stepping (Chapter: Adaptive Fluid Cohomology)
+### 3. Adaptive Mesh and Time Stepping
 
 *   **Theory**: The method uses an AFEM loop (solve-estimate-mark-refine) for spatial adaptivity and an embedded Runge-Kutta method (DOPRI5) for temporal adaptivity.
 
@@ -61,7 +62,9 @@ The library implements the full pipeline described in the paper to compute these
 
 When the mesh is refined or coarsened, all simulation data must be transferred. 
 
-*   **Theory**: Vorticity is transferred using an L2-optimal projection. The harmonic basis is not interpolated directly; instead, the underlying singular cycles that generate the basis are updated during mesh mutations. The new harmonic basis is then recomputed from these updated cycles, guaranteeing it remains a valid discretization of the same continuous harmonic form.
+*   **Theory**: Vorticity is transferred using an L2-optimal projection. The harmonic basis is not interpolated directly.
+* Instead, the underlying singular cycles that generate the basis are updated during mesh mutations. 
+* The new harmonic basis is then recomputed from these updated cycles, guaranteeing it remains a valid discretization of the same continuous harmonic form.
 
 *   **Implementation**:
     *   **Scalar/Vector Field Transfer (`transfer.h/.cpp`)**: The classes `AdaptiveVertexTransfer` and `AdaptiveFaceTransfer` build interpolation matrices (`P_A`, `P_B`) on-the-fly to solve the L2-minimization problem for transferring data between the old (`A`) and new (`B`) meshes via a common subdivision (`S`).
@@ -119,12 +122,10 @@ A specific test can be run similar to
 ./build/test/eider-test --gtest_filter=AdaptiveFluidCohomology.Main
 ```
 
-## Generating Comparison Videos
+## Generating Results
 
 This project includes a suite of tests designed to generate video outputs from different fluid solver configurations. 
 A custom workflow is available to run these tests and then combine the resulting videos into a side-by-side comparison using FFmpeg.
-
-### Step 1: Generate Individual Videos
 
 The project uses a custom CMake target to automate running the specific tests that produce video files. This target will:
 1.  Ensure the test executable (`eider-test`) is compiled and up-to-date.
@@ -136,3 +137,8 @@ To generate the individual videos (`evaluation_s.mp4`, `evaluation_c.mp4`, etc.)
 cmake --build build --target generate_videos
 ```
 After the command completes successfully, the individual video files will be created in the videos directory
+
+Similarly, to generate the results, execute 
+```bash
+cmake --build build --target generate_evaluation
+```

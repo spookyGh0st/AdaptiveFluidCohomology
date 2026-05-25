@@ -14,8 +14,8 @@ namespace fs = std::filesystem;
 
 fs::path results_folder() {
     fs::path file_path = __FILE__;
-    fs::path project_root = file_path.parent_path().parent_path().parent_path();
-    fs::path results_f = project_root / "tex" / "thesis" / "figures" / "results";
+    fs::path project_root = file_path.parent_path().parent_path();
+    fs::path results_f = project_root / "results";
     return results_f;
 }
 
