@@ -89,7 +89,7 @@ Use the following commands to clone it (replace with https url if needed)
 
 ```
 git lfs install
-git clone --recurse-submodules git@gitlab.informatik.uni-bonn.de:abtb0/master-thesis.git
+git clone --recurse-submodules https://github.com/spookyGh0st/AdaptiveFluidCohomology.git
 ```
 
 The project uses a standard CMake configuration. 
